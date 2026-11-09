@@ -4,6 +4,8 @@ A cozy city builder where you grow a little village by writing real Haskell.
 
 Residents come to you with small problems. You solve each one by writing a Haskell function, and the town grows: a cottage, a bakery, a library, a railway, a harbour… The challenges go all the way from `add :: Int -> Int -> Int` to Functors, Monads, Monoids and lazy infinite lists.
 
+To be added: after building the village you will be able to solve tasks from the residents, to promote effective learning with spacing and retrieval practice.
+
 - **23 challenges, 13 residents, 14 buildings.** Every building teaches one idea, and its upgrade practises it again.
 - **Real Haskell, checked like GHC.** Your code is type-checked before anything runs, and the error messages are written for beginners.
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
