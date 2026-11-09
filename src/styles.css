@@ -271,5 +271,36 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .gift{display:flex; gap:10px; align-items:flex-start; margin:6px 0; padding:8px 10px; background:#fbf3e3; border:2px dashed #d9b98f; border-radius:9px; font-size:13px}
 .gift > span{font-size:22px}
 .town-frame{position:relative}
-.night-btn{position:absolute; top:16px; right:16px; z-index:2; border:0; border-radius:8px; padding:4px 9px; font:700 12px var(--body); background:rgba(255,250,240,.88); color:var(--ink); cursor:pointer; box-shadow:0 2px 0 rgba(0,0,0,.15)}
+.map-btns{position:absolute; top:16px; right:16px; z-index:2; display:flex; gap:6px}
+.night-btn{border:0; border-radius:8px; padding:4px 9px; font:700 12px var(--body); background:rgba(255,250,240,.88); color:var(--ink); cursor:pointer; box-shadow:0 2px 0 rgba(0,0,0,.15)}
 .night-btn:hover{background:#fffaf0}
+
+/* ---------- The printable Journal (journal.js printJournal) ---------- */
+#printArea{display:none}
+#printJournal{width:100%; margin:0 0 10px}
+@media print{
+  @page{margin:16mm 15mm}
+  body > *:not(#printArea){display:none !important}
+  body{background:#fff !important}
+  #printArea{display:block; color:#2b2020; font:11pt/1.45 var(--body), Georgia, serif}
+  #printArea h1{font-family:var(--pixel), sans-serif; font-size:30pt; margin:6px 0 4px}
+  #printArea h2{font-family:var(--pixel), sans-serif; font-size:17pt; margin:22px 0 8px; padding-bottom:4px; border-bottom:2px solid #d9b98f; break-after:avoid}
+  #printArea h3{margin:0; font-size:12pt}
+  .pj-cover{text-align:center; padding:60mm 0 20mm; break-after:page}
+  .pj-logo{display:inline-grid; place-items:center; width:64px; height:64px; border-radius:16px; background:#c8553d; color:#fff; font-size:36pt; font-weight:800}
+  .pj-span{color:#7a6a5a; margin:0 0 18px}
+  .pj-stats{list-style:none; padding:0; margin:0 auto; display:inline-grid; grid-template-columns:auto auto; gap:6px 28px; text-align:left}
+  .pj-stats b{font-size:14pt}
+  .pj-note{margin-top:28px; font-style:italic; color:#7a6a5a}
+  .pj-page{break-inside:avoid; margin:0 0 12px; padding:10px 12px; border:1.5px solid #e6d6b8; border-radius:8px}
+  .pj-h{display:flex; gap:10px; align-items:center}
+  .pj-h p{margin:1px 0 0; color:#7a6a5a; font-size:9.5pt}
+  .pj-stamp{display:grid; place-items:center; width:32px; height:32px; flex:none; border:1.5px dashed #d9b98f; border-radius:6px; font-size:16pt}
+  .pj-learn{margin:8px 0 6px; font-size:10pt}
+  .pj-intro{color:#7a6a5a; margin:-2px 0 10px}
+  #printArea pre{margin:6px 0 0; padding:8px 10px; background:#f7f2e8; border-radius:6px; font:9.5pt/1.45 var(--mono), monospace; white-space:pre-wrap}
+  .pj-letter p{margin:0 0 6px}
+  .pj-sig{text-align:right; font-style:italic}
+  .pj-gift{font-size:10pt; color:#5a4a3a}
+  .pj-land{padding-left:18px}
+}

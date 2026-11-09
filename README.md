@@ -13,6 +13,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
 - **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift for the Journal, then a lasting change to their building on the map.
 - **Life in town.** The first errand on each topic brings something to the map: a sleepy cat, the bread bike, birds, a kite, gulls, shooting stars… Once the Observatory is built, the town gets dark in the evening, following your clock (there's a toggle on the map).
+- **Market music and a printable Journal.** Once the Market is built, a 🎵 button plays a soft music-box tune (made on the fly, no sound files) while a fiddler plays by the stalls. The Journal can be printed or saved as a PDF: a little "what I learned" booklet with every building's code, your errands, letters and land.
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
 
 Play it at **https://louisewolff17.github.io/Haskell-Town/** (it goes live after the first deploy, see below).
@@ -62,7 +63,8 @@ src/
     errands.js          the Notice Board tab
     schedule.ts         when errands come back (pure functions, tested)
     rewards.ts          map growth, Journal stamps, friendship hearts (pure functions, tested)
-    journal.js          the Journal tab
+    journal.js          the Journal tab and the printable booklet
+    music.js            market music (Web Audio, no sound files)
     notebook.js         challenge window and Workshop
     highlight.js        syntax highlighting
 tests/
@@ -85,11 +87,15 @@ The UI never calls the interpreter directly. Player code runs in a background We
 
 ## Adding an errand
 
-Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add a topic to `REVIEW_TOPICS`; each topic needs at least two errands, so reviews can vary). Give it a small `starter` that doesn't pass and a `solution` that does; `npm test` checks both. In dev mode (`npm run dev`), the DEV panel's **+1 day** button moves the clock forward so you can try the schedule.
+Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add a topic to `REVIEW_TOPICS`; each topic needs at least two errands, so reviews can vary). Give it a small `starter` that doesn't pass and a `solution` that does; `npm test` checks both. In dev mode (`npm run dev`, or the live site with `?dev` at the end of the address), the DEV panel's **+1 day** button moves the clock forward so you can try the schedule.
 
 ## Adding new land
 
 Add an entry to `EXPANSIONS` in `src/content/expansions.ts` with the next `slot` and a larger `needs` (total errands solved), and a drawing in `EXPANSION_ART` in `src/game/town.js`. Slots fill a strip of land west then east of the path; the map grows by one strip whenever a new one is needed, and the unopened half shows as mist. In dev mode, the DEV panel's **Solve errands** and **+1 day** buttons get you there quickly.
+
+## The DEV panel
+
+Under `npm run dev` there's a DEV panel in the bottom-right corner: **Solve next**, **Solve stage**, **Solve errands**, **+3 h** (try the night) and **+1 day** (move the Notice Board's clock). On the live site, add `?dev` to the address to get it, e.g. `https://louisewolff17.github.io/Haskell-Town/?dev`. It changes your saved progress, so use it in a private window if you want to keep your real town.
 
 ## Deploying
 

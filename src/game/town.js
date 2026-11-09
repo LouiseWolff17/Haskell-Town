@@ -4,6 +4,7 @@ import { $, byId, save, state, status } from './state.js';
 import { openChallenge } from './notebook.js';
 import { hearts, practised, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
 import { openLetters } from './journal.js';
+import { musicPlaying, startMusic, stopMusic } from './music.js';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
 
 const cv = $('#town'), ctx = cv.getContext('2d');
@@ -383,6 +384,7 @@ function draw(t) {
     }
   }
   drawLife(t);
+  if (musicPlaying() && state.done.market) musician(t);
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
     if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
@@ -427,6 +429,9 @@ export function portrait(rid, size = 40) {
 export function initTown() {
   paintBackground(); requestAnimationFrame(draw);
   $('#nightBtn').onclick = () => { state.clockOff = !state.clockOff; save(); renderNightBtn(); };
+  $('#musicBtn').onclick = () => { state.music = !state.music; save(); if (state.music) startMusic(); else stopMusic(); renderNightBtn(); };
+  // browsers only play sound after a click, so music that was left on starts at the first click
+  if (state.music) document.addEventListener('pointerdown', () => { if (state.music && state.done.market) { startMusic(); renderNightBtn(); } }, { once: true });
   renderNightBtn();
   cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
@@ -677,10 +682,23 @@ function drawNight(t) {
   ctx.globalAlpha = 1;
 }
 
-/** The night toggle in the corner of the map, shown once the Observatory is built. */
+/** The buttons in the corner of the map: market music (once the Market is built) and night (once the Observatory is). */
 export function renderNightBtn() {
+  const m = $('#musicBtn');
+  if (m) { m.hidden = !state.done.market; m.textContent = musicPlaying() ? '🎵 Music on' : '🔇 Music off'; m.title = musicPlaying() ? 'Stop the market music' : "Play Marigold's market music"; }
   const b = $('#nightBtn'); if (!b) return;
   b.hidden = !state.done.observatory;
   b.textContent = state.clockOff ? '☀️ Always day' : '🌙 Night follows your clock';
   b.title = state.clockOff ? 'Let the town get dark in the evening, like your clock' : 'Keep the town in daylight';
+}
+
+// a fiddler by the market while the music plays, with notes floating up
+function musician(t) {
+  const x = 344, y = 162, bow = Math.round(Math.sin(t / 160) * 2);
+  person(x, y, { hair: '#e8a33d', shirt: '#7a3b6e' }, t, true);
+  R(x + 6, y + 6, 4, 3, '#8a5a3b'); R(x + 9, y + 5, 2, 1, '#6b4429'); R(x + 3 + bow, y + 4, 1, 1, '#d6ccb8'); R(x + 4 + bow, y + 5, 6, 1, '#d6ccb8');
+  for (let i = 0; i < 3; i++) {
+    const k = ((t / 2200) + i / 3) % 1, nx = x + 8 + Math.sin(k * 6 + i) * 4, ny = y - 2 - k * 18;
+    ctx.globalAlpha = 1 - k; R(nx, ny, 2, 2, C.ink); R(nx + 1, ny - 4, 1, 4, C.ink); R(nx + 2, ny - 4, 1, 1, C.ink); ctx.globalAlpha = 1;
+  }
 }
