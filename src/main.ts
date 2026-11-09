@@ -13,3 +13,5 @@ $('#welcomeGo').onclick = () => { state.welcomed = true; save(); $('#welcome').h
 if (!state.welcomed) { $('#welcome').hidden = false; document.body.classList.add('modal-open'); }
 renderSidebar();
 $('#hoverLabel').innerHTML = plotLabel(null);
+
+if (import.meta.env.DEV) import('./game/devtools.js').then(m => m.initDevTools());

@@ -172,7 +172,7 @@ function noteCard(title, msg) {
 }
 function markLine(line) { gutter.querySelectorAll('.bad').forEach(x => x.classList.remove('bad')); if (!line) return; const lines = ed.value.split('\n').length; gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1 === line ? `<span class="bad">${i + 1}</span>` : i + 1).join('<br>'); }
 
-function build(c) {
+export function build(c) {
   state.done[c.id] = true; save();
   closeNotebook(); renderSidebar();
   const next = CHALLENGES.filter(x => status(x) === 'open');

@@ -30,6 +30,11 @@ const TREES = [[4, 4], [8, 64], [96, 10], [98, 44], [186, 4], [188, 50], [282, 4
 const plotChallenges = pid => CHALLENGES.filter(c => (c.plot || c.id) === pid);
 const mainOf = pid => plotChallenges(pid).find(c => !c.upgrade);
 const upgradeOf = pid => plotChallenges(pid).find(c => c.upgrade);
+// Stages: the map only shows the plots (and the roads they need) up to the player's current stage,
+// i.e. the furthest stage with a challenge that is open or done.
+const stageNum = c => Number(/Stage (\d+)/.exec(c.stage)?.[1] ?? 1);
+const currentStage = () => Math.max(1, ...CHALLENGES.filter(c => status(c) !== 'locked').map(stageNum));
+const visiblePlots = () => { const s = currentStage(); return Object.entries(PLOTS).filter(([pid]) => stageNum(mainOf(pid)) <= s); };
 
 // seeded RNG for static background
 let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -51,15 +56,17 @@ function paintBackground() {
   const fl = ['#f7c6d0', '#fff2a8', '#ffffff', '#e8a0bf'];
   for (let i = 0; i < 60; i++) { const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H); if ((x >= 352 && y >= 122 && y < 250) || (y > 92 && y < 128) || (y > 248 && y < 268) || (y > 318 && y < 336)) continue; S(x, y, 1, 1, fl[i % 4]); }
 }
-function roadLayer() {
+function roadLayer(plots) {
   R(0, 98, W, 22, C.road); R(0, 98, W, 1, C.road2); R(0, 119, W, 1, C.road2);
   for (let x = 6; x < W; x += 23) { R(x, 104, 3, 1, C.road2); R(x + 11, 113, 2, 1, C.road2); }
-  // south lane and the crossing path that joins it to the main road
+  // south lane and the crossing path that joins it to the main road, once a visible plot needs it
+  if (!plots.some(([, p]) => p.road === 'lane' || p.road === 'down')) return;
   R(146, 120, 10, 130, C.road); R(145, 120, 1, 130, C.road2); R(156, 120, 1, 130, C.road2);
   R(0, 250, W, 14, C.road); R(0, 250, 145, 1, C.road2); R(157, 250, W - 157, 1, C.road2); R(0, 263, W, 1, C.road2);
   for (let x = 10; x < W; x += 29) R(x, 256, 3, 1, C.road2);
   R(140, 258, 22, 1, C.road2);
-  // railway tracks along the bottom of town
+  // railway tracks along the bottom of town, once the station's plot is visible
+  if (!plots.some(([pid]) => pid === 'railway')) return;
   for (let x = 0; x < W; x += 6) R(x, 323, 3, 10, '#8a5a3b');
   R(0, 325, W, 1, '#7d7468'); R(0, 330, W, 1, '#7d7468');
 }
@@ -330,13 +337,14 @@ function withReveal(key, p, t, drawFn, under) {
   else if (anim && t - anim < 2600) { const kk = (t - anim - 900) / 1700; for (let i = 0; i < 5; i++) { ctx.globalAlpha = Math.max(0, 1 - kk); R(p.x + 6 + i * (p.w / 5), p.y + 10 - kk * 14 + (i % 2) * 6, 2, 2, '#fff2a8'); } ctx.globalAlpha = 1; }
 }
 function draw(t) {
-  ctx.drawImage(bg, 0, 0); roadLayer();
-  for (const [pid, p] of Object.entries(PLOTS)) {
+  const plots = visiblePlots();
+  ctx.drawImage(bg, 0, 0); roadLayer(plots);
+  for (const [pid, p] of plots) {
     const m = mainOf(pid); if (!m || !state.done[m.id] || p.small) continue;
     if (p.road === 'up') path(p.door, 120, p.y + (p.pathEnd ?? 6)); else if (p.road === 'down') path(p.door, 264, p.y + 6); else if (p.road === 'lane') path(p.door, p.y + p.h, 250); else path(p.door, p.y + p.h, 98);
   }
   TREES.forEach(([x, y]) => { if (y < 120) tree(x, y); });
-  for (const [pid, p] of Object.entries(PLOTS)) {
+  for (const [pid, p] of plots) {
     const m = mainOf(pid), u = upgradeOf(pid);
     if (m && state.done[m.id]) {
       withReveal(pid, p, t, () => p.art(p, t), () => p.small ? smallLot(p) : lot(p, false));
@@ -365,7 +373,7 @@ function draw(t) {
 
 function plotAt(ev) {
   const r = cv.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * H / r.height;
-  for (const [id, p] of Object.entries(PLOTS)) { const [sx, sy] = p.stand; if ((x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 4) || (x >= sx - 4 && x <= sx + 12 && y >= sy - 14 && y <= sy + 14)) return id; }
+  for (const [id, p] of visiblePlots()) { const [sx, sy] = p.stand; if ((x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 4) || (x >= sx - 4 && x <= sx + 12 && y >= sy - 14 && y <= sy + 14)) return id; }
   return null;
 }
 // which challenge a click on a plot should open: the open one, else the last one solved
