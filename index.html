@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haskell Town</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ctext y=%2213%22 font-size=%2214%22%3E%CE%BB%3C/text%3E%3C/svg%3E">
+<script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">λ</span><div>Haskell Town<small>Build a village, one function at a time</small></div></div>
+  <div class="top-right"><button class="ws-btn" id="workshopBtn">🛠 Workshop</button><div class="progress"><span id="progressText">0 of 19 requests</span><div class="bar"><i id="progressBar"></i></div></div></div>
+</header>
+
+<main class="layout">
+  <section>
+    <div class="town-frame"><canvas id="town" width="400" height="340" aria-label="Pixel-art map of Haskell Town"></canvas></div>
+    <div class="town-caption" id="hoverLabel"></div>
+  </section>
+  <aside class="side">
+    <div class="panel">
+      <div class="tabs"><button data-tab="requests" class="active">Requests</button><button data-tab="library">Library</button></div>
+      <div id="requests" class="tabpanel"></div>
+      <div id="library" class="tabpanel" hidden></div>
+    </div>
+    <div class="panel assist-box">
+      <h3>Learning assistance</h3>
+      <div class="mode-seg"></div>
+      <p class="mode-desc"></p>
+    </div>
+    <div class="side-foot"><span>Saved in this browser</span><span><button class="linkbtn" id="nsLink">What can't it do yet?</button> · <button class="linkbtn" id="resetProgress">Start town over</button></span></div>
+  </aside>
+</main>
+
+<div id="notebook" class="modal" hidden>
+  <div class="nb" role="dialog" aria-modal="true" aria-labelledby="nbTitle">
+    <div class="nb-head">
+      <div class="t"><div class="eyebrow" id="nbEyebrow"></div><h2 id="nbTitle"></h2></div>
+      <div class="mode-seg"></div>
+      <button class="x" id="nbClose" aria-label="Close notebook">×</button>
+    </div>
+    <div class="nb-grid">
+      <div class="col">
+        <section class="card" id="problem"></section>
+        <section class="card" id="assistant"></section>
+      </div>
+      <div class="col">
+        <section class="card editor-card">
+          <div class="ed-bar"><span class="file">notebook.hs</span><button id="resetBtn">Reset code</button></div>
+          <div class="editor"><div class="gutter" id="gutter"></div><div class="code-area"><pre id="hl" aria-hidden="true"></pre><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Haskell code editor"></textarea></div></div>
+          <div class="run-row"><button class="btn-run" id="runBtn">▶ Run tests</button><span class="k"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span><span class="mode-note" id="modeNote"></span></div>
+        </section>
+        <section class="card results" id="results"></section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="welcome" class="modal" hidden>
+  <div class="welcome">
+    <h2>Welcome to Haskell Town</h2>
+    <p>You've got a little patch of land along a country road. Residents will drift in with small problems — and you'll solve them by writing real Haskell.</p>
+    <div class="loop"><div><b>1</b>A resident needs help</div><div><b>2</b>You write a function</div><div><b>3</b>Hints if you want them</div><div><b>4</b>The town grows</div></div>
+    <p><b>How much help would you like?</b> You can change this any time, even mid-challenge.</p>
+    <div class="mode-seg"></div>
+    <p class="mode-desc"></p>
+    <div class="go"><button class="btn-build" id="welcomeGo">Let's build a town</button></div>
+    <p class="fine">Your code runs in a small Haskell interpreter right in your browser. Like GHC, it checks all your types before running anything, and everything you write here is genuine Haskell syntax.</p>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+
+</body>
+</html>

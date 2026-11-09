@@ -1,0 +1,385 @@
+// The pixel-art town map: background, buildings, residents, animation and clicks.
+import { CHALLENGES, RESIDENTS } from '../content/index.ts';
+import { $, byId, state, status } from './state.js';
+import { openChallenge } from './notebook.js';
+
+const cv = $('#town'), ctx = cv.getContext('2d');
+const W = 400, H = 340;
+const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
+const C = { grass: '#93c47d', grass2: '#86b870', grass3: '#a4d18c', road: '#e2c596', road2: '#cfae7b', dirt: '#c69c6d', dirt2: '#a97f55', wood: '#8a5a3b', wood2: '#6b4429', ink: '#3b2a2a', wall: '#f6e7cf', wall2: '#e3cfae', glass: '#a8dbe8', glass2: '#7cc0d4', door: '#7a4a2c', skin: '#f2c9a0', white: '#fffaf0' };
+
+// Plots: where each building stands. stand = where its resident waits with a request; road = which street its path joins.
+const PLOTS = {
+  house:   { x: 30, y: 38, w: 48, h: 50, door: 54, road: 'main', stand: [50, 100], art: (p, t) => house(p.x, p.y - 2, t) },
+  mailbox: { x: 84, y: 66, w: 12, h: 22, small: true, stand: [82, 88], art: p => mailbox(p.x, p.y) },
+  bakery:  { x: 116, y: 22, w: 64, h: 66, door: 160, road: 'main', stand: [144, 100], art: (p, t) => bakery(p.x, p.y, t) },
+  store:   { x: 206, y: 22, w: 64, h: 66, door: 248, road: 'main', stand: [234, 100], art: p => store(p.x, p.y) },
+  garden:  { x: 36, y: 136, w: 84, h: 44, door: 78, road: 'up', stand: [74, 122], art: (p, t) => garden(p.x, p.y - 2, t) },
+  library: { x: 190, y: 136, w: 76, h: 46, door: 228, road: 'up', stand: [224, 122], art: (p, t) => library(p.x, p.y, t), deco: (p, t) => libraryDeco(p.x, p.y, t) },
+  school:  { x: 22, y: 194, w: 72, h: 56, door: 58, road: 'lane', stand: [54, 252], art: (p, t) => school(p.x, p.y, t), deco: (p, t) => schoolDeco(p.x, p.y, t) },
+  hall:    { x: 176, y: 192, w: 104, h: 58, door: 216, road: 'lane', stand: [212, 252], art: (p, t) => hall(p.x, p.y, t), deco: (p, t) => hallDeco(p.x, p.y, t) },
+  clinic:  { x: 24, y: 272, w: 70, h: 48, door: 59, road: 'down', stand: [72, 252], art: (p, t) => clinic(p.x, p.y, t), deco: (p, t) => clinicDeco(p.x, p.y, t) },
+  railway: { x: 180, y: 270, w: 96, h: 48, door: 228, road: 'down', stand: [238, 252], art: (p, t) => station(p.x, p.y, t), deco: (p, t) => stationDeco(p.x, p.y, t) },
+  park:    { x: 302, y: 18, w: 90, h: 72, door: 347, road: 'main', stand: [342, 100], art: (p, t) => park(p.x, p.y, t), deco: (p, t) => parkDeco(p.x, p.y, t) },
+  harbour: { x: 288, y: 188, w: 64, h: 60, door: 318, road: 'lane', stand: [318, 252], art: (p, t) => harbour(p.x, p.y, t), deco: (p, t) => harbourDeco(p.x, p.y, t) },
+  observatory: { x: 316, y: 268, w: 64, h: 52, door: 348, road: 'down', stand: [296, 252], art: (p, t) => observatory(p.x, p.y, t), deco: (p, t) => observatoryDeco(p.x, p.y, t) },
+  market:  { x: 280, y: 134, w: 68, h: 50, door: 314, road: 'up', stand: [300, 121], art: (p, t) => market(p.x, p.y, t), deco: (p, t) => marketDeco(p.x, p.y, t) },
+};
+const HOMES = { wren: [60, 93], hazel: [174, 93], moss: [26, 116], bram: [262, 93], iris: [270, 116], juniper: [100, 245], fern: [168, 266], sorrel: [112, 266], pip: [292, 300], rowan: [378, 93], brine: [372, 252], marigold: [340, 116], orla: [388, 296] };
+const TREES = [[4, 4], [8, 64], [96, 10], [98, 44], [186, 4], [188, 50], [282, 4], [284, 66], [6, 150], [126, 128], [124, 164], [170, 140], [104, 196], [122, 222], [0, 186], [110, 280], [132, 296], [290, 270], [2, 296]];
+const plotChallenges = pid => CHALLENGES.filter(c => (c.plot || c.id) === pid);
+const mainOf = pid => plotChallenges(pid).find(c => !c.upgrade);
+const upgradeOf = pid => plotChallenges(pid).find(c => c.upgrade);
+
+// seeded RNG for static background
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
+function paintBackground() {
+  const b = bg.getContext('2d'); const S = (x, y, w, h, c) => { b.fillStyle = c; b.fillRect(x, y, w, h); };
+  S(0, 0, W, H, C.grass);
+  for (let i = 0; i < 700; i++) S(Math.floor(rnd() * W), Math.floor(rnd() * H), 1 + (rnd() < .3 ? 1 : 0), 1, rnd() < .5 ? C.grass2 : C.grass3);
+  for (let i = 0; i < 90; i++) { const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H); S(x, y, 1, 2, C.grass2); S(x + 2, y + 1, 1, 2, C.grass2); }
+  // the sea along the east coast
+  S(352, 122, 48, 128, '#e8d7a8'); S(358, 122, 42, 128, '#5aa0c0'); S(356, 126, 2, 120, '#7fb9d2');
+  for (let i = 0; i < 40; i++) { const x = 362 + Math.floor(rnd() * 36), y = 126 + Math.floor(rnd() * 118); S(x, y, 3, 1, '#86c1d8'); }
+  S(380, 160, 14, 8, '#8d8a84'); S(378, 164, 18, 6, '#77746e'); S(382, 159, 8, 2, '#a5a29c');
+  const fl = ['#f7c6d0', '#fff2a8', '#ffffff', '#e8a0bf'];
+  for (let i = 0; i < 60; i++) { const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H); if ((y > 92 && y < 128) || (y > 248 && y < 268) || (y > 318 && y < 336)) continue; S(x, y, 1, 1, fl[i % 4]); }
+}
+function roadLayer() {
+  R(0, 98, W, 22, C.road); R(0, 98, W, 1, C.road2); R(0, 119, W, 1, C.road2);
+  for (let x = 6; x < W; x += 23) { R(x, 104, 3, 1, C.road2); R(x + 11, 113, 2, 1, C.road2); }
+  // south lane and the crossing path that joins it to the main road
+  R(146, 120, 10, 130, C.road); R(145, 120, 1, 130, C.road2); R(156, 120, 1, 130, C.road2);
+  R(0, 250, W, 14, C.road); R(0, 250, 145, 1, C.road2); R(157, 250, W - 157, 1, C.road2); R(0, 263, W, 1, C.road2);
+  for (let x = 10; x < W; x += 29) R(x, 256, 3, 1, C.road2);
+  R(140, 258, 22, 1, C.road2);
+  // railway tracks along the bottom of town
+  for (let x = 0; x < W; x += 6) R(x, 323, 3, 10, '#8a5a3b');
+  R(0, 325, W, 1, '#7d7468'); R(0, 330, W, 1, '#7d7468');
+}
+function path(x, y1, y2) { R(x - 4, y1, 8, y2 - y1, C.road); R(x - 5, y1, 1, y2 - y1, C.road2); R(x + 4, y1, 1, y2 - y1, C.road2); }
+function tree(x, y) { R(x + 6, y + 13, 4, 7, C.wood2); R(x + 2, y + 2, 12, 11, '#4f8a4a'); R(x, y + 5, 16, 6, '#4f8a4a'); R(x + 4, y, 8, 3, '#4f8a4a'); R(x + 4, y + 3, 4, 3, '#6aa85e'); R(x + 2, y + 6, 3, 2, '#6aa85e'); R(x + 3, y + 12, 10, 1, '#3e7039'); }
+function lot(p, sign) {
+  R(p.x + 4, p.y + p.h - 34, p.w - 8, 30, C.dirt); R(p.x + 4, p.y + p.h - 34, p.w - 8, 2, C.dirt2);
+  for (let i = 0; i < 6; i++) R(p.x + 10 + i * ((p.w - 24) / 5), p.y + p.h - 26 + (i % 2) * 8, 3, 1, C.dirt2);
+  [[p.x + 4, p.y + p.h - 38], [p.x + p.w - 6, p.y + p.h - 38], [p.x + 4, p.y + p.h - 8], [p.x + p.w - 6, p.y + p.h - 8]].forEach(([x, y]) => R(x, y, 2, 6, C.wood));
+  if (sign) { R(p.x + p.w / 2 - 1, p.y + p.h - 16, 2, 10, C.wood2); R(p.x + p.w / 2 - 7, p.y + p.h - 22, 14, 8, C.wood); R(p.x + p.w / 2 - 5, p.y + p.h - 20, 10, 1, '#c49a6c'); R(p.x + p.w / 2 - 5, p.y + p.h - 18, 7, 1, '#c49a6c'); }
+}
+function smallLot(p) { R(p.x + 2, p.y + 10, 8, 12, C.dirt); R(p.x + 5, p.y + 6, 2, 16, C.wood); }
+function roofSteps(x, y, w, rows, c, c2) { for (let i = 0; i < rows; i++) { const ww = Math.round(8 + (w - 8) * i / (rows - 1)); R(x + (w - ww) / 2, y + i * 2, ww, 2, i === rows - 1 ? c2 : c); } }
+function house(x, y, t) {
+  R(x + 34, y + 2, 6, 12, '#9c5b4a'); R(x + 33, y + 1, 8, 2, '#7d463a');
+  for (let i = 0; i < 3; i++) { const k = ((t / 1400) + i / 3) % 1; ctx.globalAlpha = 0.55 * (1 - k); R(x + 35 + Math.sin(k * 6 + i) * 2, y - k * 16, 3 + k * 3, 3 + k * 2, '#f2efe9'); ctx.globalAlpha = 1; }
+  roofSteps(x, y + 4, 48, 11, '#c8553d', '#9b3d2a');
+  R(x + 4, y + 26, 40, 24, C.wall); R(x + 4, y + 48, 40, 2, C.wall2);
+  R(x + 20, y + 33, 9, 17, C.door); R(x + 26, y + 41, 1, 2, '#f2cc8f');
+  [x + 8, x + 33].forEach(wx => { R(wx, y + 31, 8, 8, C.glass); R(wx, y + 31, 8, 1, C.ink); R(wx + 3, y + 31, 1, 8, C.glass2); R(wx, y + 34, 8, 1, C.glass2); R(wx - 1, y + 39, 10, 2, '#9c6b4a'); R(wx, y + 38, 2, 1, '#e8a0bf'); R(wx + 5, y + 38, 2, 1, '#fff2a8'); });
+}
+function mailbox(x, y) { R(x + 5, y + 10, 2, 12, C.wood); R(x + 1, y + 4, 10, 7, '#4a7fa7'); R(x + 1, y + 4, 10, 2, '#5f97c2'); R(x + 1, y + 10, 10, 1, '#365f7f'); R(x + 10, y + 1, 1, 7, '#c8553d'); R(x + 10, y + 1, 3, 3, '#c8553d'); }
+function bakery(x, y, t) {
+  roofSteps(x, y + 2, 64, 13, '#d9934d', '#a86a32');
+  R(x + 26, y + 6, 12, 8, '#f6e7cf'); R(x + 28, y + 9, 8, 3, '#c58a4a'); R(x + 29, y + 8, 6, 1, '#d9a35f');
+  R(x + 4, y + 28, 56, 38, C.wall); R(x + 4, y + 64, 56, 2, C.wall2);
+  for (let i = 0; i < 7; i++) { R(x + 3 + i * 8, y + 30, 8, 7, i % 2 ? '#fff4e0' : '#e07a5f'); R(x + 5 + i * 8, y + 37, 4, 2, i % 2 ? '#fff4e0' : '#e07a5f'); }
+  R(x + 8, y + 42, 24, 16, C.glass); R(x + 8, y + 42, 24, 1, C.ink); R(x + 7, y + 58, 26, 2, '#9c6b4a');
+  [[x + 10, y + 52], [x + 17, y + 53], [x + 24, y + 52]].forEach(([bx, by]) => { R(bx, by, 6, 4, '#c58a4a'); R(bx + 1, by, 4, 1, '#e0b070'); });
+  R(x + 40, y + 44, 12, 22, C.door); R(x + 42, y + 46, 8, 6, C.glass2); R(x + 49, y + 56, 1, 2, '#f2cc8f');
+  const k = (t / 1800) % 1; ctx.globalAlpha = 0.4 * (1 - k); R(x + 30, y + 4 - k * 10, 3, 2, '#fff'); ctx.globalAlpha = 1;
+}
+function store(x, y) {
+  roofSteps(x, y + 2, 64, 13, '#4f8a8b', '#356566');
+  R(x + 4, y + 28, 56, 38, '#f1e4cc'); R(x + 4, y + 64, 56, 2, C.wall2);
+  R(x + 14, y + 26, 36, 7, C.wood); R(x + 16, y + 28, 32, 3, '#f2cc8f'); [18, 24, 30, 36, 42].forEach(o => R(x + o, y + 29, 3, 1, C.wood2));
+  for (let i = 0; i < 7; i++) { R(x + 3 + i * 8, y + 34, 8, 6, i % 2 ? '#fffaf0' : '#81b29a'); }
+  R(x + 8, y + 44, 18, 14, C.glass); R(x + 8, y + 44, 18, 1, C.ink); R(x + 16, y + 44, 1, 14, C.glass2);
+  R(x + 32, y + 44, 12, 22, C.door); R(x + 34, y + 46, 8, 6, C.glass2);
+  R(x + 47, y + 56, 11, 9, C.wood); R(x + 47, y + 56, 11, 1, C.wood2); [[49, 54], [52, 53], [55, 54]].forEach(([a, b]) => R(x + a, y + b, 3, 3, '#d1495b'));
+}
+function garden(x, y, t) {
+  R(x + 2, y + 6, 80, 36, '#9a7350');
+  for (let r = 0; r < 3; r++) {
+    R(x + 6, y + 10 + r * 11, 72, 6, '#7d5a3c');
+    for (let i = 0; i < 9; i++) {
+      const px = x + 9 + i * 8, py = y + 9 + r * 11, sw = Math.round(Math.sin(t / 700 + i + r) * 0.8);
+      R(px + sw, py - 2, 1, 5, '#4f8a4a'); R(px - 1 + sw, py - 1, 1, 1, '#6aa85e'); R(px + 1 + sw, py, 1, 1, '#6aa85e');
+      R(px + sw, py - 3, 1, 1, ['#f7c6d0', '#fff2a8', '#e07a5f'][(i + r) % 3]);
+    }
+  }
+  for (let i = 0; i <= 10; i++) { R(x + i * 8, y + 2, 2, 7, C.wood); R(x + i * 8, y + 38, 2, 7, C.wood); }
+  R(x, y + 4, 82, 1, C.wood2); R(x, y + 40, 82, 1, C.wood2); R(x + 38, y + 38, 8, 7, '#9a7350');
+  R(x + 70, y + 30, 6, 5, '#5f97c2'); R(x + 76, y + 31, 3, 1, '#5f97c2');
+}
+function library(x, y) {
+  roofSteps(x, y + 2, 76, 8, '#5c6b8a', '#46536e');
+  R(x + 4, y + 18, 68, 28, '#ece4d4'); R(x + 4, y + 18, 68, 2, '#cfc5b0'); R(x + 2, y + 44, 72, 2, '#bfb6a4');
+  [10, 22, 50, 62].forEach(o => { R(x + o, y + 20, 4, 24, '#fbf7ee'); R(x + o + 3, y + 20, 1, 24, '#d6cdb9'); R(x + o - 1, y + 20, 6, 1, '#d6cdb9'); });
+  R(x + 32, y + 28, 12, 16, C.door); R(x + 33, y + 29, 10, 3, '#9c6b4a'); R(x + 41, y + 36, 1, 2, '#f2cc8f');
+  [[x + 15, y + 26], [x + 55, y + 26]].forEach(([wx, wy]) => { R(wx, wy, 6, 12, '#6b4429'); ['#c8553d', '#4a7fa7', '#e0b040', '#6a994e'].forEach((col, i) => R(wx + 1 + (i % 2) * 2, wy + 1 + Math.floor(i / 2) * 6, 2, 5, col)); });
+  R(x + 30, y + 8, 16, 6, '#46536e'); R(x + 32, y + 10, 12, 2, '#f2cc8f');
+}
+function libraryDeco(x, y, t) {
+  const glow = 0.6 + Math.sin(t / 400) * 0.2;
+  [x + 26, x + 48].forEach(lx => { R(lx, y + 30, 1, 16, '#3b2a2a'); R(lx - 1, y + 27, 3, 4, '#3b2a2a'); ctx.globalAlpha = glow; R(lx - 1, y + 28, 3, 2, '#ffe08a'); ctx.globalAlpha = 1; });
+  R(x + 58, y + 40, 14, 2, C.wood); R(x + 58, y + 37, 14, 2, C.wood); R(x + 59, y + 42, 1, 4, C.wood2); R(x + 70, y + 42, 1, 4, C.wood2);
+  R(x + 62, y + 38, 3, 2, '#c8553d');
+}
+function school(x, y, t) {
+  R(x + 31, y + 2, 10, 10, '#e9dcc4'); roofSteps(x + 29, y - 4, 14, 3, '#7d2c22', '#5f2019'); R(x + 34, y + 4, 4, 4, '#e0b040'); R(x + 35, y + 8, 2, 1, '#a07a20');
+  roofSteps(x, y + 10, 72, 11, '#a33b2e', '#7d2c22');
+  R(x + 4, y + 30, 64, 26, '#c8644a'); for (let k = 0; k < 6; k++) R(x + 4, y + 33 + k * 4, 64, 1, '#b35640');
+  R(x + 4, y + 54, 64, 2, '#9c4a36');
+  [x + 9, x + 51].forEach(wx => { R(wx, y + 36, 12, 10, C.glass); R(wx, y + 36, 12, 1, C.ink); R(wx + 5, y + 36, 1, 10, C.glass2); R(wx - 1, y + 46, 14, 2, '#f1e4cc'); });
+  R(x + 31, y + 40, 10, 16, C.door); R(x + 32, y + 41, 8, 4, C.glass2);
+  R(x + 25, y + 32, 22, 6, '#f2cc8f'); R(x + 28, y + 34, 3, 2, '#c8553d'); R(x + 33, y + 34, 3, 2, '#4a7fa7'); R(x + 38, y + 34, 3, 2, '#6a994e');
+}
+function schoolDeco(x, y, t) {
+  R(x + 69, y + 10, 1, 46, '#8d8d8d'); R(x + 68, y + 9, 3, 1, '#e0b040');
+  const f = Math.floor(t / 300) % 2;
+  R(x + 70, y + 11, 8, 2, '#81b29a'); R(x + 70, y + 13, 7 + f, 2, '#f2cc8f'); R(x + 70, y + 15, 8 - f, 1, '#81b29a');
+  R(x - 8, y + 36, 1, 20, C.wood2); R(x + 2, y + 36, 1, 20, C.wood2); R(x - 9, y + 35, 13, 2, C.wood);
+  const sw = Math.round(Math.sin(t / 500) * 2);
+  R(x - 5 + sw, y + 37, 1, 11, '#7a7a7a'); R(x - 1 + sw, y + 37, 1, 11, '#7a7a7a'); R(x - 6 + sw, y + 48, 7, 2, '#c8553d');
+}
+function hall(x, y, t) {
+  R(x + 2, y + 22, 80, 36, '#f1e9d6');
+  roofSteps(x, y + 12, 84, 6, '#3d5a80', '#2c4360');
+  R(x + 34, y + 3, 16, 14, '#efe6d2'); roofSteps(x + 32, y - 4, 20, 4, '#3d5a80', '#2c4360');
+  R(x + 37, y + 5, 10, 9, '#fffaf0'); R(x + 37, y + 5, 10, 1, '#9a8f80'); R(x + 37, y + 13, 10, 1, '#9a8f80');
+  const hh = Math.floor(t / 1000) % 4; R(x + 41, y + 7, 2, 4, C.ink); R(x + 42, y + 10, [3, 1, 3, 1][hh], 1, C.ink);
+  R(x + 2, y + 24, 80, 2, '#e07a5f');
+  for (let i = 0; i < 6; i++) { const cx = x + 8 + i * 13 + (i >= 3 ? 4 : 0); R(cx, y + 28, 4, 26, '#fffaf0'); R(cx + 3, y + 28, 1, 26, '#ddd3bf'); }
+  R(x + 36, y + 38, 12, 20, '#5a3a24'); R(x + 41, y + 38, 1, 20, '#3b2a2a'); R(x + 39, y + 48, 1, 2, '#f2cc8f'); R(x + 44, y + 48, 1, 2, '#f2cc8f');
+  R(x + 30, y + 56, 24, 2, '#d8ccb4');
+}
+function hallDeco(x, y, t) {
+  const fx = x + 86, fy = y + 38;
+  R(fx, fy + 10, 18, 8, '#9aa8b2'); R(fx + 1, fy + 10, 16, 1, '#c4ced5'); R(fx + 2, fy + 11, 14, 4, '#6fb3c9');
+  R(fx + 8, fy + 2, 2, 9, '#9aa8b2');
+  for (let i = 0; i < 4; i++) { const k = ((t / 600) + i / 4) % 1; R(fx + 9 + (i % 2 ? 1 : -1) * (2 + k * 5), fy + 1 + k * 10 - Math.sin(k * 3.14) * 4, 1, 1, '#a5d8e6'); }
+  R(x + 2, y + 18, 3, 6, '#e07a5f'); R(x + 79, y + 18, 3, 6, '#e07a5f');
+}
+function clinic(x, y) {
+  roofSteps(x, y + 2, 70, 8, '#5fa8a0', '#3f7f78');
+  R(x + 4, y + 18, 62, 30, '#fbfbf7'); R(x + 4, y + 46, 62, 2, '#d8d8cf'); R(x + 4, y + 18, 62, 1, '#e3e3da');
+  R(x + 29, y + 6, 12, 10, '#ffffff'); R(x + 34, y + 7, 2, 8, '#d1495b'); R(x + 31, y + 10, 8, 2, '#d1495b');
+  [x + 10, x + 48].forEach(wx => { R(wx, y + 25, 12, 10, C.glass); R(wx, y + 25, 12, 1, C.ink); R(wx + 5, y + 25, 1, 10, C.glass2); R(wx - 1, y + 35, 14, 2, '#d8d8cf'); });
+  R(x + 30, y + 30, 10, 18, '#5fa8a0'); R(x + 31, y + 32, 8, 5, C.glass2); R(x + 38, y + 40, 1, 2, '#f2cc8f');
+}
+function clinicDeco(x, y, t) {
+  [x - 2, x + 58].forEach((bx, j) => {
+    R(bx, y + 40, 14, 7, C.wood); R(bx, y + 40, 14, 1, C.wood2);
+    for (let i = 0; i < 4; i++) { const sw = Math.round(Math.sin(t / 650 + i + j) * 0.6); R(bx + 2 + i * 3 + sw, y + 35, 1, 5, '#4f8a4a'); R(bx + 1 + i * 3 + sw, y + 36, 1, 1, '#6aa85e'); R(bx + 2 + i * 3 + sw, y + 34, 1, 1, ['#b48ad1', '#fff2a8', '#f7c6d0', '#ffffff'][i]); }
+  });
+}
+function station(x, y, t) {
+  roofSteps(x + 16, y, 64, 7, '#4a3b5c', '#352a43');
+  R(x + 20, y + 14, 56, 28, '#c0704e'); for (let k = 0; k < 6; k++) R(x + 20, y + 17 + k * 4, 56, 1, '#ab6044');
+  R(x + 43, y + 15, 10, 10, '#fffaf0'); R(x + 43, y + 15, 10, 1, '#9a8f80'); const hh = Math.floor(t / 1000) % 4; R(x + 47, y + 17, 2, 4, C.ink); R(x + 48, y + 20, [3, 1, 3, 1][hh], 1, C.ink);
+  R(x + 26, y + 29, 10, 8, C.glass); R(x + 60, y + 29, 10, 8, C.glass); R(x + 26, y + 29, 10, 1, C.ink); R(x + 60, y + 29, 10, 1, C.ink);
+  R(x + 42, y + 28, 12, 14, C.door); R(x + 43, y + 29, 10, 4, C.glass2);
+  for (let i = 0; i < 12; i++) R(x + i * 8, y + 25, 8, 3, i % 2 ? '#fff4e0' : '#e0a458');
+  R(x, y + 24, 96, 1, '#a86a32'); R(x + 2, y + 28, 2, 14, '#6b4429'); R(x + 92, y + 28, 2, 14, '#6b4429');
+  R(x, y + 42, 96, 4, '#b8ad9a'); R(x, y + 42, 96, 1, '#d6ccb8'); R(x, y + 46, 96, 1, '#9a8f80');
+}
+function stationDeco(x, y, t) {
+  // signal post
+  R(x + 86, y + 30, 1, 12, '#3b2a2a'); R(x + 84, y + 26, 5, 5, '#3b2a2a');
+  const period = 16000, ph = (t % period) / period;
+  R(x + 85, y + 27, 3, 3, ph > 0.15 && ph < 0.75 ? '#81d18a' : '#e85a4f');
+  // the train
+  const len = 76, px = Math.round(ph * (W + len + 40)) - len - 20, ty = 313;
+  const car = (cx, col) => { R(cx, ty + 2, 22, 9, col); R(cx, ty + 2, 22, 1, 'rgba(255,255,255,.35)'); for (let w = 0; w < 3; w++) R(cx + 3 + w * 6, ty + 4, 4, 3, '#fff2c8'); R(cx + 3, ty + 11, 3, 3, '#2b2b2b'); R(cx + 16, ty + 11, 3, 3, '#2b2b2b'); };
+  car(px, '#4a7fa7'); car(px + 24, '#e0a458');
+  const lx = px + 48;
+  R(lx, ty + 3, 22, 8, '#c8553d'); R(lx + 2, ty - 2, 8, 6, '#9b3d2a'); R(lx + 3, ty - 1, 6, 3, '#fff2c8');
+  R(lx + 15, ty - 3, 4, 6, '#3b2a2a'); R(lx + 20, ty + 6, 4, 4, '#3b2a2a'); R(lx + 22, ty + 4, 2, 2, '#ffe08a');
+  [3, 9, 16].forEach(o => R(lx + o, ty + 11, 4, 3, '#2b2b2b')); R(px + 22, ty + 7, 2, 1, '#3b2a2a'); R(px + 46, ty + 7, 2, 1, '#3b2a2a');
+  for (let i = 0; i < 4; i++) { const k = ((t / 500) + i / 4) % 1; ctx.globalAlpha = 0.6 * (1 - k); R(lx + 16 - k * 14, ty - 6 - k * 10, 3 + k * 3, 3 + k * 2, '#f2efe9'); ctx.globalAlpha = 1; }
+}
+function park(x, y, t) {
+  R(x, y, 90, 72, '#79b866');
+  for (let i = 0; i < 90; i += 6) { R(x + i, y, 6, 4, '#3f7a3a'); R(x + i, y + 68, 6, 4, '#3f7a3a'); } R(x, y, 4, 72, '#3f7a3a'); R(x + 86, y, 4, 72, '#3f7a3a');
+  R(x + 41, y + 50, 8, 22, '#e2c596'); R(x + 20, y + 44, 50, 6, '#e2c596');
+  // bandstand
+  R(x + 31, y + 30, 28, 14, '#f6efe2'); R(x + 31, y + 42, 28, 2, '#c9bca2'); [32, 44, 56].forEach(o => R(x + o, y + 24, 2, 18, '#fbf7ee'));
+  roofSteps(x + 27, y + 12, 36, 6, '#d1495b', '#a83a49'); R(x + 44, y + 9, 2, 3, '#e0b040');
+  // trees, pond, flower beds
+  [[x + 6, y + 6], [x + 70, y + 8]].forEach(([tx, ty]) => { R(tx + 5, ty + 12, 3, 6, C.wood2); R(tx + 1, ty + 2, 11, 10, '#4f8a4a'); R(tx + 3, ty, 7, 3, '#4f8a4a'); R(tx + 3, ty + 3, 3, 3, '#6aa85e'); });
+  R(x + 66, y + 34, 16, 10, '#6fb3c9'); R(x + 64, y + 36, 20, 6, '#6fb3c9'); const k = Math.floor(t / 600) % 3; R(x + 68 + k * 3, y + 37, 3, 1, '#a5d8e6');
+  R(x + 6, y + 30, 16, 10, '#9a7350'); for (let i = 0; i < 4; i++) { R(x + 8 + i * 4, y + 31, 2, 2, ['#f7c6d0', '#fff2a8', '#e07a5f', '#b48ad1'][i]); R(x + 8 + i * 4, y + 35, 2, 2, ['#fff2a8', '#e07a5f', '#b48ad1', '#f7c6d0'][i]); }
+  R(x + 8, y + 54, 14, 2, C.wood); R(x + 8, y + 51, 14, 2, C.wood); R(x + 9, y + 56, 1, 3, C.wood2); R(x + 20, y + 56, 1, 3, C.wood2);
+}
+function parkDeco(x, y, t) {
+  // bunting across the bandstand and prize flowers
+  for (let i = 0; i < 9; i++) { const fx = x + 20 + i * 6, fy = y + 22 + Math.round(Math.sin(i / 8 * 3.14) * 3); R(fx, fy, 3, 3, ['#e07a5f', '#f2cc8f', '#81b29a', '#4a7fa7'][i % 4]); }
+  [[x + 64, y + 52], [x + 74, y + 54], [x + 28, y + 56]].forEach(([fx, fy], i) => {
+    R(fx, fy + 4, 6, 5, '#b5603f'); R(fx + 2, fy, 1, 4, '#4f8a4a');
+    const pulse = Math.round(Math.sin(t / 500 + i) * 0.5);
+    R(fx, fy - 3 - pulse, 6, 4, ['#e8a0bf', '#fff2a8', '#e07a5f'][i]); R(fx + 2, fy - 2 - pulse, 2, 2, '#f2cc8f');
+  });
+  R(x + 76, y + 22, 7, 7, '#e0b040'); R(x + 78, y + 24, 3, 3, '#d1495b'); R(x + 77, y + 29, 2, 4, '#4a7fa7'); R(x + 80, y + 29, 2, 4, '#4a7fa7');
+}
+function harbour(x, y, t) {
+  // pier and moored boat
+  R(x + 56, y + 32, 46, 6, '#a0764e'); R(x + 56, y + 32, 46, 1, '#c49a6c'); for (let i = 0; i < 46; i += 9) R(x + 58 + i, y + 38, 2, 6, '#6b4429');
+  const bob = Math.round(Math.sin(t / 700) * 1);
+  R(x + 76, y + 42 + bob, 20, 5, '#c8553d'); R(x + 78, y + 47 + bob, 16, 2, '#9b3d2a'); R(x + 85, y + 30 + bob, 1, 12, '#6b4429'); R(x + 86, y + 31 + bob, 6, 8, '#fffaf0');
+  // warehouse
+  roofSteps(x, y + 2, 58, 9, '#7a3b2e', '#5c2b21');
+  R(x + 4, y + 20, 50, 40, '#a0764e'); for (let k = 0; k < 9; k++) R(x + 4, y + 23 + k * 4, 50, 1, '#8a6240');
+  R(x + 18, y + 34, 22, 26, '#6b4429'); R(x + 28, y + 34, 1, 26, '#4b2f1c'); R(x + 18, y + 34, 22, 2, '#4b2f1c');
+  R(x + 8, y + 26, 8, 6, C.glass); R(x + 42, y + 26, 8, 6, C.glass);
+  R(x + 20, y + 8, 18, 6, '#fffaf0'); R(x + 23, y + 10, 4, 2, '#1f4e79'); R(x + 30, y + 10, 5, 2, '#1f4e79');
+  [[x - 2, y + 50], [x + 6, y + 50], [x + 2, y + 44]].forEach(([cx, cy]) => { R(cx, cy, 8, 8, '#c49a6c'); R(cx, cy, 8, 1, '#8a6240'); R(cx + 3, cy, 1, 8, '#8a6240'); });
+}
+function harbourDeco(x, y, t) {
+  const lx = 383, ly = 128;
+  R(lx, ly + 12, 8, 24, '#fffaf0'); R(lx, ly + 18, 8, 4, '#d1495b'); R(lx, ly + 28, 8, 4, '#d1495b'); R(lx - 1, ly + 35, 10, 2, '#8d8a84');
+  R(lx - 1, ly + 10, 10, 2, '#3b2a2a'); R(lx + 1, ly + 5, 6, 5, '#ffe08a'); R(lx, ly + 3, 8, 2, '#3b2a2a');
+  const a = (t / 900) % (Math.PI * 2), on = Math.cos(a) > 0;
+  ctx.globalAlpha = 0.35; ctx.fillStyle = '#fff2a8';
+  ctx.beginPath(); ctx.moveTo(lx + 4, ly + 7); ctx.lineTo(lx + 4 + Math.cos(a) * 40, ly + 7 + Math.sin(a) * 12 - 4); ctx.lineTo(lx + 4 + Math.cos(a) * 40, ly + 7 + Math.sin(a) * 12 + 4); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1; if (on) R(lx + 2, ly + 6, 4, 3, '#ffffff');
+}
+function dome(cx, top, r, col) { for (let i = 0; i < r; i++) { const w = Math.round(2 * Math.sqrt(r * r - (r - i - 0.5) ** 2)); R(cx - w / 2, top + i, w, 1, col); } }
+function observatory(x, y, t) {
+  // stone tower
+  R(x + 12, y + 22, 40, 30, '#d8d2c4'); for (let k = 0; k < 7; k++) R(x + 12, y + 25 + k * 4, 40, 1, '#c2bba9');
+  for (let k = 0; k < 7; k++) R(x + 14 + (k % 2) * 6 + Math.floor(k / 2) * 12, y + 27 + (k % 3) * 8, 1, 3, '#c2bba9');
+  R(x + 10, y + 20, 44, 3, '#9b9484');
+  // dome with its shutter (closed by day)
+  dome(x + 32, y + 2, 19, '#6f8fb0'); dome(x + 32, y + 4, 15, '#7fa0c2');
+  R(x + 29, y + 3, 6, 18, '#4c6a8a'); R(x + 30, y + 3, 4, 18, '#5b7b9c');
+  R(x + 31, y, 2, 3, '#e0b040');
+  // door and round windows
+  R(x + 27, y + 36, 10, 16, C.door); R(x + 28, y + 37, 8, 1, '#5a3420'); R(x + 34, y + 44, 1, 2, '#f2cc8f');
+  [[x + 17, y + 31], [x + 43, y + 31]].forEach(([wx, wy]) => { R(wx, wy, 5, 5, '#3b3f63'); R(wx + 1, wy + 1, 1, 1, '#fff2a8'); R(wx + 3, wy + 3, 1, 1, '#ffffff'); });
+  // a little star flag
+  R(x + 54, y + 10, 1, 14, C.wood2); R(x + 55, y + 10, 8, 6, '#3b3f63'); R(x + 58, y + 12, 2, 2, '#fff2a8');
+}
+function observatoryDeco(x, y, t) {
+  // the shutter opens and a telescope slowly sweeps the sky
+  R(x + 29, y + 3, 6, 18, '#23263d');
+  const a = -1.15 + Math.sin(t / 2600) * 0.25;
+  for (let k = 0; k < 16; k++) R(x + 32 + Math.cos(a) * k - 1, y + 14 + Math.sin(a) * k - 1, 3, 3, k > 13 ? '#e0b040' : '#c8c8d0');
+  // stars that twinkle over the dome
+  [[x + 6, y + 4], [x + 52, y + 2], [x + 60, y + 18], [x + 2, y + 16]].forEach(([sx, sy], i) => {
+    const on = Math.sin(t / 400 + i * 1.7) > 0.2; R(sx, sy, 1, 1, '#fff2a8');
+    if (on) { R(sx - 1, sy, 3, 1, '#fff2a8'); R(sx, sy - 1, 1, 3, '#fff2a8'); }
+  });
+}
+function market(x, y, t) {
+  // cobbled square
+  R(x + 2, y + 40, 64, 10, '#dccaa4'); for (let i = 0; i < 13; i++) R(x + 4 + i * 5, y + 42 + (i % 2) * 4, 3, 1, '#c4b08a');
+  // string of bunting over the square
+  R(x + 2, y + 2, 64, 1, C.wood2);
+  for (let i = 0; i < 8; i++) { R(x + 4 + i * 8, y + 3, 4, 2, ['#e07a5f', '#f2cc8f', '#81b29a', '#4a7fa7'][i % 4]); R(x + 5 + i * 8, y + 5, 2, 1, ['#e07a5f', '#f2cc8f', '#81b29a', '#4a7fa7'][i % 4]); }
+  // two stalls with striped awnings
+  [[x + 3, '#d1495b', ['#b48ad1', '#e8a0bf', '#f2cc8f']], [x + 35, '#4a7fa7', ['#e07a5f', '#f2cc8f', '#81b29a']]].forEach(([sx, col, goods], k) => {
+    R(sx + 2, y + 15, 2, 26, C.wood2); R(sx + 26, y + 15, 2, 26, C.wood2);
+    R(sx, y + 8, 30, 1, C.wood);
+    for (let i = 0; i < 6; i++) { R(sx + i * 5, y + 9, 5, 6, i % 2 ? C.white : col); R(sx + i * 5 + 1, y + 15, 3, 2, i % 2 ? C.white : col); }
+    for (let i = 0; i < 6; i++) { R(sx + 3 + i * 4, y + 27, 3, 3, goods[i % 3]); R(sx + 3 + i * 4, y + 27, 1, 1, 'rgba(255,255,255,.5)'); }
+    R(sx + 1, y + 30, 28, 10, C.wood); R(sx + 1, y + 30, 28, 2, '#a0764e'); R(sx + 1, y + 39, 28, 1, C.wood2);
+    // a coin that glints now and then
+    if (Math.floor(t / 900 + k * 2) % 4 === 0) R(sx + 22, y + 26, 2, 1, '#fff2a8');
+    R(sx + 21, y + 27, 3, 2, '#e0b040');
+  });
+}
+function marketDeco(x, y, t) {
+  // a little pyramid of crates (a tree of crates!) in the square
+  [[x + 28, y + 44], [x + 35, y + 44], [x + 31, y + 39]].forEach(([cx, cy]) => { R(cx, cy, 6, 5, '#c49a6c'); R(cx, cy, 6, 1, '#8a6240'); R(cx + 2, cy, 1, 5, '#8a6240'); });
+  // a hanging scale beside the market, its pans gently tipping
+  const sx = x - 11, sy = y + 14, tip = Math.round(Math.sin(t / 800) * 1.5);
+  R(sx + 5, sy, 2, 32, C.wood2); R(sx + 3, sy + 31, 6, 2, C.wood);
+  R(sx, sy + 3 - tip, 6, 1, '#8d8a84'); R(sx + 6, sy + 3 + tip, 6, 1, '#8d8a84'); R(sx + 5, sy + 2, 2, 2, '#e0b040');
+  R(sx, sy + 4 - tip, 1, 5, '#8d8a84'); R(sx + 11, sy + 4 + tip, 1, 5, '#8d8a84');
+  R(sx - 2, sy + 9 - tip, 5, 2, '#e0b040'); R(sx + 9, sy + 9 + tip, 5, 2, '#e0b040'); R(sx - 1, sy + 7 - tip, 3, 2, '#e07a5f');
+}
+function person(x, y, r, t, bob) {
+  const dy = bob ? Math.round(Math.sin(t / 380) * 0.6) : 0; y += dy;
+  R(x + 1, y + 13, 6, 1, 'rgba(0,0,0,.15)');
+  R(x + 1, y, 6, 3, r.hair); R(x + 1, y + 2, 6, 4, C.skin); R(x, y + 1, 1, 3, r.hair); R(x + 7, y + 1, 1, 3, r.hair);
+  R(x + 2, y + 3, 1, 1, C.ink); R(x + 5, y + 3, 1, 1, C.ink); R(x + 2, y + 5, 1, 1, '#f0a0a0'); R(x + 5, y + 5, 1, 1, '#f0a0a0');
+  R(x + 1, y + 6, 6, 5, r.shirt); R(x, y + 7, 1, 3, r.shirt); R(x + 7, y + 7, 1, 3, r.shirt);
+  R(x + 2, y + 11, 1, 2, '#5a4636'); R(x + 5, y + 11, 1, 2, '#5a4636');
+}
+function bubble(x, y, t) {
+  const by = y + Math.round(Math.sin(t / 260) * 1.5);
+  R(x, by, 9, 9, C.ink); R(x + 1, by - 1, 7, 11, C.ink); R(x + 1, by, 7, 9, C.white); R(x + 3, by + 9, 2, 2, C.ink);
+  R(x + 4, by + 2, 1, 4, '#e07a5f'); R(x + 4, by + 7, 1, 1, '#e07a5f');
+}
+const butterflies = [{ x: 140, y: 150, c: '#fff2a8', s: 0 }, { x: 60, y: 30, c: '#f7c6d0', s: 2 }, { x: 240, y: 230, c: '#ffffff', s: 4 }];
+export const buildAnim = {};
+let hover = null;
+
+function withReveal(key, p, t, drawFn, under) {
+  const anim = buildAnim[key]; const k = anim ? Math.min(1, (t - anim) / 900) : 1;
+  if (k < 1) { if (under) under(); ctx.save(); ctx.beginPath(); ctx.rect(p.x - 12, p.y - 12 + (p.h + 14) * (1 - k), p.w + 26, (p.h + 14) * k + 4); ctx.clip(); }
+  drawFn();
+  if (k < 1) { ctx.restore(); for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; ctx.globalAlpha = 1 - k; R(p.x + p.w / 2 + Math.cos(a) * (p.w / 2) * k, p.y + p.h - 4 + Math.sin(a) * 6 * k, 3, 2, '#f2efe9'); ctx.globalAlpha = 1; } }
+  else if (anim && t - anim < 2600) { const kk = (t - anim - 900) / 1700; for (let i = 0; i < 5; i++) { ctx.globalAlpha = Math.max(0, 1 - kk); R(p.x + 6 + i * (p.w / 5), p.y + 10 - kk * 14 + (i % 2) * 6, 2, 2, '#fff2a8'); } ctx.globalAlpha = 1; }
+}
+function draw(t) {
+  ctx.drawImage(bg, 0, 0); roadLayer();
+  for (const [pid, p] of Object.entries(PLOTS)) {
+    const m = mainOf(pid); if (!m || !state.done[m.id] || p.small) continue;
+    if (p.road === 'up') path(p.door, 120, p.y + 6); else if (p.road === 'down') path(p.door, 264, p.y + 6); else if (p.road === 'lane') path(p.door, p.y + p.h, 250); else path(p.door, p.y + p.h, 98);
+  }
+  TREES.forEach(([x, y]) => { if (y < 120) tree(x, y); });
+  for (const [pid, p] of Object.entries(PLOTS)) {
+    const m = mainOf(pid), u = upgradeOf(pid);
+    if (m && state.done[m.id]) {
+      withReveal(pid, p, t, () => p.art(p, t), () => p.small ? smallLot(p) : lot(p, false));
+      if (u && state.done[u.id] && p.deco) withReveal(pid + '-deco', p, t, () => p.deco(p, t));
+    } else if (p.small) { if (status(m) === 'open') smallLot(p); }
+    else lot(p, status(m) === 'locked');
+  }
+  TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
+  const shown = new Set();
+  for (const c of CHALLENGES) {
+    if (status(c) !== 'open' || shown.has(c.resident)) continue;
+    shown.add(c.resident);
+    const [fx, fy] = PLOTS[c.plot || c.id].stand;
+    person(fx, fy, RESIDENTS[c.resident], t, true); bubble(fx - 1, fy - 13, t);
+  }
+  for (const [rid, pos] of Object.entries(HOMES)) {
+    if (shown.has(rid)) continue;
+    if (CHALLENGES.some(c => c.resident === rid && state.done[c.id])) person(pos[0], pos[1], RESIDENTS[rid], t + pos[0] * 50, false);
+  }
+  butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
+  if (hover && PLOTS[hover]) { const p = PLOTS[hover]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  requestAnimationFrame(draw);
+}
+
+function plotAt(ev) {
+  const r = cv.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * H / r.height;
+  for (const [id, p] of Object.entries(PLOTS)) { const [sx, sy] = p.stand; if ((x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 4) || (x >= sx - 4 && x <= sx + 12 && y >= sy - 14 && y <= sy + 14)) return id; }
+  return null;
+}
+// which challenge a click on a plot should open: the open one, else the last one solved
+function challengeForPlot(pid) { const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
+export function plotLabel(id) {
+  if (!id) return 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
+  const cs = plotChallenges(id), open = cs.find(c => status(c) === 'open');
+  if (open) return `<b>${RESIDENTS[open.resident].name}</b> has a request: “${open.title}” · ${open.concept}. Click to help!`;
+  const m = mainOf(id);
+  if (state.done[m.id]) { const u = upgradeOf(id); return `<b>${m.reward}</b> ✓${u && state.done[u.id] ? ` with ${u.reward.replace(/ for the .*$/, '').toLowerCase()}` : ''} — click to revisit.`; }
+  return `An empty lot. Help ${m.requires.map(q => RESIDENTS[byId(q).resident].name).filter((v, i, a) => a.indexOf(v) === i).join(' & ')} first to unlock it.`;
+}
+
+// mini portrait canvases
+export function portrait(rid, size = 40) {
+  const c = document.createElement('canvas'); c.width = 10; c.height = 10; c.className = 'portrait'; c.style.width = c.style.height = size + 'px';
+  const g = c.getContext('2d'); const r = RESIDENTS[rid]; const P = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  P(0, 0, 10, 10, '#f2e3c4'); P(2, 1, 6, 3, r.hair); P(1, 2, 1, 4, r.hair); P(8, 2, 1, 4, r.hair); P(2, 3, 6, 4, C.skin); P(3, 4, 1, 1, C.ink); P(6, 4, 1, 1, C.ink); P(3, 6, 1, 1, '#f0a0a0'); P(6, 6, 1, 1, '#f0a0a0'); P(1, 7, 8, 3, r.shirt);
+  return c;
+}
+
+export function initTown() {
+  paintBackground(); requestAnimationFrame(draw);
+  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && challengeForPlot(id) ? 'pointer' : 'default'; });
+  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
+  cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return; const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
+}
