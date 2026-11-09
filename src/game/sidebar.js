@@ -4,6 +4,7 @@ import { $, MODES, state, status } from './state.js';
 import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
 import { openChallenge, setMode } from './notebook.js';
+import { renderBoard } from './errands.js';
 
 export function notSupportedHTML() {
   return `<summary>What Haskell Town can't do yet</summary><p class="ns-intro">Your code runs in a small Haskell made for this game, not the full GHC compiler. These parts of real Haskell aren't available yet:</p><ul class="ns-list">${NOT_SUPPORTED.map(([t, d]) => `<li><b>${t}.</b> ${d}</li>`).join('')}</ul>`;
@@ -26,7 +27,7 @@ export function renderSidebar() {
   });
   const soon = document.createElement('div'); soon.className = 'soon';
   soon.innerHTML = `<div class="soon-h">Coming next in town</div>` + (COMING_SOON.length ? COMING_SOON.map(s => `<div class="soon-i"><b>${s.title}</b> · ${s.concept}<br><span>${s.note}</span></div>`).join('')
-    : `<div class="soon-i"><span>Every building in the plan is open. The Workshop is always there for your own experiments.</span></div>`);
+    : `<div class="soon-i"><span>Every building in the plan is open. Once they're all built, residents pin errands to the Notice Board (the Errands tab), and the Workshop is always there for your own experiments.</span></div>`);
   list.appendChild(soon);
   const lib = $('#library'); lib.innerHTML = `<p class="lib-intro">Every concept you learn is kept here, so you can come back to it whenever you like.</p>`;
   CHALLENGES.forEach(c => {
@@ -36,6 +37,7 @@ export function renderSidebar() {
   });
   const ns = document.createElement('details'); ns.className = 'notsup';
   ns.innerHTML = notSupportedHTML(); lib.appendChild(ns);
+  renderBoard();
   document.querySelectorAll('.mode-seg').forEach(seg => renderSeg(seg));
 }
 export function renderSeg(seg) {
@@ -47,6 +49,7 @@ export function renderSeg(seg) {
 export function initSidebar() {
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
     document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
-    $('#requests').hidden = b.dataset.tab !== 'requests'; $('#library').hidden = b.dataset.tab !== 'library';
+    for (const id of ['requests', 'errands', 'library']) $('#' + id).hidden = b.dataset.tab !== id;
+    if (b.dataset.tab === 'errands') renderBoard(); // a new day may have started since the page was opened
   });
 }

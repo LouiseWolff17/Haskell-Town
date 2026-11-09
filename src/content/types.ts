@@ -83,3 +83,36 @@ export interface WorkshopExample {
   expr?: string;
   input?: string;
 }
+
+/** The fields a CodeRunner needs to check code: a challenge has them, and so does an errand. */
+export type Checkable = Pick<Challenge, 'fn' | 'sig' | 'needs' | 'tests' | 'forbid' | 'recursive'>;
+
+// ---------- Errands: spaced retrieval practice after the village is built ----------
+
+/** A group of ideas that comes back for review as one unit, e.g. "Recursion". */
+export interface ReviewTopic {
+  id: string;
+  title: string;
+  resident: string;
+  /** The challenges that taught this topic. Their Library cards are the cue a player can peek at. */
+  from: string[];
+}
+
+/** A small new problem on an old topic, solved from memory. Each topic has several, so a
+ *  review is a fresh problem (practising transfer) rather than retyping a remembered answer. */
+export interface Errand extends Checkable {
+  id: string;
+  /** A ReviewTopic id. */
+  topic: string;
+  resident: string;
+  title: string;
+  story: string;
+  task: string;
+  examples?: ExprTest[];
+  ioExamples?: IOTest[];
+  /** Kept small on purpose: the point is to recall the rest. */
+  starter: string;
+  solution: string;
+  /** Shown after the errand is solved, or when the player asks for the answer. */
+  explanation: string;
+}

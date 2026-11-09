@@ -63,7 +63,22 @@ Story · learning objective · task · examples · editor · tests · hints · e
 | 22 | Orla | The Endless Star Chart | Laziness & infinite lists | Observatory |
 | 23 | Orla | The Twinkling Star | Lists defined by themselves | Observatory: telescope |
 
+Then: the Notice Board's errands (see below).
+
 Unlock order: 1 → 2 → 3 → (4, 5) → 6 → 7 → 8 → 9 → (City Hall 10–11 and Clinic 12–13 in either order) → Railway → Park → Harbour → Market → Observatory.
+
+## After the village: the Notice Board
+
+Building the village once isn't the same as remembering it. When every request is done, residents start pinning **errands** to the Notice Board (the Errands tab). The design follows Carpenter, Pan & Butler (2022), *The science of effective learning with spacing and retrieval practice*:
+
+- **Retrieval practice with feedback.** Errands are solved from memory: no primer, no hints up front. After trying, the player can peek at the topic's Library cards or see the answer, and every solved errand shows a model answer to compare with.
+- **Spacing.** Each of the 11 review topics sits in a box. Solving it first time without a peek moves it up a box, and the gap until it comes back grows: 1, 3, 7, 14, 30 days. A peek or a few wrong runs keep the box; seeing the answer sends it back to tomorrow.
+- **Successive relearning.** Within a day, a topic is practised until it's solved once from memory: seeing the answer puts a fresh errand on that topic at the end of the day's list.
+- **Interleaving and limits.** At most four errands a day, on different topics, in mixed order. When they're done, the board says when the next ones come and why there is no point cramming.
+- **Varied problems (transfer).** Each topic has at least two errands, and reviews take turns, so the player applies the idea to a new problem instead of retyping a remembered answer.
+- **Metacognition.** Before the first run, the player can guess how sure they are. The board shows how often “Sure” really meant right first time, and the “Why do errands come back?” panel explains why effortful practice feels worse but works better.
+
+The rules are pure functions in `src/game/schedule.ts`, tested in `tests/schedule.test.ts`.
 
 ## Learning stages (long term)
 

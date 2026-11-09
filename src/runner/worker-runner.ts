@@ -4,7 +4,7 @@
 // cancel() is called, the worker is terminated (the only way to stop JavaScript
 // mid-loop), the call resolves with a `stopped` result, and a fresh worker starts.
 
-import type { Challenge } from '../content/types.ts';
+import type { Checkable } from '../content/types.ts';
 import type {
   CheckResult, CodeRunner, CompileResult, EvalResult, RunMainResult, Stopped,
 } from './types.ts';
@@ -12,7 +12,7 @@ import type {
 export type WorkerRequest = {
   id: number;
   request:
-    | { method: 'check'; challenge: Challenge; source: string }
+    | { method: 'check'; challenge: Checkable; source: string }
     | { method: 'compile'; source: string }
     | { method: 'runMain'; source: string; input: string }
     | { method: 'evaluate'; source: string; expr: string; input: string };
@@ -52,7 +52,7 @@ export class WorkerRunner implements CodeRunner {
     this.worker = this.spawn(); // start loading the interpreter right away
   }
 
-  check(challenge: Challenge, source: string) {
+  check(challenge: Checkable, source: string) {
     return this.call<CheckResult>({ method: 'check', challenge, source });
   }
   compile(source: string) {

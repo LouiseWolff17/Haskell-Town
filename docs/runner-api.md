@@ -5,7 +5,7 @@ Haskell Town keeps the game separate from the thing that runs the player's Haske
 ```ts
 interface CodeRunner {
   readonly name: string;
-  check(challenge: Challenge, source: string): Promise<CheckResult>;
+  check(challenge: Checkable, source: string): Promise<CheckResult>;  // a Challenge or an Errand
   compile(source: string): Promise<CompileResult>;
   runMain(source: string, input: string): Promise<RunMainResult>;
   evaluate(source: string, expr: string, input: string): Promise<EvalResult>;

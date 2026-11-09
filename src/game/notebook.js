@@ -6,6 +6,8 @@ import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } 
 import { codeBlock, highlight } from './highlight.js';
 import { buildAnim, plotLabel, portrait } from './town.js';
 import { notSupportedHTML, renderSidebar } from './sidebar.js';
+import { ERRANDS_BY_TOPIC, cueHTML, errandById, reviews, today, topicById, villageBuilt, whenText } from './errands.js';
+import { completeItem, isOpen, showAnswer } from './schedule.ts';
 
 const runner = createRunner();
 
@@ -18,7 +20,7 @@ function syncEditor() {
 }
 function starterFor(c, mode = state.mode) { return c.starter[mode]; }
 export function setMode(m) {
-  if (current && current.workshop) { state.mode = m; save(); renderSidebar(); return; }
+  if (current && (current.workshop || current.errand)) { state.mode = m; save(); renderSidebar(); return; }
   const prev = state.mode; state.mode = m; save(); renderSidebar();
   if (current) {
     const code = ed.value; const untouched = !code.trim() || Object.values(current.starter).includes(code);
@@ -29,7 +31,7 @@ export function setMode(m) {
 }
 export function openChallenge(id) {
   const c = byId(id); if (status(c) === 'locked') return;
-  current = c; $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop'); $('#runBtn').textContent = '▶ Run tests';
+  current = c; $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop', 'is-errand'); $('#runBtn').textContent = '▶ Run tests';
   $('#nbEyebrow').textContent = `Challenge ${String(c.num).padStart(2, '0')} · ${c.stage}`;
   $('#nbTitle').textContent = c.title;
   ed.value = state.code[id] != null ? state.code[id] : starterFor(c); syncEditor();
@@ -111,25 +113,39 @@ function workshopEval() { return whileRunning(doWorkshopEval); }
 async function checkNotebook() {
   const c = current; if (!c) return;
   if (c.workshop) return doWorkshopRun();
+  if (c.errand) return checkErrand();
   state.attempts[c.id] = (state.attempts[c.id] || 0) + 1; save();
   const out = $('#results');
   const r = await runner.check(c, ed.value);
   if (current !== c) return; // the notebook was closed or switched while checking
-  if (r.status === 'stopped') { out.innerHTML = stoppedCard(r); return; }
+  let { html, all } = checkHTML(c, r);
+  if (all) {
+    const hints = Math.min(state.hints[c.id] || 0, 5);
+    html += `<div class="win"><h3>What just happened</h3><p>${c.explanation}</p><div class="win-stats">Solved in ${state.attempts[c.id]} run${state.attempts[c.id] === 1 ? '' : 's'} · ${hints} hint${hints === 1 ? '' : 's'} used</div>`;
+    html += state.done[c.id] ? `<div class="already">Already built ✓</div>` : `<button class="btn-build" id="buildBtn">Build ${c.reward}</button>`;
+    html += `</div>`;
+  }
+  out.innerHTML = html;
+  const bb = $('#buildBtn'); if (bb) bb.onclick = () => build(c);
+}
+// Turn a CheckResult into HTML. `all` is true when every test passed and no rule was broken.
+function checkHTML(c, r) {
+  const early = html => ({ html, all: false });
+  if (r.status === 'stopped') return early(stoppedCard(r));
   if (r.status === 'compile-error') {
     const e = r.error;
-    out.innerHTML = noteCard(compileTitle(e), e.message) + `<p class="nudge">${e.kind === 'type' ? 'Like GHC, Haskell Town checks every type before running anything, so none of the tests ran yet.' : 'Fix this and run again — none of the tests ran yet.'}</p>`;
-    markLine(e.line); return;
+    markLine(e.line);
+    return early(noteCard(compileTitle(e), e.message) + `<p class="nudge">${e.kind === 'type' ? 'Like GHC, Haskell Town checks every type before running anything, so none of the tests ran yet.' : 'Fix this and run again — none of the tests ran yet.'}</p>`);
   }
   markLine(null);
   if (r.status === 'missing-function') {
-    out.innerHTML = noteCard(`I couldn't find ${r.fn}`, `The tests call a function named <code>${r.fn}</code>, but there's no definition for it in your notebook yet. Check the spelling — Haskell names are case-sensitive.`); return;
+    return early(noteCard(`I couldn't find ${r.fn}`, `The tests call a function named <code>${r.fn}</code>, but there's no definition for it in your notebook yet. Check the spelling — Haskell names are case-sensitive.`));
   }
   if (r.status === 'missing-parts') {
-    out.innerHTML = noteCard('Something the challenge needs is missing', `This challenge needs ${r.missing.map(m => MISSING[m.what](m)).join(', ')} — check the task description and the spelling.`); return;
+    return early(noteCard('Something the challenge needs is missing', `This challenge needs ${r.missing.map(m => MISSING[m.what](m)).join(', ')} — check the task description and the spelling.`));
   }
   if (r.status === 'signature-mismatch') {
-    out.innerHTML = noteCard("The types don't fit the challenge", r.message) + `<p class="nudge">The tests call <code>${c.fn}</code> with the types above, so they can't run until it fits.</p>`; return;
+    return early(noteCard("The types don't fit the challenge", r.message) + `<p class="nudge">The tests call <code>${c.fn}</code> with the types above, so they can't run until it fits.</p>`);
   }
   const typeLine = r.fnType ? `<div class="typeok"><span>✓ Types check out</span><code>${esc(r.fnType.fn)} :: ${esc(r.fnType.type)}</code>${r.fnType.hasSignature ? '' : '<em>(worked out by Haskell — you didn\'t even write a signature!)</em>'}</div>`
     : `<div class="typeok"><span>✓ Types check out</span><code>${r.instances.map(i => 'instance ' + esc(i)).join(' · ')}</code></div>`;
@@ -139,7 +155,7 @@ async function checkNotebook() {
   if (r.ruleBreak) {
     const who = RESIDENTS[c.resident].name;
     if (r.ruleBreak.rule === 'forbidden') ruleNote = noteCard('It works — but not quite the way ' + who + ' asked', `All the tests pass, but this challenge is about writing it yourself, so please don't use ${r.ruleBreak.used.map(u => '`' + u + '`').join(' or ')}. Try making <code>${c.fn}</code> call itself instead.`);
-    else ruleNote = noteCard('It works — but where is the recursion?', `All the tests pass, but this challenge is about recursion: <code>${c.fn}</code> (or a helper) should call itself. Hint 1 shows the two cases to write.`);
+    else ruleNote = noteCard('It works — but where is the recursion?', `All the tests pass, but this challenge is about recursion: <code>${c.fn}</code> (or a helper) should call itself.${c.hints ? ' Hint 1 shows the two cases to write.' : ''}`);
   }
   let html = `<div class="res-head ${all ? 'ok' : ''}"><span>${all ? 'All tests pass!' : `${passed} of ${rows.length} tests pass`}</span><span class="dots">${rows.map(r => `<i class="${r.ok ? 'ok' : 'no'}"></i>`).join('')}</span></div>${typeLine}<ul class="tests">`;
   rows.forEach(r => {
@@ -150,16 +166,10 @@ async function checkNotebook() {
     html += `</div></li>`;
   });
   html += '</ul>' + ruleNote;
-  if (all) {
-    const hints = Math.min(state.hints[c.id] || 0, 5);
-    html += `<div class="win"><h3>What just happened</h3><p>${c.explanation}</p><div class="win-stats">Solved in ${state.attempts[c.id]} run${state.attempts[c.id] === 1 ? '' : 's'} · ${hints} hint${hints === 1 ? '' : 's'} used</div>`;
-    html += state.done[c.id] ? `<div class="already">Already built ✓</div>` : `<button class="btn-build" id="buildBtn">Build ${c.reward}</button>`;
-    html += `</div>`;
-  } else if (rows.some(r => r.error && /undefined|___/.test(r.error))) {
+  if (!all && !c.errand && rows.some(r => r.error && /undefined|___/.test(r.error))) {
     html += `<p class="nudge">Not written yet? That's fine — try something, run it, and see what happens. The hints on the left are there if you get stuck.</p>`;
   }
-  out.innerHTML = html;
-  const bb = $('#buildBtn'); if (bb) bb.onclick = () => build(c);
+  return { html, all };
 }
 function noteCard(title, msg) {
   const [first, ...rest] = msg.split('\n');
@@ -178,16 +188,117 @@ export function build(c) {
   const next = CHALLENGES.filter(x => status(x) === 'open');
   buildAnim[c.upgrade ? c.plot + '-deco' : (c.plot || c.id)] = performance.now();
   const noun = c.upgrade ? `${c.reward} — added!` : `${c.reward} ${['mailbox', 'garden'].includes(c.id) ? 'is ready' : 'has been built'}!`;
-  toast(`<b>${noun}</b> ` + (next.length ? `New request from ${[...new Set(next.map(x => RESIDENTS[x.resident].name))].join(' & ')}.` : `You've finished every request in town so far. More neighbourhoods are on the way — try the Workshop meanwhile!`));
+  toast(`<b>${noun}</b> ` + (next.length ? `New request from ${[...new Set(next.map(x => RESIDENTS[x.resident].name))].join(' & ')}.`
+    : villageBuilt() ? `The whole village is built! From now on, residents pin small errands to the <b>Notice Board</b> (the Errands tab) — a few each day.` : `You've finished every request in town so far. Try the Workshop meanwhile!`));
+  if (villageBuilt()) document.querySelector('.tabs button[data-tab=errands]')?.click();
   document.querySelector('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 let toastT; function toast(html) { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
+
+
+// ---------- Errands: retrieval practice from the Notice Board ----------
+// The player solves a small new problem on an old topic from memory. There are no hints up
+// front: a peek at the Library or the full answer is there, but only after trying, and each
+// one changes when the topic comes back (see schedule.ts).
+const CONF = { unsure: 'Not sure', fairly: 'Fairly sure', sure: 'Sure' };
+function errandItem() {
+  const rs = reviews(), c = current;
+  if (!rs || !c || !c.errand || rs.day.date !== c.date) return null;
+  return rs.day.items[c.index] || null;
+}
+export function openErrand(index) {
+  const rs = reviews(); const item = rs && rs.day.items[index]; if (!item) return;
+  const e = errandById(item.errand), t = topicById(item.topic);
+  current = { ...e, id: 'errand:' + e.id, errandId: e.id, errand: true, index, date: rs.day.date };
+  $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop'); $('.nb').classList.add('is-errand'); $('#runBtn').textContent = '▶ Run tests';
+  $('#nbEyebrow').textContent = `Errand · ${t.title} · from memory`;
+  $('#nbTitle').textContent = e.title;
+  ed.value = state.code[current.id] != null ? state.code[current.id] : e.starter; syncEditor(); markLine(null);
+  renderErrandProblem(); renderErrandAssistant();
+  $('#results').innerHTML = item.outcome ? `<div class="res-empty done-note">You've done this errand today. Feel free to run it again.</div>`
+    : item.sawAnswer ? `<div class="res-empty">You've seen the answer to this one. Study it, then try the new errand on ${t.title} on the Notice Board, from memory.</div>`
+    : `<div class="res-empty">Write it from memory first, then press <b>Run tests</b>. A wrong first try is fine: trying to remember is what does the work.</div>`;
+  $('#notebook').hidden = false; document.body.classList.add('modal-open');
+  setTimeout(() => ed.focus(), 50);
+}
+function renderErrandProblem() {
+  const c = current, r = RESIDENTS[c.resident];
+  const ex = c.ioExamples ? `<h3>Example run</h3>${c.ioExamples.map(x => `<div class="io-ex"><div><span>You type</span><pre class="console">${esc(x.input)}</pre></div><div><span>It prints</span><pre class="console">${esc(x.out)}</pre></div></div>`).join('')}`
+    : `<h3>Examples</h3>${codeBlock(c.examples.map(([a, b]) => `${a.padEnd(Math.max(...c.examples.map(e => e[0].length)) + 2)}-- ${b}`).join('\n'))}`;
+  $('#problem').innerHTML = `<div class="story"><div class="story-p"></div><div><div class="who">${r.name} <span>the ${r.role}</span></div><p>${c.story}</p></div></div>
+    <h3>Your task</h3><p>${c.task}</p>${c.sig ? `<div class="sig-line">Type signature ${codeBlock(c.sig)}</div>` : ''}${ex}`;
+  $('#problem').querySelector('.story-p').appendChild(portrait(c.resident, 52));
+}
+function renderErrandAssistant() {
+  const item = errandItem(); if (!item) return;
+  const c = current, t = topicById(item.topic), a = $('#assistant');
+  let html = `<div class="primer recall"><div class="primer-h">From memory · ${t.title}</div><p>No hints up front this time. Give it a real try before looking anything up: struggling to remember is what makes it stick.</p></div>`;
+  html += `<div class="hints-h"><span>How sure are you?</span></div>`;
+  if (item.runs === 0 && isOpen(item)) {
+    html += `<p class="conf-q">Before you run it: how sure are you that it will pass first time?</p><div class="conf-seg">${Object.entries(CONF).map(([k, l]) => `<button data-conf="${k}" class="${item.confidence === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  } else {
+    html += `<p class="conf-q">${item.confidence ? `You said: <b>${CONF[item.confidence]}</b>.` : `You didn't say. Next time, try guessing before you run: it helps you notice what you really know.`}</p>`;
+  }
+  if (isOpen(item)) {
+    html += `<div class="hints-h"><span>Stuck?</span></div>`;
+    html += item.cue ? `<div class="cue">${cueHTML(item.topic)}</div>` : `<button class="btn-soft" id="cueBtn">Peek at the Library cards for ${t.title}</button>`;
+    html += `<button class="btn-soft ghost" id="answerBtn">I can't remember — show me the answer</button>`;
+    html += `<p class="no-penalty">Looking is fine. It only changes when this topic comes back: a peek keeps the gap the same, and after seeing the answer, a new errand on ${t.title} comes back later today.</p>`;
+  } else if (item.sawAnswer) {
+    html += answerHTML(c);
+  }
+  a.innerHTML = html;
+  a.querySelectorAll('[data-conf]').forEach(b => b.onclick = () => { item.confidence = b.dataset.conf; save(); renderErrandAssistant(); });
+  const cb = $('#cueBtn'); if (cb) cb.onclick = () => { item.cue = true; save(); renderErrandAssistant(); };
+  const ab = $('#answerBtn'); if (ab) ab.onclick = () => {
+    showAnswer(state.reviews, item, ERRANDS_BY_TOPIC[item.topic]); save(); renderSidebar(); renderErrandAssistant();
+    $('#results').innerHTML = `<div class="res-empty">Read the answer through and make sense of it. Then close this: a <b>new errand on ${t.title}</b> is now at the end of today's list, to do from memory.</div>`;
+  };
+}
+function answerHTML(c) {
+  return `<div class="solution"><div class="hint-lv">One way to write it</div>${codeBlock(c.solution)}<p>${c.explanation}</p></div>`;
+}
+async function checkErrand() {
+  const c = current, item = errandItem();
+  if (!item) { $('#results').innerHTML = noteCard('A new day has started', 'Today has new errands. Close this and open one from the Notice Board.'); return; }
+  const counts = isOpen(item);
+  if (counts) { item.runs++; save(); if (item.runs === 1) renderErrandAssistant(); } // the confidence guess is locked once you run
+  const r = await runner.check(c, ed.value);
+  if (current !== c) return;
+  let { html, all } = checkHTML(c, r);
+  if (all && counts) {
+    const outcome = completeItem(state.reviews, item, today()); save();
+    const p = state.reviews.topics[item.topic], t = topicById(item.topic), who = RESIDENTS[c.resident].name;
+    const headline = { recalled: 'Remembered, first try!', effortful: 'Done — and that effort counts.', relearned: 'Relearned!' }[outcome];
+    const body = {
+      recalled: `You pulled it straight from memory. ${t.title} will come back after a longer gap.`,
+      effortful: `Getting there after ${item.runs > 1 ? 'a few runs' : 'a peek'} is still real practice: you had to work to remember, and that strengthens it.`,
+      relearned: `You saw an answer earlier and then solved a new one yourself. That second recall is the one that sticks.`,
+    }[outcome];
+    let conf = '';
+    if (item.confidence) {
+      const first = outcome === 'recalled';
+      conf = `<p class="conf-res">You felt <b>${CONF[item.confidence].toLowerCase()}</b>, and it ${first ? 'passed first time' : "didn't pass first time"}. ${
+        item.confidence === 'sure' && !first ? 'Feeling sure and being sure aren\'t the same: worth remembering next time.'
+        : item.confidence === 'unsure' && first ? 'You knew more than you thought!' : 'Nicely judged.'}</p>`;
+    }
+    html += `<div class="win"><h3>${headline}</h3><p>${body}</p>${conf}<details class="compare"><summary>Compare with one way to write it</summary>${answerHTML(c)}</details>
+      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
+    renderSidebar(); renderErrandAssistant();
+  } else if (all) {
+    html += `<div class="win"><h3>All tests pass</h3><p>${item.sawAnswer ? `Now try the new ${topicById(item.topic).title} errand on the Notice Board, from memory.` : 'This errand is already done for today.'}</p><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
+  } else if (counts && r.status === 'tested') {
+    html += `<p class="nudge">Not quite yet. Look at what failed and try again: a wrong try followed by a fix is still good practice.</p>`;
+  }
+  $('#results').innerHTML = html;
+  const bb = $('#boardBtn'); if (bb) bb.onclick = () => { closeNotebook(); document.querySelector('.tabs button[data-tab=errands]')?.click(); };
+}
 
 // ---------- Workshop: free play with the whole language ----------
 const WORKSHOP = { id: 'workshop', workshop: true };
 function openWorkshop() {
   current = WORKSHOP; $('#modeNote').textContent = '';
-  $('.nb').classList.add('is-workshop'); $('#runBtn').textContent = '▶ Check & run';
+  $('.nb').classList.remove('is-errand'); $('.nb').classList.add('is-workshop'); $('#runBtn').textContent = '▶ Check & run';
   $('#nbEyebrow').textContent = 'Free play · no tests, no pressure';
   $('#nbTitle').textContent = 'The Workshop';
   ed.value = state.code.workshop != null ? state.code.workshop : WORKSHOP_EXAMPLES[0].code; syncEditor();
@@ -265,7 +376,7 @@ export function initNotebook() {
   $('#nbClose').onclick = closeNotebook;
   $('#notebook').addEventListener('click', e => { if (e.target.id === 'notebook') closeNotebook(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#notebook').hidden) closeNotebook(); });
-  $('#resetBtn').onclick = () => { if (!current) return; if (current.workshop) { loadExample(0); return; } ed.value = starterFor(current); state.code[current.id] = ed.value; save(); syncEditor(); $('#modeNote').textContent = ''; ed.focus(); };
+  $('#resetBtn').onclick = () => { if (!current) return; if (current.workshop) { loadExample(0); return; } ed.value = current.errand ? current.starter : starterFor(current); state.code[current.id] = ed.value; save(); syncEditor(); $('#modeNote').textContent = ''; ed.focus(); };
   $('#runBtn').onclick = () => (activeRun ? runner.cancel?.() : runTests());
 
   // reset progress (two-step, no confirm dialog)

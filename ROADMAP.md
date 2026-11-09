@@ -34,7 +34,9 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [ ] A `Traversable` class, perhaps with a Bridge building.
 
 ### Learning
-- [ ] Track which concepts the player struggles with (attempt counts are already stored) and offer optional practice in the Library.
+- [x] Spaced retrieval practice after the village is built: the Notice Board (`src/game/schedule.ts`).
+- [ ] Use the Notice Board's data (lapses, calibration) to suggest which topics to revisit in the Library.
+- [ ] More errands per topic, and errands that mix two topics.
 - [ ] Larger multi-function projects at City Hall (design doc stage 5: mastery and creativity).
 
 ### Real GHC

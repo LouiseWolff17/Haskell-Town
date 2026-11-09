@@ -7,7 +7,7 @@ import { BrowserRunner } from '../src/runner/browser.ts';
 import { WorkerRunner } from '../src/runner/worker-runner.ts';
 import { InProcessWorker } from './helpers/fake-worker.ts';
 import type { CodeRunner, CheckResult } from '../src/runner/types.ts';
-import { CHALLENGES, WORKSHOP_EXAMPLES } from '../src/content/index.ts';
+import { CHALLENGES, ERRANDS, WORKSHOP_EXAMPLES } from '../src/content/index.ts';
 import type { Challenge } from '../src/content/types.ts';
 
 const RUNNERS: CodeRunner[] = [new BrowserRunner(), new WorkerRunner(() => new InProcessWorker())];
@@ -39,6 +39,17 @@ for (const runner of RUNNERS) {
             const r = await runner.check(c, c.starter[mode]);
             assert.ok(!(r.status === 'tested' && r.passed), `${mode} starter should not pass`);
           }
+        });
+      }
+    });
+
+    describe('every errand solution passes, and no errand starter does', () => {
+      for (const e of ERRANDS) {
+        test(`errand ${e.id}`, async () => {
+          const r = await runner.check(e, e.solution);
+          assert.ok(r.status === 'tested' && r.passed, describeFailure(r));
+          const s = await runner.check(e, e.starter);
+          assert.ok(!(s.status === 'tested' && s.passed), 'starter should not pass');
         });
       }
     });

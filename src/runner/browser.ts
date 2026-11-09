@@ -4,7 +4,7 @@
 
 import { HS } from '../haskell/interpreter.js';
 import type { Program } from '../haskell/interpreter.js';
-import type { Challenge, IOTest } from '../content/types.ts';
+import type { Checkable, IOTest } from '../content/types.ts';
 import type {
   CheckResult, CodeRunner, CompileResult, Diagnostic, DiagnosticKind, EvalResult,
   MissingPart, ProgramSummary, RuleBreak, RunMainResult, RunOutput, TestRow,
@@ -40,7 +40,7 @@ function compile(source: string): Compiled {
   catch (e) { return { ok: false, error: diagnostic(e) }; }
 }
 
-function missingParts(c: Challenge, prog: Program): MissingPart[] {
+function missingParts(c: Checkable, prog: Program): MissingPart[] {
   const n = c.needs;
   if (!n) return [];
   const { ctx } = prog;
@@ -75,7 +75,7 @@ function runExprTest(prog: Program, expr: string, expected: string): TestRow {
   }
 }
 
-export function checkChallenge(c: Challenge, source: string): CheckResult {
+export function checkChallenge(c: Checkable, source: string): CheckResult {
   const compiled = compile(source);
   if (!compiled.ok) return { status: 'compile-error', error: compiled.error };
   const { prog } = compiled;
@@ -142,7 +142,7 @@ export function evaluate(source: string, expr: string, input: string): EvalResul
 
 export class BrowserRunner implements CodeRunner {
   readonly name = 'browser';
-  async check(challenge: Challenge, source: string) { return checkChallenge(challenge, source); }
+  async check(challenge: Checkable, source: string) { return checkChallenge(challenge, source); }
   async compile(source: string) { return compileProgram(source); }
   async runMain(source: string, input: string) { return runMain(source, input); }
   async evaluate(source: string, expr: string, input: string) { return evaluate(source, expr, input); }

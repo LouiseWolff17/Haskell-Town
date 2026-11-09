@@ -154,7 +154,37 @@ pre.code{margin:6px 0 0; background:var(--code-bg); color:var(--code-ink); font-
 .top-right{display:flex; align-items:center; gap:18px}
 .ws-btn{border:2px solid var(--ink); background:var(--paper); border-radius:10px; padding:6px 12px; font-weight:800; font-size:14px; box-shadow:0 2px 0 var(--ink)}
 .ws-btn:hover{background:var(--honey)}
-.is-workshop .nb-head .mode-seg{visibility:hidden}
+.is-workshop .nb-head .mode-seg, .is-errand .nb-head .mode-seg{visibility:hidden}
+/* Notice Board (errands) */
+.tabs button{font-size:15px; padding:10px 6px}
+.tab-badge{display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; margin-left:3px; border-radius:9px; background:var(--sky); color:#fff; font-family:var(--body); font-size:11px; font-weight:800; vertical-align:1px}
+.board-locked{text-align:center; padding:14px 8px; border:2px dashed var(--line); border-radius:11px}
+.board-locked h4{margin:2px 0 6px; font-family:var(--pixel); font-size:17px; font-weight:500}
+.board-locked p{margin:0 0 8px; font-size:13.5px; color:var(--ink2)}
+.board-pin{font-size:22px}
+.board-prog{font-weight:800; color:var(--ink) !important}
+.board-rest{margin:4px 0 8px; padding:10px 12px; background:#e9f1f7; border:2px solid #c9dceb; border-radius:11px; font-size:13.5px}
+.board-h{margin:14px 2px 6px; font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--terra)}
+.topic-list,.cal-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px; font-size:13px}
+.topic-list li{display:grid; grid-template-columns:minmax(0,1fr) auto 66px; gap:8px; align-items:center}
+.topic-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.topic-next{color:var(--ink2); font-size:12px; text-align:right}
+.pips{display:flex; gap:2px} .pips i{width:9px; height:9px; border-radius:2px; background:#eee3cf; border:1px solid var(--line)} .pips i.on{background:var(--sage); border-color:var(--sage2)}
+.cal-list li{display:grid; grid-template-columns:76px 1fr auto; gap:8px; align-items:center}
+.cal-bar{height:9px; background:#eee3cf; border-radius:5px; overflow:hidden} .cal-bar i{display:block; height:100%; background:var(--sky)}
+.board-small{font-size:12px; color:var(--ink2); margin:6px 0 0}
+.board-why{margin-top:14px; border:2px solid var(--line); border-radius:11px; padding:8px 12px; font-size:13.5px}
+.board-why summary{cursor:pointer; font-weight:800}
+.board-why p{margin:8px 0 0}
+.primer.recall{background:#e9f1f7; border-color:#c9dceb} .primer.recall .primer-h{color:var(--sky)}
+.conf-q{margin:0 0 6px; font-size:14px}
+.conf-seg{display:flex; gap:6px; flex-wrap:wrap}
+.conf-seg button{flex:1; border:2px solid var(--line); background:var(--paper); border-radius:9px; padding:6px 8px; font-weight:700; font-size:13px; color:var(--ink2)}
+.conf-seg button.on{border-color:var(--sky); background:var(--sky); color:#fff}
+.btn-soft.ghost{background:var(--paper); margin-top:8px}
+.cue{max-height:320px; overflow:auto}
+.conf-res{margin:8px 0 0 !important; font-size:13.5px !important}
+.compare{margin-top:8px; font-size:14px} .compare summary{cursor:pointer; font-weight:700; color:var(--sage2)} .compare .solution{margin:8px 0 0} .compare .solution p{margin:6px 0 0}
 .ex-list{display:flex; flex-direction:column; gap:6px; margin-top:6px}
 .ex{text-align:left; border:2px solid var(--line); background:var(--paper2); border-radius:10px; padding:8px 10px; font-size:13px; color:var(--ink)}
 .ex:hover{border-color:var(--honey)} .ex > b{display:block; font-size:14px} .ex span{color:var(--ink2)}

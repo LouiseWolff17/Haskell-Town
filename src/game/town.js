@@ -2,6 +2,7 @@
 import { CHALLENGES, RESIDENTS } from '../content/index.ts';
 import { $, byId, state, status } from './state.js';
 import { openChallenge } from './notebook.js';
+import { villageBuilt, waitingResidents } from './errands.js';
 
 const cv = $('#town'), ctx = cv.getContext('2d');
 const W = 400, H = 340;
@@ -320,6 +321,12 @@ function person(x, y, r, t, bob) {
   R(x + 1, y + 6, 6, 5, r.shirt); R(x, y + 7, 1, 3, r.shirt); R(x + 7, y + 7, 1, 3, r.shirt);
   R(x + 2, y + 11, 1, 2, '#5a4636'); R(x + 5, y + 11, 1, 2, '#5a4636');
 }
+// a blue ? for a resident who has pinned an errand to the Notice Board
+function errandBubble(x, y, t) {
+  const by = y + Math.round(Math.sin(t / 300) * 1.5);
+  R(x, by, 9, 9, C.ink); R(x + 1, by - 1, 7, 11, C.ink); R(x + 1, by, 7, 9, C.white); R(x + 3, by + 9, 2, 2, C.ink);
+  R(x + 3, by + 2, 3, 1, '#4a7fa7'); R(x + 5, by + 3, 1, 1, '#4a7fa7'); R(x + 4, by + 4, 1, 1, '#4a7fa7'); R(x + 4, by + 7, 1, 1, '#4a7fa7');
+}
 function bubble(x, y, t) {
   const by = y + Math.round(Math.sin(t / 260) * 1.5);
   R(x, by, 9, 9, C.ink); R(x + 1, by - 1, 7, 11, C.ink); R(x + 1, by, 7, 9, C.white); R(x + 3, by + 9, 2, 2, C.ink);
@@ -360,9 +367,13 @@ function draw(t) {
     const [fx, fy] = PLOTS[c.plot || c.id].stand;
     person(fx, fy, RESIDENTS[c.resident], t, true); bubble(fx - 1, fy - 13, t);
   }
+  const waiting = waitingResidents();
   for (const [rid, pos] of Object.entries(HOMES)) {
     if (shown.has(rid)) continue;
-    if (CHALLENGES.some(c => c.resident === rid && state.done[c.id])) person(pos[0], pos[1], RESIDENTS[rid], t + pos[0] * 50, false);
+    if (CHALLENGES.some(c => c.resident === rid && state.done[c.id])) {
+      person(pos[0], pos[1], RESIDENTS[rid], t + pos[0] * 50, waiting.has(rid));
+      if (waiting.has(rid)) errandBubble(pos[0] - 1, pos[1] - 13, t);
+    }
   }
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
@@ -379,7 +390,7 @@ function plotAt(ev) {
 // which challenge a click on a plot should open: the open one, else the last one solved
 function challengeForPlot(pid) { const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
 export function plotLabel(id) {
-  if (!id) return 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
+  if (!id) return villageBuilt() ? 'The village is built! Residents with a <b>?</b> have pinned an errand to the Notice Board (the Errands tab).' : 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
   const cs = plotChallenges(id), open = cs.find(c => status(c) === 'open');
   if (open) return `<b>${RESIDENTS[open.resident].name}</b> has a request: “${open.title}” · ${open.concept}. Click to help!`;
   const m = mainOf(id);

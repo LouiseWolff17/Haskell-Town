@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="brand"><span class="logo">λ</span><div>Haskell Town<small>Build a village, one function at a time</small></div></div>
-  <div class="top-right"><button class="ws-btn" id="workshopBtn">🛠 Workshop</button><div class="progress"><span id="progressText">0 of 19 requests</span><div class="bar"><i id="progressBar"></i></div></div></div>
+  <div class="top-right"><button class="ws-btn" id="workshopBtn">🛠 Workshop</button><div class="progress"><span id="progressText">0 of 23 requests</span><div class="bar"><i id="progressBar"></i></div></div></div>
 </header>
 
 <main class="layout">
@@ -22,8 +22,9 @@
   </section>
   <aside class="side">
     <div class="panel">
-      <div class="tabs"><button data-tab="requests" class="active">Requests</button><button data-tab="library">Library</button></div>
+      <div class="tabs"><button data-tab="requests" class="active">Requests</button><button data-tab="errands">Errands</button><button data-tab="library">Library</button></div>
       <div id="requests" class="tabpanel"></div>
+      <div id="errands" class="tabpanel" hidden></div>
       <div id="library" class="tabpanel" hidden></div>
     </div>
     <div class="panel assist-box">

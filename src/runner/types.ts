@@ -7,7 +7,7 @@
 // Results are plain JSON-friendly data — no HTML, no interpreter objects — so they can
 // cross a network boundary unchanged. See docs/runner-api.md.
 
-import type { Challenge } from '../content/types.ts';
+import type { Checkable } from '../content/types.ts';
 
 export type DiagnosticKind = 'parse' | 'scope' | 'type' | 'runtime' | 'loop' | 'internal';
 
@@ -120,8 +120,8 @@ export type EvalResult =
 export interface CodeRunner {
   /** Short name for logs and the UI, e.g. "browser" or "ghc". */
   readonly name: string;
-  /** Check the player's code against a challenge: compile, check needs and signature, run tests, check rules. */
-  check(challenge: Challenge, source: string): Promise<CheckResult>;
+  /** Check the player's code against a challenge (or anything with its checking fields, like an errand): compile, check needs and signature, run tests, check rules. */
+  check(challenge: Checkable, source: string): Promise<CheckResult>;
   /** Type-check a program and describe what it declares. */
   compile(source: string): Promise<CompileResult>;
   /** Compile, then run `main` with the given stdin (one line per getLine). */

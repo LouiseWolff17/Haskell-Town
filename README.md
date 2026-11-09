@@ -4,11 +4,12 @@ A cozy city builder where you grow a little village by writing real Haskell.
 
 Residents come to you with small problems. You solve each one by writing a Haskell function, and the town grows: a cottage, a bakery, a library, a railway, a harbour… The challenges go all the way from `add :: Int -> Int -> Int` to Functors, Monads, Monoids and lazy infinite lists.
 
-To be added: after building the village you will be able to solve tasks from the residents, to promote effective learning with spacing and retrieval practice.
+After the village is built, the **Notice Board** opens: residents pin up a few errands each day, small new problems on old topics, to solve from memory. Each topic comes back after a gap that grows as you remember it better (spaced retrieval practice, based on [Carpenter, Pan & Butler, 2022](https://doi.org/10.1038/s44159-022-00089-1)).
 
 - **23 challenges, 13 residents, 14 buildings.** Every building teaches one idea, and its upgrade practises it again.
 - **Real Haskell, checked like GHC.** Your code is type-checked before anything runs, and the error messages are written for beginners.
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
+- **The Notice Board** brings each topic back over days and weeks: 22 errands on 11 topics, solved from memory, with feedback after you try.
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
 
 Play it at **https://louisewolff17.github.io/Haskell-Town/** (it goes live after the first deploy, see below).
@@ -39,6 +40,7 @@ src/
   content/              everything a game designer edits — plain typed data
     types.ts            Challenge, Resident, … (start here)
     challenges/         one file per building, e.g. 06-library.ts
+    errands.ts          review topics and errands for the Notice Board
     residents.ts  workshop-examples.ts  unsupported.ts  coming-soon.ts
   runner/               the boundary between the game and "something that runs Haskell"
     types.ts            the CodeRunner interface and its result types
@@ -51,12 +53,15 @@ src/
     state.js            saved progress (localStorage) + helpers
     town.js             the pixel-art map
     sidebar.js          request list, learning library
+    errands.js          the Notice Board tab
+    schedule.ts         when errands come back (pure functions, tested)
     notebook.js         challenge window and Workshop
     highlight.js        syntax highlighting
 tests/
   content.test.ts          ids, unlock order, hints… all fit together
   runner-contract.test.ts  every reference solution passes; wrong answers don't
   worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
+  schedule.test.ts         Notice Board scheduling: boxes, gaps, retries
 docs/                   design notes and the runner API
 ```
 
@@ -68,6 +73,10 @@ The UI never calls the interpreter directly. Player code runs in a background We
 2. Give it a `solution`, and tests that the starters fail.
 3. Run `npm test`. It checks that your solution passes, that no starter passes, and that the unlock order still works.
 4. A new building also needs a plot and a drawing in `src/game/town.js` (`PLOTS` and the draw functions).
+
+## Adding an errand
+
+Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add a topic to `REVIEW_TOPICS`; each topic needs at least two errands, so reviews can vary). Give it a small `starter` that doesn't pass and a `solution` that does; `npm test` checks both. In dev mode (`npm run dev`), the DEV panel's **+1 day** button moves the clock forward so you can try the schedule.
 
 ## Deploying
 

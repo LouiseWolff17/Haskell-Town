@@ -1,7 +1,7 @@
 // Checks that the game's content fits together: ids, unlock order, residents, hints.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHALLENGES, RESIDENTS, WORKSHOP_EXAMPLES, NOT_SUPPORTED } from '../src/content/index.ts';
+import { CHALLENGES, RESIDENTS, WORKSHOP_EXAMPLES, NOT_SUPPORTED, ERRANDS, REVIEW_TOPICS } from '../src/content/index.ts';
 
 test('there are 23 challenges, numbered 1..23 in list order', () => {
   assert.equal(CHALLENGES.length, 23);
@@ -54,4 +54,28 @@ test('every challenge has four hints, starters for each mode, tests and a soluti
 test('workshop examples and the not-supported list are present', () => {
   assert.ok(WORKSHOP_EXAMPLES.length >= 9);
   assert.ok(NOT_SUPPORTED.length >= 10);
+});
+
+test('errand ids are unique and do not clash with challenge ids', () => {
+  const ids = ERRANDS.map(e => e.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const id of ids) assert.ok(!CHALLENGES.some(c => c.id === id), `errand ${id} shares an id with a challenge`);
+});
+
+test('every review topic has at least two errands, and its cue cards exist', () => {
+  for (const t of REVIEW_TOPICS) {
+    assert.ok(RESIDENTS[t.resident], `${t.id}: unknown resident ${t.resident}`);
+    assert.ok(ERRANDS.filter(e => e.topic === t.id).length >= 2, `${t.id}: needs at least two errands so reviews can vary`);
+    for (const c of t.from) assert.ok(CHALLENGES.some(x => x.id === c), `${t.id}: unknown challenge ${c}`);
+  }
+});
+
+test('every errand belongs to a topic, has a resident, examples, tests and a solution', () => {
+  for (const e of ERRANDS) {
+    assert.ok(REVIEW_TOPICS.some(t => t.id === e.topic), `${e.id}: unknown topic ${e.topic}`);
+    assert.ok(RESIDENTS[e.resident], `${e.id}: unknown resident ${e.resident}`);
+    assert.ok(e.examples?.length || e.ioExamples?.length, `${e.id}: examples`);
+    assert.ok(e.tests.length > 0 && e.solution.trim() && e.explanation.trim(), `${e.id}: tests, solution, explanation`);
+    if (e.fn) assert.ok(e.sig?.startsWith(e.fn + ' ::'), `${e.id}: sig should start with "${e.fn} ::"`);
+  }
 });
