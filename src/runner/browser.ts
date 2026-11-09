@@ -109,12 +109,12 @@ export function checkChallenge(c: Challenge, source: string): CheckResult {
   };
 }
 
-function compileProgram(source: string): CompileResult {
+export function compileProgram(source: string): CompileResult {
   const c = compile(source);
   return c.ok ? { status: 'ok', summary: summarize(c.prog) } : { status: 'compile-error', error: c.error };
 }
 
-function runMain(source: string, input: string): RunMainResult {
+export function runMain(source: string, input: string): RunMainResult {
   const c = compile(source);
   if (!c.ok) return { status: 'compile-error', error: c.error };
   const summary = summarize(c.prog);
@@ -122,7 +122,7 @@ function runMain(source: string, input: string): RunMainResult {
   return { status: 'ran', summary, output: output(HS.runMain(c.prog, input)) };
 }
 
-function evaluate(source: string, expr: string, input: string): EvalResult {
+export function evaluate(source: string, expr: string, input: string): EvalResult {
   const c = compile(source);
   if (!c.ok) return { status: 'compile-error', error: c.error };
   const { prog } = c;

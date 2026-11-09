@@ -124,6 +124,10 @@ pre.code{margin:6px 0 0; background:var(--code-bg); color:var(--code-ink); font-
 .run-row{display:flex; align-items:center; gap:12px; padding:10px 12px; background:#3a3440}
 .btn-run{border:2px solid #1d1a20; background:var(--sage); color:#fff; font-weight:800; font-size:15px; padding:8px 18px; border-radius:10px; box-shadow:0 3px 0 #1d1a20}
 .btn-run:hover{background:#7fb093} .btn-run:active{transform:translateY(2px); box-shadow:0 1px 0 #1d1a20}
+.btn-run.stop{background:var(--terra)} .btn-run.stop:hover{background:#e47a5c}
+.running{display:flex; align-items:center}
+.dots-anim::after{content:''; display:inline-block; width:1.5em; text-align:left; animation:dots 1.2s steps(4,end) infinite}
+@keyframes dots{0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'}}
 .run-row .k{color:#b4a99a; font-size:12.5px}
 .mode-note{color:var(--honey); font-size:12.5px; margin-left:auto}
 

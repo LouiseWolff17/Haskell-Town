@@ -9,8 +9,11 @@ interface CodeRunner {
   compile(source: string): Promise<CompileResult>;
   runMain(source: string, input: string): Promise<RunMainResult>;
   evaluate(source: string, expr: string, input: string): Promise<EvalResult>;
+  cancel?(): void;   // stop the running call, if the runner can
 }
 ```
+
+Every result type can also be `{ status: 'stopped', reason: 'timeout' | 'cancelled', seconds }`. That means the runner gave up before the code finished, and the UI explains it to the player.
 
 Every method is async, and every result is plain JSON. A runner can therefore live in the page, in a Web Worker, or behind an HTTP API without the game changing.
 
@@ -18,7 +21,8 @@ Every method is async, and every result is plain JSON. A runner can therefore li
 
 | Runner | Status | Notes |
 |---|---|---|
-| `BrowserRunner` (`src/runner/browser.ts`) | ✅ in use | Mini-Haskell interpreter in `src/haskell`. Instant, works offline, but only a subset of Haskell (see ROADMAP.md). |
+| `BrowserRunner` (`src/runner/browser.ts`) | ✅ | Mini-Haskell interpreter in `src/haskell`. Works offline, but only covers a subset of Haskell (see ROADMAP.md). Runs on the page, so slow code freezes it. Used in tests and where Web Workers aren't available. |
+| `WorkerRunner` (`src/runner/worker-runner.ts`) | ✅ in use | The same interpreter in a Web Worker (`worker.ts`). One call at a time. A call is stopped after 10 s, or by `cancel()` (the Stop button), by terminating the worker and starting a new one. |
 | GHC runner | 💭 planned | Real GHC in a sandbox (container with CPU/memory/time limits, no network). Covers all of Haskell. |
 
 `createRunner()` in `src/runner/index.ts` picks the runner. A likely setup is GHC when it's reachable, with the browser runner as the offline fallback.
@@ -40,7 +44,7 @@ Error messages are shown to beginners. Raw GHC output should be translated into 
 
 ## The contract test
 
-`tests/runner-contract.test.ts` runs against every runner in its `RUNNERS` list. It checks that all 23 reference solutions pass, that no starter code passes, and that each kind of failure produces the right status. A new runner is ready when that file passes with it added.
+`tests/runner-contract.test.ts` runs against every runner in its `RUNNERS` list (today BrowserRunner, plus WorkerRunner with an in-process stand-in for the worker). It checks that all 23 reference solutions pass, that no starter code passes, and that each kind of failure produces the right status. A new runner is ready when that file passes with it added.
 
 ## A possible HTTP shape for the GHC runner
 

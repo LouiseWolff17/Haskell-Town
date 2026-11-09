@@ -40,7 +40,7 @@ export function openChallenge(id) {
   $('#notebook').hidden = false; document.body.classList.add('modal-open');
   setTimeout(() => ed.focus(), 50);
 }
-export function closeNotebook() { $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; }
+export function closeNotebook() { if (activeRun) runner.cancel?.(); $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; }
 function renderProblem() {
   const c = current, r = RESIDENTS[c.resident];
   const p = $('#problem');
@@ -77,14 +77,45 @@ const MISSING = {
   instance: m => `<code>instance ${m.cls} ${m.type}</code>`,
 };
 
+// ---------- Running code ----------
+// The runner works in the background (a Web Worker), so while code runs the Run
+// button becomes Stop, and slow code is stopped after a while instead of freezing the page.
+let activeRun = null;
+const runLabel = () => (current && current.workshop ? '▶ Check & run' : '▶ Run tests');
+// Run `task` unless something is already running. With restart, stop the current run first.
+function whileRunning(task, restart = false) {
+  if (activeRun) {
+    if (!restart) return activeRun;
+    runner.cancel?.();
+    return activeRun.then(() => whileRunning(task));
+  }
+  const btn = $('#runBtn');
+  btn.textContent = '■ Stop'; btn.classList.add('stop');
+  const slow = setTimeout(() => { $('#results').innerHTML = `<div class="res-empty running">Running your code<span class="dots-anim"></span></div>`; }, 400);
+  activeRun = (async () => {
+    try { return await task(); }
+    finally { clearTimeout(slow); activeRun = null; btn.textContent = runLabel(); btn.classList.remove('stop'); }
+  })();
+  return activeRun;
+}
+function stoppedCard(r) {
+  if (r.reason === 'cancelled') return noteCard('Stopped', `You stopped your code after ${r.seconds} seconds. Change something and run it again whenever you like.`);
+  return noteCard(`Still running after ${r.seconds} seconds`, "I stopped your code so the page wouldn't freeze. It might be stuck in an endless loop, or doing far more work than it needs to: a function that recomputes the same values again and again, like a naive `fib`, can take ages.\nTip: Check that every recursive call gets closer to a base case, and try a smaller input first.");
+}
+
+function runTests() { return whileRunning(checkNotebook); }
+function workshopRun(forceMain) { return whileRunning(() => doWorkshopRun(forceMain)); }
+function workshopEval() { return whileRunning(doWorkshopEval); }
+
 // Check the notebook against the current challenge (via the runner) and show the results.
-async function runTests() {
+async function checkNotebook() {
   const c = current; if (!c) return;
-  if (c.workshop) return workshopRun();
+  if (c.workshop) return doWorkshopRun();
   state.attempts[c.id] = (state.attempts[c.id] || 0) + 1; save();
   const out = $('#results');
   const r = await runner.check(c, ed.value);
   if (current !== c) return; // the notebook was closed or switched while checking
+  if (r.status === 'stopped') { out.innerHTML = stoppedCard(r); return; }
   if (r.status === 'compile-error') {
     const e = r.error;
     out.innerHTML = noteCard(compileTitle(e), e.message) + `<p class="nudge">${e.kind === 'type' ? 'Like GHC, Haskell Town checks every type before running anything, so none of the tests ran yet.' : 'Fix this and run again — none of the tests ran yet.'}</p>`;
@@ -182,7 +213,7 @@ function loadExample(i) {
   ed.value = x.code; state.code.workshop = x.code; syncEditor();
   $('#wsExpr').value = state.wsExpr = x.expr || ''; $('#wsInput').value = state.wsInput = x.input || ''; save();
   markLine(null);
-  if (x.expr) workshopEval(); else workshopRun(true);
+  whileRunning(x.expr ? doWorkshopEval : () => doWorkshopRun(true), true);
 }
 function showCompileError(e) { $('#results').innerHTML = noteCard(compileTitle(e), e.message); markLine(e.line); }
 // summary: a ProgramSummary from the runner
@@ -196,8 +227,10 @@ function typesBlock(summary) {
 function outputBlock(r) {
   return `<div class="ws-h">Output</div><pre class="console">${esc(r.out || '')}${r.out ? '' : '<span class="dim">(nothing printed)</span>'}</pre>${r.error ? noteCard('The program stopped', r.error.message) : ''}`;
 }
-async function workshopRun(forceMain) {
+async function doWorkshopRun(forceMain) {
   const r = await runner.runMain(ed.value, $('#wsInput') ? $('#wsInput').value : '');
+  if (current !== WORKSHOP) return;
+  if (r.status === 'stopped') { $('#results').innerHTML = stoppedCard(r); return; }
   if (r.status === 'compile-error') { showCompileError(r.error); return; }
   markLine(null);
   let html = typesBlock(r.summary);
@@ -205,9 +238,11 @@ async function workshopRun(forceMain) {
   else if (forceMain === true) html += noteCard('No main yet', 'There is no `main` to run. Write one, like:  main = putStrLn "Hello!"');
   $('#results').innerHTML = html;
 }
-async function workshopEval() {
-  const expr = $('#wsExpr').value.trim(); if (!expr) { workshopRun(); return; }
+async function doWorkshopEval() {
+  const expr = $('#wsExpr').value.trim(); if (!expr) return doWorkshopRun();
   const r = await runner.evaluate(ed.value, expr, $('#wsInput').value);
+  if (current !== WORKSHOP) return;
+  if (r.status === 'stopped') { $('#results').innerHTML = `<div class="ws-h">λ&gt; ${esc(expr)}</div>` + stoppedCard(r); return; }
   if (r.status === 'compile-error') { showCompileError(r.error); return; }
   markLine(null);
   if (r.status === 'expr-error') { $('#results').innerHTML = noteCard(r.error.kind === 'type' ? "The types don't fit together yet" : 'The compiler has a note for you', r.error.message.replace(/^Line 1: /, '')); return; }
@@ -231,7 +266,7 @@ export function initNotebook() {
   $('#notebook').addEventListener('click', e => { if (e.target.id === 'notebook') closeNotebook(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#notebook').hidden) closeNotebook(); });
   $('#resetBtn').onclick = () => { if (!current) return; if (current.workshop) { loadExample(0); return; } ed.value = starterFor(current); state.code[current.id] = ed.value; save(); syncEditor(); $('#modeNote').textContent = ''; ed.focus(); };
-  $('#runBtn').onclick = () => runTests();
+  $('#runBtn').onclick = () => (activeRun ? runner.cancel?.() : runTests());
 
   // reset progress (two-step, no confirm dialog)
   let resetArmed = false;

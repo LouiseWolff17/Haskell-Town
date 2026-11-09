@@ -36,6 +36,14 @@ export interface RunOutput {
   error?: Diagnostic;
 }
 
+/** The runner gave up before the code finished: it ran too long, or the player pressed Stop. */
+export interface Stopped {
+  status: 'stopped';
+  reason: 'timeout' | 'cancelled';
+  /** How long the code had been running. */
+  seconds: number;
+}
+
 // ---------- checking a challenge ----------
 
 export interface TestRow {
@@ -58,6 +66,7 @@ export type RuleBreak =
   | { rule: 'recursion' };
 
 export type CheckResult =
+  | Stopped
   /** It didn't parse or type-check. No tests ran. */
   | { status: 'compile-error'; error: Diagnostic }
   /** The function the tests call isn't defined. */
@@ -81,15 +90,18 @@ export type CheckResult =
 // ---------- the Workshop ----------
 
 export type CompileResult =
+  | Stopped
   | { status: 'compile-error'; error: Diagnostic }
   | { status: 'ok'; summary: ProgramSummary };
 
 export type RunMainResult =
+  | Stopped
   | { status: 'compile-error'; error: Diagnostic }
   | { status: 'no-main'; summary: ProgramSummary }
   | { status: 'ran'; summary: ProgramSummary; output: RunOutput };
 
 export type EvalResult =
+  | Stopped
   | { status: 'compile-error'; error: Diagnostic }
   /** The program is fine but the expression doesn't type-check. */
   | { status: 'expr-error'; error: Diagnostic; summary: ProgramSummary }
@@ -116,4 +128,6 @@ export interface CodeRunner {
   runMain(source: string, input: string): Promise<RunMainResult>;
   /** Compile, then evaluate an expression in the program (like GHCi's λ> prompt). IO actions are run. */
   evaluate(source: string, expr: string, input: string): Promise<EvalResult>;
+  /** Stop the code that is running now, if the runner can. Its pending call resolves with a `stopped` result. */
+  cancel?(): void;
 }

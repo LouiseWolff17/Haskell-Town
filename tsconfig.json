@@ -11,6 +11,7 @@
     "checkJs": false,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "isolatedModules": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,

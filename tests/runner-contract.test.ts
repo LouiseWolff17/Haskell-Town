@@ -1,13 +1,16 @@
-// The contract every CodeRunner must meet. Today it runs against BrowserRunner;
-// when a GHC runner exists, add it to RUNNERS and the same tests must pass.
+// The contract every CodeRunner must meet. It runs against BrowserRunner and against
+// WorkerRunner (with an in-process stand-in for the Web Worker, so the messaging is tested).
+// When a GHC runner exists, add it to RUNNERS and the same tests must pass.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { BrowserRunner } from '../src/runner/browser.ts';
+import { WorkerRunner } from '../src/runner/worker-runner.ts';
+import { InProcessWorker } from './helpers/fake-worker.ts';
 import type { CodeRunner, CheckResult } from '../src/runner/types.ts';
 import { CHALLENGES, WORKSHOP_EXAMPLES } from '../src/content/index.ts';
 import type { Challenge } from '../src/content/types.ts';
 
-const RUNNERS: CodeRunner[] = [new BrowserRunner()];
+const RUNNERS: CodeRunner[] = [new BrowserRunner(), new WorkerRunner(() => new InProcessWorker())];
 const byId = (id: string): Challenge => {
   const c = CHALLENGES.find(x => x.id === id);
   if (!c) throw new Error('no challenge ' + id);

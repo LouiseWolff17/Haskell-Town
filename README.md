@@ -43,6 +43,8 @@ src/
   runner/               the boundary between the game and "something that runs Haskell"
     types.ts            the CodeRunner interface and its result types
     browser.ts          BrowserRunner: checks challenges with the in-browser interpreter
+    worker-runner.ts    WorkerRunner: the same, in a Web Worker, with Stop and a 10 s timeout
+    worker.ts           the code that runs inside the worker
   haskell/
     interpreter.js      Mini-Haskell: lexer, parser, type checker, lazy evaluator
   game/                 the UI
@@ -54,10 +56,11 @@ src/
 tests/
   content.test.ts          ids, unlock order, hints… all fit together
   runner-contract.test.ts  every reference solution passes; wrong answers don't
+  worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
 docs/                   design notes and the runner API
 ```
 
-The UI never calls the interpreter directly. It asks a **`CodeRunner`** to `check` a challenge, `compile`, `evaluate` or `runMain`, and gets plain data back (`CheckResult`, `EvalResult`, …) that it turns into HTML. So swapping the in-browser interpreter for a real GHC backend later only means writing a new runner. See [docs/runner-api.md](docs/runner-api.md).
+The UI never calls the interpreter directly. Player code runs in a background Web Worker, so slow or endless code can't freeze the page: the Run button turns into **Stop**, and anything still running after 10 seconds is stopped with a friendly explanation. It asks a **`CodeRunner`** to `check` a challenge, `compile`, `evaluate` or `runMain`, and gets plain data back (`CheckResult`, `EvalResult`, …) that it turns into HTML. So swapping the in-browser interpreter for a real GHC backend later only means writing a new runner. See [docs/runner-api.md](docs/runner-api.md).
 
 ## Adding a challenge
 
