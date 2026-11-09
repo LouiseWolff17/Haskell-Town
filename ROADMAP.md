@@ -42,7 +42,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 ### Rewards (see the rewards design note)
 - [x] Map growth from errands: new land south of the railway (`src/content/expansions.ts`).
 - [x] The Journal: a page per building with your code, errand stamps, and the land you've opened.
-- [ ] Friendship with residents: hearts from their errands, letters in Wren's mailbox, gifts, and a lasting change to their building.
+- [x] Friendship with residents: hearts from their errands, letters in Wren's mailbox, gifts, and a lasting change to their building.
 - [ ] Life in town: one atmospheric touch per building (birds, chimney smoke, people walking), and a day/night cycle from the Observatory.
 
 ### Real GHC

@@ -260,3 +260,13 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .jstamps{display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 8px}
 .jstamps span{display:grid; place-items:center; width:26px; height:26px; border:2px dashed var(--line); border-radius:6px; font-size:14px; color:var(--ink2)}
 .jstamps span.on{border-style:solid; border-color:#d9b98f; background:#fbf3e3}
+.hearts{color:#e85a6f; letter-spacing:1px}
+.friend-line{color:var(--ink)}
+.jportrait{border-style:solid; background:#f2e3c4; overflow:hidden}
+.jportrait .portrait{border:0; border-radius:0}
+.jt .new{color:#c8553d}
+.letter{margin:4px 0 8px; padding:10px 12px; background:#fffdf6; border:1px solid #e6d6b8; border-radius:6px; box-shadow:2px 2px 0 #eadcc0; font-size:13.5px; transform:rotate(-.4deg)}
+.letter p{margin:0 0 6px}
+.letter .sig{text-align:right; font-style:italic; margin:0}
+.gift{display:flex; gap:10px; align-items:flex-start; margin:6px 0; padding:8px 10px; background:#fbf3e3; border:2px dashed #d9b98f; border-radius:9px; font-size:13px}
+.gift > span{font-size:22px}

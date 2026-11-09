@@ -1,10 +1,11 @@
 // The Journal: a keepsake book of everything the player has made. One page per building, with the
 // code that built it, a stamp for each errand solved, and the land that has opened. No scores or
 // hint counts: the Journal shows what you made, not how much help you used.
-import { CHALLENGES, ERRANDS, EXPANSIONS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
-import { $, esc, state } from './state.js';
+import { CHALLENGES, ERRANDS, EXPANSIONS, FRIENDSHIP, HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
+import { $, esc, save, state } from './state.js';
+import { portrait } from './town.js';
 import { codeBlock } from './highlight.js';
-import { villageBuilt } from './errands.js';
+import { heartRow, hearts, unreadLetters, villageBuilt } from './errands.js';
 import { errandStamps, openedOn } from './rewards.ts';
 
 const STAMP = { house: '🏡', mailbox: '📬', bakery: '🥖', garden: '🌱', store: '🛒', library: '📚', school: '🎒', hall: '🏛️', clinic: '🩺', railway: '🚂', park: '🌳', harbour: '⚓', market: '🧺', observatory: '🔭' };
@@ -25,6 +26,7 @@ export function renderJournal() {
   const built = CHALLENGES.filter(c => state.done[c.id]).length;
   let html = `<p class="lib-intro">Your keepsake book: everything you've made in Haskell Town, and the code you wrote for it.</p>`;
 
+  html += friendsHTML();
   html += `<h4 class="board-h">Buildings · ${built} of ${CHALLENGES.length}</h4>`;
   for (const c of CHALLENGES) {
     const r = RESIDENTS[c.resident];
@@ -58,4 +60,43 @@ export function renderJournal() {
     }
   }
   el.innerHTML = html;
+  el.querySelectorAll('[data-friend]').forEach(d => {
+    d.querySelector('.jstamp')?.appendChild(portrait(d.dataset.friend, 30));
+    d.addEventListener('toggle', () => { if (d.open && d.dataset.unread) markRead(d); });
+  });
+  updateBadge();
+}
+
+// ---------- Friends: hearts, letters in the mailbox, gifts ----------
+function friendsHTML() {
+  if (!state.reviews) return `<h4 class="board-h">Friends</h4><p class="board-small">Once the village is built, every errand you solve for a resident earns a heart. Hearts bring letters to Wren's mailbox, gifts, and changes around town.</p>`;
+  const h = hearts(), unread = new Set(unreadLetters());
+  let html = `<h4 class="board-h">Friends</h4>`;
+  for (const f of FRIENDSHIP) {
+    const rid = f.resident, n = h[rid] || 0, r = RESIDENTS[rid];
+    const next = n < HEARTS.letter ? `${HEARTS.letter - n} errand${HEARTS.letter - n === 1 ? '' : 's'} until a letter` : n < HEARTS.gift ? 'a gift is coming' : n < HEARTS.change ? 'something in town will change' : 'best friends';
+    let body = '';
+    if (n >= HEARTS.letter) body += `<div class="letter"><p>Dear neighbour,</p><p>${f.letter}</p><p class="sig">— ${r.name}</p></div>`;
+    if (n >= HEARTS.gift) body += `<div class="gift"><span>${f.gift.icon}</span><div><b>${f.gift.name}</b><br>${f.gift.note}</div></div>`;
+    if (n >= HEARTS.change) body += `<p class="jconcept">On the map: ${f.change}</p>`;
+    const meta = `<span class="hearts">${heartRow(n)}</span> · ${next}${unread.has(rid) ? '<b class="new"> · ✉ new letter</b>' : ''}`;
+    html += n
+      ? `<details class="jpage" data-friend="${rid}"${unread.has(rid) ? ' data-unread="1"' : ''}><summary><span class="jstamp jportrait"></span><span class="jt"><b>${r.name}</b><small>${meta}</small></span></summary><div class="jbody">${body || `<p class="board-small">Solve more of ${r.name}'s errands and a letter will arrive.</p>`}</div></details>`
+      : `<div class="jpage jlocked" data-friend="${rid}"><span class="jstamp jportrait"></span><span class="jt"><b>${r.name}</b><small>${meta}</small></span></div>`;
+  }
+  return html;
+}
+function markRead(d) {
+  (state.lettersRead ||= {})[d.dataset.friend] = true; save();
+  delete d.dataset.unread; d.querySelector('.new')?.remove(); updateBadge();
+}
+function updateBadge() {
+  const tab = document.querySelector('.tabs button[data-tab=journal]'), n = unreadLetters().length;
+  if (tab) tab.innerHTML = `Journal${n ? ` <span class="tab-badge">${n}</span>` : ''}`;
+}
+/** Open the Journal at the first unread letter (clicking the mailbox on the map). */
+export function openLetters() {
+  document.querySelector('.tabs button[data-tab=journal]')?.click();
+  const rid = unreadLetters()[0], d = rid && document.querySelector(`#journal details[data-friend="${rid}"]`);
+  if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 }

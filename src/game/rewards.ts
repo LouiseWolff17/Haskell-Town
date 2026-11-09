@@ -45,3 +45,22 @@ export function openedOn(expansions: Expansion[], log: LogEntry[]): Record<strin
   for (const x of expansions) if (log.length >= x.needs) out[x.id] = log[x.needs - 1].date;
   return out;
 }
+
+// ---------- Friendship ----------
+
+/** Hearts per resident: one for each of their errands you've solved, up to `max`. */
+export function heartsByResident(log: LogEntry[], residentOf: (errandId: string) => string | undefined, max = Infinity): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of log) { const r = residentOf(e.errand); if (r) out[r] = Math.min(max, (out[r] || 0) + 1); }
+  return out;
+}
+
+export type FriendReward = 'letter' | 'gift' | 'change';
+/** The rewards a resident has at this many hearts. */
+export function friendRewards(hearts: number, at: Record<FriendReward, number>): FriendReward[] {
+  return (Object.keys(at) as FriendReward[]).filter(k => hearts >= at[k]);
+}
+/** The rewards reached going from `before` to `after` hearts. */
+export function newFriendRewards(before: number, after: number, at: Record<FriendReward, number>): FriendReward[] {
+  return (Object.keys(at) as FriendReward[]).filter(k => before < at[k] && after >= at[k]);
+}

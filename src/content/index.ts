@@ -6,3 +6,4 @@ export { WORKSHOP_EXAMPLES } from './workshop-examples.ts';
 export { COMING_SOON } from './coming-soon.ts';
 export { REVIEW_TOPICS, ERRANDS } from './errands.ts';
 export { EXPANSIONS } from './expansions.ts';
+export { FRIENDSHIP, HEARTS, MAX_HEARTS } from './friendship.ts';

@@ -1,8 +1,9 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
-import { CHALLENGES, EXPANSIONS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
 import { $, byId, state, status } from './state.js';
 import { openChallenge } from './notebook.js';
-import { solvedErrands, villageBuilt, waitingResidents } from './errands.js';
+import { hearts, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
+import { openLetters } from './journal.js';
 import { nextExpansion, openExpansions, stripsShown } from './rewards.ts';
 
 const cv = $('#town'), ctx = cv.getContext('2d');
@@ -204,7 +205,7 @@ function stationDeco(x, y, t) {
   R(x + 85, y + 27, 3, 3, ph > 0.15 && ph < 0.75 ? '#81d18a' : '#e85a4f');
 }
 // the train: drawn separately, after the trees, so it rides on top of them
-function train(t) {
+function train(t, heartOnFront) {
   const period = 16000, ph = (t % period) / period;
   const len = 76, px = Math.round(ph * (W + len + 40)) - len - 20, ty = 313;
   const car = (cx, col) => { R(cx, ty + 2, 22, 9, col); R(cx, ty + 2, 22, 1, 'rgba(255,255,255,.35)'); for (let w = 0; w < 3; w++) R(cx + 3 + w * 6, ty + 4, 4, 3, '#fff2c8'); R(cx + 3, ty + 11, 3, 3, '#2b2b2b'); R(cx + 16, ty + 11, 3, 3, '#2b2b2b'); };
@@ -212,7 +213,8 @@ function train(t) {
   const lx = px + 48;
   R(lx, ty + 3, 22, 8, '#c8553d'); R(lx + 2, ty - 2, 8, 6, '#9b3d2a'); R(lx + 3, ty - 1, 6, 3, '#fff2c8');
   R(lx + 15, ty - 3, 4, 6, '#3b2a2a'); R(lx + 20, ty + 6, 4, 4, '#3b2a2a'); R(lx + 22, ty + 4, 2, 2, '#ffe08a');
-  [3, 9, 16].forEach(o => R(lx + o, ty + 11, 4, 3, '#2b2b2b')); R(px + 22, ty + 7, 2, 1, '#3b2a2a'); R(px + 46, ty + 7, 2, 1, '#3b2a2a');
+  [3, 9, 16].forEach(o => R(lx + o, ty + 11, 4, 3, '#2b2b2b'));
+  if (heartOnFront) heart(lx + 12, ty + 5, '#ffd1dc'); R(px + 22, ty + 7, 2, 1, '#3b2a2a'); R(px + 46, ty + 7, 2, 1, '#3b2a2a');
   for (let i = 0; i < 4; i++) { const k = ((t / 500) + i / 4) % 1; ctx.globalAlpha = 0.6 * (1 - k); R(lx + 16 - k * 14, ty - 6 - k * 10, 3 + k * 3, 3 + k * 2, '#f2efe9'); ctx.globalAlpha = 1; }
 }
 function park(x, y, t) {
@@ -363,6 +365,7 @@ function draw(t) {
     } else if (p.small) { if (status(m) === 'open') smallLot(p); }
     else lot(p, status(m) === 'locked');
   }
+  drawFriends(t);
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
   const shown = new Set();
   for (const c of CHALLENGES) {
@@ -381,7 +384,7 @@ function draw(t) {
   }
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
-    if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t); }
+    if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
   if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover.split(':')[1]).slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
   if (hover && PLOTS[hover]) { const p = PLOTS[hover]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
   requestAnimationFrame(draw);
@@ -397,6 +400,7 @@ function plotAt(ev) {
 function challengeForPlot(pid) { if (pid.includes(':')) return null; const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
 export function plotLabel(id) {
   if (!id) return villageBuilt() ? 'The village is built! Residents with a <b>?</b> have pinned an errand to the Notice Board (the Errands tab).' : 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
+  if (id === 'mailbox' && unreadLetters().length) { const n = unreadLetters().length; return `📬 <b>You've got mail!</b> ${n} letter${n === 1 ? '' : 's'} waiting. Click the mailbox to read.`; }
   if (id.startsWith('exp:') || id.startsWith('fog:')) {
     const x = EXPANSIONS.find(e => e.id === id.slice(4)), n = solvedErrands();
     if (id.startsWith('exp:')) return `<b>${x.title}</b> ✓ — opened by solving errands. ${RESIDENTS[x.resident].name} looks after it.`;
@@ -420,9 +424,10 @@ export function portrait(rid, size = 40) {
 
 export function initTown() {
   paintBackground(); requestAnimationFrame(draw);
-  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && challengeForPlot(id) ? 'pointer' : 'default'; });
+  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
-  cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return; const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
+  cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return;
+    if (id === 'mailbox' && unreadLetters().length) { openLetters(); return; } const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
 }
 
 
@@ -539,3 +544,42 @@ const EXPANSION_ART = {
     for (let i = 0; i < 3; i++) { const fx = x + 180 + i * 14, fy = y + 20 + i * 9; R(fx, fy, 1, 2, '#4f8a4a'); R(fx, fy - 1, 1, 1, ['#fff2a8', '#f7c6d0', '#ffffff'][i]); }
   },
 };
+
+
+// ---------- Friendship: letters in the mailbox and lasting changes around town (src/content/friendship.ts) ----------
+const friendsWith = rid => (hearts()[rid] || 0) >= HEARTS.change;
+function heart(x, y, c = '#e85a6f') { R(x + 1, y, 1, 1, c); R(x + 3, y, 1, 1, c); R(x, y + 1, 5, 1, c); R(x + 1, y + 2, 3, 1, c); R(x + 2, y + 3, 1, 1, c); }
+function star(x, y, c) { R(x + 2, y, 1, 5, c); R(x, y + 2, 5, 1, c); R(x + 1, y + 1, 3, 3, c); }
+function envelope(x, y, t) {
+  const by = y + Math.round(Math.sin(t / 250) * 1.5);
+  R(x, by, 10, 7, C.ink); R(x + 1, by + 1, 8, 5, C.white);
+  for (let i = 0; i < 4; i++) { R(x + 1 + i, by + 1 + i, 1, 1, '#c9bca2'); R(x + 8 - i, by + 1 + i, 1, 1, '#c9bca2'); }
+  R(x + 4, by + 4, 2, 2, '#e85a6f');
+}
+// keyed by resident; p is the plot of their building
+const FRIEND_PLOT = { wren: 'house', hazel: 'bakery', moss: 'garden', bram: 'store', iris: 'library', juniper: 'school', fern: 'hall', sorrel: 'clinic', rowan: 'park', brine: 'harbour', marigold: 'market', orla: 'observatory' };
+const FRIEND_ART = {
+  wren(p) { const x = p.x + 21, y = p.y + 34; R(x, y, 7, 1, '#4f8a4a'); R(x, y + 5, 7, 1, '#4f8a4a'); R(x - 1, y + 1, 1, 4, '#4f8a4a'); R(x + 7, y + 1, 1, 4, '#4f8a4a'); R(x + 1, y + 1, 1, 1, '#6aa85e'); R(x + 5, y + 4, 1, 1, '#6aa85e'); R(x + 2, y + 5, 3, 2, '#d1495b'); },
+  hazel(p) { const x = p.x + 38, y = p.y + 34; R(x + 2, y - 2, 1, 2, C.wood2); R(x + 13, y - 2, 1, 2, C.wood2); R(x, y, 16, 8, C.wood); R(x + 1, y + 1, 14, 6, '#fff4e0'); heart(x + 2, y + 2); R(x + 8, y + 3, 5, 1, '#c58a4a'); R(x + 8, y + 5, 4, 1, '#c58a4a'); },
+  moss(p, t) { const x = p.x + 64, y = p.y + 2, sw = Math.round(Math.sin(t / 900)); R(x + 4, y + 8, 1, 16, C.wood2); R(x, y + 11, 9, 1, C.wood2); R(x + 2, y + 4, 5, 4, '#f2cc8f'); R(x + 3, y + 5, 1, 1, C.ink); R(x + 5, y + 5, 1, 1, C.ink); R(x + 1, y + 2, 7, 2, '#8a5a3b'); R(x + 2, y + 1, 5, 1, '#8a5a3b'); R(x + 2, y + 9, 5, 6, '#4a7fa7'); R(x - 1 + sw, y + 12, 2, 1, '#f2cc8f'); R(x + 8 + sw, y + 12, 2, 1, '#f2cc8f'); },
+  bram(p, t) { star(p.x + 18, p.y + 47, Math.floor(t / 700) % 3 ? '#e0b040' : '#fff2a8'); },
+  iris(p) { const x = p.x + 29, y = p.y + 19; R(x, y, 18, 1, C.wood2); R(x + 1, y + 1, 16, 7, '#8e6fb5'); R(x + 3, y + 8, 3, 2, '#8e6fb5'); R(x + 12, y + 8, 3, 2, '#8e6fb5'); heart(x + 2, y + 2, '#fff2a8'); R(x + 8, y + 3, 7, 1, '#e8dcf5'); R(x + 8, y + 5, 5, 1, '#e8dcf5'); },
+  juniper(p, t) { const x = p.x + 52, y = p.y + 17; star(x, y, '#e0b040'); if (Math.floor(t / 500) % 4 === 0) R(x + 2, y + 2, 1, 1, '#fffaf0'); },
+  fern(p, t) { const x = p.x + 76, y = p.y + 4, f = Math.floor(t / 350) % 2; R(x, y, 1, 12, '#3b2a2a'); R(x + 1, y, 9 + f, 6, '#2f6f73'); R(x + 3, y + 1, 1, 1, C.white); R(x + 4, y + 2, 1, 1, C.white); R(x + 5, y + 3, 1, 1, C.white); R(x + 3, y + 4, 1, 1, C.white); R(x + 6, y + 4, 1, 1, C.white); },
+  sorrel(p) { heart(p.x + 14, p.y + 28, '#e85a6f'); heart(p.x + 52, p.y + 28, '#e85a6f'); },
+  rowan(p, t) { const x = p.x + 40, y = p.y + 4; const fl = ['#e8a0bf', '#d1495b', '#f7c6d0'];
+    [[1, 0], [3, 0], [7, 0], [9, 0], [0, 2], [2, 2], [4, 2], [6, 2], [8, 2], [10, 2], [2, 4], [4, 4], [6, 4], [8, 4], [4, 6], [6, 6], [5, 8]].forEach(([a, b], i) => { R(x + a, y + b + 1, 2, 1, '#4f8a4a'); R(x + a, y + b, 2, 1, fl[(i + Math.floor(t / 900)) % 3]); }); },
+  brine(p, t) { const bob = Math.round(Math.sin(t / 650 + 1)); const x = p.x + 74, y = p.y + 22 + bob; R(x, y + 4, 12, 3, '#4a7fa7'); R(x + 1, y + 7, 10, 1, '#365f7f'); R(x + 5, y - 4, 1, 8, '#6b4429'); R(x + 6, y - 3, 4, 5, '#fffaf0'); heart(x + 4, y + 4, '#fff2a8'); },
+  marigold(p, t) { const x = p.x + 58, y = p.y + 6;
+    [['#e85a6f', 0, 0], ['#f2cc8f', 5, -3], ['#81b29a', 9, 1]].forEach(([c, dx, dy], i) => { const sx = x + dx + Math.round(Math.sin(t / 900 + i)), sy = y + dy; R(sx, sy, 4, 5, c); R(sx + 1, sy - 1, 2, 1, c); R(sx + 1, sy + 1, 1, 1, 'rgba(255,255,255,.6)'); for (let k = 0; k < 12; k++) R(sx + 2 + Math.round((x + 4 - sx - 2) * k / 12), sy + 5 + k, 1, 1, '#9a8f80'); }); },
+  orla(p, t) { const x = p.x + 8, y = p.y - 2, g = 0.4 + Math.sin(t / 500) * 0.3; ctx.globalAlpha = g; R(x - 2, y + 2, 9, 1, '#fff2a8'); R(x + 2, y - 2, 1, 9, '#fff2a8'); ctx.globalAlpha = 1; star(x, y, '#ffe08a'); R(x + 2, y + 2, 1, 1, C.white); },
+};
+function drawFriends(t) {
+  const h = hearts();
+  for (const [rid, pid] of Object.entries(FRIEND_PLOT)) {
+    const p = PLOTS[pid], m = mainOf(pid);
+    if ((h[rid] || 0) < HEARTS.change || !m || !state.done[m.id]) continue;
+    withReveal('friend-' + rid, p, t, () => FRIEND_ART[rid](p, t));
+  }
+  if (unreadLetters().length && state.done.mailbox) envelope(PLOTS.mailbox.x + 1, PLOTS.mailbox.y - 9, t);
+}

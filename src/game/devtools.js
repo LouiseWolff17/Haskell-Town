@@ -1,10 +1,10 @@
 // Dev-only shortcuts for skipping through the game. Loaded from main.ts only under `npm run dev`.
-import { CHALLENGES, ERRANDS, EXPANSIONS } from '../content/index.ts';
+import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS } from '../content/index.ts';
 import { save, state, status } from './state.js';
-import { build, queueLand, revealLand } from './notebook.js';
-import { reviews, today } from './errands.js';
+import { build, queueFriend, queueLand, revealLand } from './notebook.js';
+import { hearts, reviews, today } from './errands.js';
 import { completeItem, isOpen } from './schedule.ts';
-import { newlyOpened } from './rewards.ts';
+import { newFriendRewards, newlyOpened } from './rewards.ts';
 import { renderSidebar } from './sidebar.js';
 
 // Mark a challenge solved with its reference solution, as if the player had run it and pressed Build.
@@ -29,13 +29,15 @@ export function initDevTools() {
   // solve today's errands, as if from memory first try, so new land can be tried quickly
   panel.querySelector('[data-a="errands"]').onclick = () => {
     const rs = reviews(); if (!rs) return;
-    const before = rs.log.length;
+    const before = rs.log.length, hBefore = hearts();
     for (const item of rs.day.items.filter(isOpen)) {
       item.runs = 1; completeItem(rs, item, today());
       state.code['errand:' + item.errand] = ERRANDS.find(e => e.id === item.errand)?.solution ?? '';
       (state.errandCode ||= {})[item.errand] = state.code['errand:' + item.errand];
     }
-    queueLand(newlyOpened(EXPANSIONS, before, rs.log.length)); save(); renderSidebar(); revealLand();
+    queueLand(newlyOpened(EXPANSIONS, before, rs.log.length));
+    const hAfter = hearts(); for (const rid of Object.keys(hAfter)) queueFriend(rid, newFriendRewards(hBefore[rid] || 0, hAfter[rid], HEARTS));
+    save(); renderSidebar(); revealLand();
   };
   // move the clock forward, so spaced errands can be tried without waiting for real days
   const clock = panel.querySelector('[data-a="clock"]');
