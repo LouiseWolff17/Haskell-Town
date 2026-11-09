@@ -21,7 +21,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 ## Next steps
 
 ### Project health
-- [ ] Commit `package-lock.json` after the first `npm install`, then switch CI to `npm ci`.
+- [x] Commit `package-lock.json` and switch CI to `npm ci`.
 - [ ] Run the runner in a **Web Worker**, so an endless loop can't freeze the page. A timeout could then stop it.
 - [ ] Split `src/haskell/interpreter.js` into lexer / parser / types / evaluator modules. Its parts share mutable state (`curLevel`, the current data context), so that becomes an explicit context object first.
 - [ ] Move `src/game/*.js` to TypeScript, one file at a time (`state` and `highlight` first).
