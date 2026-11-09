@@ -132,3 +132,22 @@ export interface Expansion {
   /** Shown in the toast and the Journal when it opens. */
   note: string;
 }
+
+/** What a resident gives as you help them with errands. Hearts come from their errands on the Notice Board. */
+export interface Friendship {
+  resident: string;
+  /** ♥ 1: a letter that arrives in Wren's mailbox. */
+  letter: string;
+  /** ♥ 2: a keepsake for the Journal. */
+  gift: { icon: string; name: string; note: string };
+  /** ♥ 4: a lasting change to their building on the map (drawn in town.js FRIEND_ART). */
+  change: string;
+}
+
+/** A bit of life on the map that appears the first time you solve an errand on a topic. */
+export interface LifeTouch {
+  /** A ReviewTopic id. */
+  topic: string;
+  title: string;
+  note: string;
+}

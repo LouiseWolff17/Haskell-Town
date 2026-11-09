@@ -1,12 +1,12 @@
 // The Notice Board: once the village is built, residents pin up errands — small new problems on
 // old topics, solved from memory and spaced out over days. The scheduling rules are in schedule.ts.
-import { CHALLENGES, ERRANDS, EXPANSIONS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
-import { nextExpansion } from './rewards.ts';
+import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS, LEGACY_TOPICS, MAX_HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
+import { heartsByResident, nextExpansion, topicsPractised } from './rewards.ts';
 import { $, byId, esc, save, state } from './state.js';
 import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
 import { openErrand } from './notebook.js';
-import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, startReviews } from './schedule.ts';
+import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, startReviews, syncTopics } from './schedule.ts';
 
 export const errandById = id => ERRANDS.find(e => e.id === id);
 export const topicById = id => REVIEW_TOPICS.find(t => t.id === id);
@@ -17,12 +17,20 @@ export const today = () => dayNumber(new Date()) + (state.devDays || 0);
 export const villageBuilt = () => CHALLENGES.every(c => state.done[c.id]);
 /** Errands solved so far, in any way. New land opens as this grows (src/content/expansions.ts). */
 export const solvedErrands = () => state.reviews?.log.length || 0;
+/** Friendship hearts per resident, from the errands of theirs you've solved. */
+export const hearts = (log = state.reviews?.log || []) => heartsByResident(log, id => errandById(id)?.resident, MAX_HEARTS);
+/** Residents whose letter has arrived but hasn't been opened yet. */
+export const unreadLetters = () => Object.entries(hearts()).filter(([rid, h]) => h >= HEARTS.letter && !state.lettersRead?.[rid]).map(([rid]) => rid);
+/** Topics with at least one solved errand: each brings a bit of life to the map (src/content/life.ts). */
+export const practised = (log = state.reviews?.log || []) => topicsPractised(log, LEGACY_TOPICS);
+export const heartRow = n => '♥'.repeat(n) + '♡'.repeat(Math.max(0, MAX_HEARTS - n));
 
 /** The review state, started when the village is finished, with today's errands planned. Null before that. */
 export function reviews() {
   if (!villageBuilt() && !state.reviews) return null;
   let changed = false;
   if (!state.reviews) { state.reviews = startReviews(REVIEW_TOPICS.map(t => t.id), today()); changed = true; }
+  if (syncTopics(state.reviews, REVIEW_TOPICS.map(t => t.id), today(), LEGACY_TOPICS, id => errandById(id)?.topic)) changed = true;
   if (ensureDay(state.reviews, ERRANDS_BY_TOPIC, today())) changed = true;
   if (changed) save();
   return state.reviews;

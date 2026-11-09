@@ -45,3 +45,39 @@ export function openedOn(expansions: Expansion[], log: LogEntry[]): Record<strin
   for (const x of expansions) if (log.length >= x.needs) out[x.id] = log[x.needs - 1].date;
   return out;
 }
+
+// ---------- Friendship ----------
+
+/** Hearts per resident: one for each of their errands you've solved, up to `max`. */
+export function heartsByResident(log: LogEntry[], residentOf: (errandId: string) => string | undefined, max = Infinity): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of log) { const r = residentOf(e.errand); if (r) out[r] = Math.min(max, (out[r] || 0) + 1); }
+  return out;
+}
+
+export type FriendReward = 'letter' | 'gift' | 'change';
+/** The rewards a resident has at this many hearts. */
+export function friendRewards(hearts: number, at: Record<FriendReward, number>): FriendReward[] {
+  return (Object.keys(at) as FriendReward[]).filter(k => hearts >= at[k]);
+}
+/** The rewards reached going from `before` to `after` hearts. */
+export function newFriendRewards(before: number, after: number, at: Record<FriendReward, number>): FriendReward[] {
+  return (Object.keys(at) as FriendReward[]).filter(k => before < at[k] && after >= at[k]);
+}
+
+// ---------- Life in town ----------
+
+/** Topics with at least one solved errand. Log entries from before a topic was split count for every topic it became. */
+export function topicsPractised(log: LogEntry[], legacy: Record<string, string[]> = {}): Set<string> {
+  const out = new Set<string>();
+  for (const e of log) for (const t of legacy[e.topic] ?? [e.topic]) out.add(t);
+  return out;
+}
+
+/** How dark the map is at this hour (0 = day, up to 1 = deep night), for the day/night cycle. */
+export function nightness(hours: number): number {
+  if (hours >= 7 && hours < 17) return 0;
+  if (hours >= 17 && hours < 20) return (hours - 17) / 3;
+  if (hours >= 5 && hours < 7) return (7 - hours) / 2;
+  return 1;
+}

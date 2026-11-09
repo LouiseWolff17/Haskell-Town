@@ -59,3 +59,48 @@ test('openedOn uses the day of the errand that reached the threshold', () => {
   const log = Array.from({ length: first.needs }, (_, i) => entry(10 + i, 'e' + i));
   assert.deepEqual(openedOn(EXPANSIONS, log), { [first.id]: 10 + first.needs - 1 });
 });
+
+import { ERRANDS, FRIENDSHIP, HEARTS } from '../src/content/index.ts';
+import { friendRewards, heartsByResident, newFriendRewards } from '../src/game/rewards.ts';
+
+test('every resident has a friendship entry, and every errand-giver is one of them', () => {
+  assert.deepEqual(FRIENDSHIP.map(f => f.resident).sort(), Object.keys(RESIDENTS).sort());
+  for (const e of ERRANDS) assert.ok(FRIENDSHIP.some(f => f.resident === e.resident), `${e.id}: ${e.resident} has no friendship entry`);
+  assert.ok(HEARTS.letter < HEARTS.gift && HEARTS.gift < HEARTS.change);
+});
+
+test('hearts come one per solved errand, whatever the outcome, capped', () => {
+  const who = (id: string) => ({ a: 'hazel', b: 'wren' } as Record<string, string>)[id];
+  const log = [entry(1, 'a', 'recalled'), entry(2, 'a', 'relearned'), entry(3, 'b', 'effortful'), entry(4, 'a')];
+  assert.deepEqual(heartsByResident(log, who), { hazel: 3, wren: 1 });
+  assert.deepEqual(heartsByResident(log, who, 2), { hazel: 2, wren: 1 });
+});
+
+test('friend rewards arrive at their heart counts, once', () => {
+  assert.deepEqual(friendRewards(0, HEARTS), []);
+  assert.deepEqual(friendRewards(HEARTS.gift, HEARTS), ['letter', 'gift']);
+  assert.deepEqual(newFriendRewards(0, 1, HEARTS), ['letter']);
+  assert.deepEqual(newFriendRewards(HEARTS.change, HEARTS.change + 1, HEARTS), []);
+  assert.deepEqual(newFriendRewards(HEARTS.gift, HEARTS.change, HEARTS), ['change']);
+});
+
+import { LIFE, REVIEW_TOPICS } from '../src/content/index.ts';
+import { nightness, topicsPractised } from '../src/game/rewards.ts';
+
+test('every review topic has exactly one life touch', () => {
+  assert.deepEqual(LIFE.map(l => l.topic).sort(), REVIEW_TOPICS.map(t => t.id).sort());
+});
+
+test('topicsPractised counts old split topics for each new topic', () => {
+  const log = [{ ...entry(1, 'crust'), topic: 'basics' }, { ...entry(2, 'evens'), topic: 'lazy' }];
+  assert.deepEqual([...topicsPractised(log, { basics: ['functions', 'patterns'] })].sort(), ['functions', 'lazy', 'patterns']);
+});
+
+test('nightness: day, dusk, night, dawn', () => {
+  assert.equal(nightness(12), 0);
+  assert.equal(nightness(17), 0);
+  assert.ok(nightness(18.5) > 0.4 && nightness(18.5) < 0.6);
+  assert.equal(nightness(23), 1);
+  assert.equal(nightness(3), 1);
+  assert.equal(nightness(6), 0.5);
+});

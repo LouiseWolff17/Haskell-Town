@@ -2,7 +2,7 @@
 import { CHALLENGES, RESIDENTS, COMING_SOON, NOT_SUPPORTED } from '../content/index.ts';
 import { $, MODES, state, status } from './state.js';
 import { codeBlock } from './highlight.js';
-import { portrait } from './town.js';
+import { portrait, renderNightBtn } from './town.js';
 import { openChallenge, setMode } from './notebook.js';
 import { renderBoard } from './errands.js';
 import { renderJournal } from './journal.js';
@@ -40,6 +40,7 @@ export function renderSidebar() {
   ns.innerHTML = notSupportedHTML(); lib.appendChild(ns);
   renderBoard();
   renderJournal();
+  renderNightBtn();
   document.querySelectorAll('.mode-seg').forEach(seg => renderSeg(seg));
 }
 export function renderSeg(seg) {

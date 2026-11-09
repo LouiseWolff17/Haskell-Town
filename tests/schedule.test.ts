@@ -101,3 +101,19 @@ test('calibration counts first-time results per confidence level', () => {
   assert.deepEqual(cal.sure, { total: 2, firstTry: 1 });
   assert.deepEqual(cal.unsure, { total: 0, firstTry: 0 });
 });
+
+import { syncTopics } from '../src/game/schedule.ts';
+
+test('syncTopics: split topics inherit progress, new ones start today, old ones go', () => {
+  const rs = startReviews(['basics', 'recursion'], 10);
+  rs.topics.basics = { box: 3, due: 20, reviews: 4, lapses: 1 };
+  rs.day = { date: 15, items: [{ topic: 'basics', errand: 'crust', retry: false, runs: 0, cue: false, sawAnswer: false, confidence: null, outcome: null }] };
+  const changed = syncTopics(rs, ['functions', 'patterns', 'recursion', 'lazy'], 15, { basics: ['functions', 'patterns'] }, id => ({ crust: 'patterns' } as Record<string, string>)[id]);
+  assert.ok(changed);
+  assert.deepEqual(Object.keys(rs.topics).sort(), ['functions', 'lazy', 'patterns', 'recursion']);
+  assert.deepEqual(rs.topics.functions, { box: 3, due: 20, reviews: 0, lapses: 1 });
+  assert.deepEqual(rs.topics.patterns, { box: 3, due: 20, reviews: 0, lapses: 1 });
+  assert.deepEqual(rs.topics.lazy, { box: 0, due: 15, reviews: 0, lapses: 0 });
+  assert.equal(rs.day.items[0].topic, 'patterns');
+  assert.equal(syncTopics(rs, ['functions', 'patterns', 'recursion', 'lazy'], 15, { basics: ['functions', 'patterns'] }, () => undefined), false);
+});

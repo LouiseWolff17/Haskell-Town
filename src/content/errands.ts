@@ -4,12 +4,18 @@ import type { Errand, ReviewTopic } from './types.ts';
 // each one a new problem on an idea from an earlier building, to be solved from memory.
 // When each topic comes back is decided by src/game/schedule.ts (spaced retrieval practice).
 //
+// Each resident has a topic of their own, so every resident's errands (and friendship hearts)
+// come back at the same pace. Topics that used to be shared are listed in LEGACY_TOPICS,
+// so older saves carry their progress over.
+//
 // Every topic needs at least two errands: reviews take turns through them, so the player
 // practises using the idea on a new problem instead of retyping an answer they remember.
 
 export const REVIEW_TOPICS: ReviewTopic[] = [
-  { id: 'basics', title: 'Functions & pattern matching', resident: 'hazel', from: ['house', 'mailbox', 'bakery'] },
-  { id: 'mapfilter', title: 'map & filter', resident: 'moss', from: ['garden', 'store'] },
+  { id: 'functions', title: 'Functions & lists', resident: 'wren', from: ['house', 'mailbox'] },
+  { id: 'patterns', title: 'Pattern matching', resident: 'hazel', from: ['bakery'] },
+  { id: 'map', title: 'map', resident: 'moss', from: ['garden'] },
+  { id: 'filter', title: 'filter', resident: 'bram', from: ['store'] },
   { id: 'recursion', title: 'Recursion', resident: 'iris', from: ['library', 'library2'] },
   { id: 'data', title: 'Data types & records', resident: 'juniper', from: ['school', 'school2'] },
   { id: 'io', title: 'IO & do blocks', resident: 'fern', from: ['hall', 'hall2'] },
@@ -21,10 +27,13 @@ export const REVIEW_TOPICS: ReviewTopic[] = [
   { id: 'lazy', title: 'Laziness & infinite lists', resident: 'orla', from: ['observatory', 'observatory2'] },
 ];
 
+/** Old topic id → the topics it was split into. Their progress is copied to each (see syncTopics in schedule.ts). */
+export const LEGACY_TOPICS: Record<string, string[]> = { basics: ['functions', 'patterns'], mapfilter: ['map', 'filter'] };
+
 export const ERRANDS: Errand[] = [
-  // ---------- basics ----------
+  // ---------- pattern matching (Hazel) ----------
   {
-    id: 'crust', topic: 'basics', resident: 'hazel', title: 'Which Crust?',
+    id: 'crust', topic: 'patterns', resident: 'hazel', title: 'Which Crust?',
     story: "Hazel is labelling the morning loaves. “Rye bakes dark, spelt bakes nutty, and everything else comes out golden. Could you write that down for me?”",
     task: 'Write <code>crustFor</code>, which gives <code>"dark"</code> for <code>"rye"</code>, <code>"nutty"</code> for <code>"spelt"</code> and <code>"golden"</code> for any other flour.',
     fn: 'crustFor', sig: 'crustFor :: String -> String',
@@ -35,7 +44,20 @@ export const ERRANDS: Errand[] = [
     explanation: 'One equation per case, tried from top to bottom. The last one uses <code>_</code>, which matches anything, so it has to come last, or it would catch rye and spelt too.',
   },
   {
-    id: 'firstOrZero', topic: 'basics', resident: 'wren', title: 'The Top Box',
+    id: 'boxLabel', topic: 'patterns', resident: 'hazel', title: 'Bun Boxes',
+    story: "Hazel packs buns into little boxes and writes on the lid. “An empty box says empty. One bun says just bun, or just roll, or whatever it is. More than one, I write assorted.”",
+    task: 'Write <code>boxLabel</code>: <code>"empty"</code> for an empty list, <code>"just "</code> followed by the name for a list with one item, and <code>"assorted"</code> for anything longer. Use patterns, not <code>length</code>.',
+    fn: 'boxLabel', sig: 'boxLabel :: [String] -> String', forbid: ['length', 'null'],
+    examples: [['boxLabel []', '"empty"'], ['boxLabel ["bun"]', '"just bun"'], ['boxLabel ["bun", "roll"]', '"assorted"']],
+    tests: [['boxLabel []', '"empty"'], ['boxLabel ["bun"]', '"just bun"'], ['boxLabel ["roll"]', '"just roll"'], ['boxLabel ["bun", "roll"]', '"assorted"'], ['boxLabel ["a", "b", "c"]', '"assorted"']],
+    starter: 'boxLabel :: [String] -> String\n',
+    solution: 'boxLabel :: [String] -> String\nboxLabel []  = "empty"\nboxLabel [x] = "just " ++ x\nboxLabel _   = "assorted"\n',
+    explanation: '<code>[x]</code> is a pattern for a list with exactly one item, and it names that item <code>x</code>. Patterns are tried from the top, so the catch-all <code>_</code> only gets lists with two or more.',
+  },
+
+  // ---------- functions & lists (Wren) ----------
+  {
+    id: 'firstOrZero', topic: 'functions', resident: 'wren', title: 'The Top Box',
     story: "Wren is stacking boxes again. “I only ever need to know what's in the top box. And if there are no boxes at all, just say 0.”",
     task: 'Write <code>topBox</code>, which gives the first number in a list, or <code>0</code> for an empty list. Use pattern matching, not <code>head</code>.',
     fn: 'topBox', sig: 'topBox :: [Int] -> Int', forbid: ['head', 'null'],
@@ -46,9 +68,21 @@ export const ERRANDS: Errand[] = [
     explanation: 'A list is either <code>[]</code> or a first item stuck on the front of the rest, <code>(x:rest)</code>. The <code>_</code> says “I don\'t need the rest”. Unlike <code>head</code>, this can never crash on an empty list.',
   },
 
-  // ---------- map & filter ----------
   {
-    id: 'afterRain', topic: 'mapfilter', resident: 'moss', title: 'After the Rain',
+    id: 'twoBags', topic: 'functions', resident: 'wren', title: 'Two Mailbags',
+    story: "The post came in two bags today. “I've got one list of letters from the morning bag and one from the afternoon bag. How many letters is that altogether?”",
+    task: 'Write <code>countBoth</code>, which takes two lists of letters and gives how many letters there are in total.',
+    fn: 'countBoth', sig: 'countBoth :: [String] -> [String] -> Int',
+    examples: [['countBoth ["Hi"] ["Hello", "Hey"]', '3'], ['countBoth [] []', '0']],
+    tests: [['countBoth ["Hi"] ["Hello", "Hey"]', '3'], ['countBoth [] []', '0'], ['countBoth ["a", "b"] []', '2'], ['countBoth [] ["x"]', '1']],
+    starter: 'countBoth :: [String] -> [String] -> Int\n',
+    solution: 'countBoth :: [String] -> [String] -> Int\ncountBoth morning afternoon = length morning + length afternoon\n',
+    explanation: 'A function with two arguments has two arrows in its type: <code>[String] -> [String] -> Int</code>. Each argument gets a name on the left of <code>=</code>. (<code>length (morning ++ afternoon)</code> works too.)',
+  },
+
+  // ---------- map (Moss) ----------
+  {
+    id: 'afterRain', topic: 'map', resident: 'moss', title: 'After the Rain',
     story: "Moss measured the seedlings, then it rained. “Each one grew 2 centimetres overnight. Which ones are at least 10 centimetres tall now?”",
     task: 'Write <code>afterRain</code>: add 2 to every height, then keep only the heights that are at least 10.',
     fn: 'afterRain', sig: 'afterRain :: [Int] -> [Int]',
@@ -59,7 +93,20 @@ export const ERRANDS: Errand[] = [
     explanation: '<code>map</code> changes every item, <code>filter</code> keeps some of them. Here the order matters: grow first, then measure. <code>(+ 2)</code> and <code>(>= 10)</code> are sections: an operator with one side filled in.',
   },
   {
-    id: 'inStock', topic: 'mapfilter', resident: 'bram', title: 'What Can I Sell?',
+    id: 'potLabels', topic: 'map', resident: 'moss', title: 'Labelling the Pots',
+    story: "Moss is potting up seedlings to give away. “Every pot needs a little label: Pot, then the plant's name. Could you make me the labels?”",
+    task: 'Write <code>potLabels</code>, which puts <code>"Pot: "</code> in front of every name in the list.',
+    fn: 'potLabels', sig: 'potLabels :: [String] -> [String]',
+    examples: [['potLabels ["basil", "mint"]', '["Pot: basil", "Pot: mint"]'], ['potLabels []', '[]']],
+    tests: [['potLabels ["basil", "mint"]', '["Pot: basil", "Pot: mint"]'], ['potLabels []', '[]'], ['potLabels ["fern"]', '["Pot: fern"]']],
+    starter: 'potLabels :: [String] -> [String]\n',
+    solution: 'potLabels :: [String] -> [String]\npotLabels names = map ("Pot: " ++) names\n',
+    explanation: '<code>map</code> does the same thing to every item. <code>("Pot: " ++)</code> is a section: <code>++</code> with its left side filled in, so it\'s a function waiting for the name to stick on the end.',
+  },
+
+  // ---------- filter (Bram) ----------
+  {
+    id: 'inStock', topic: 'filter', resident: 'bram', title: 'What Can I Sell?',
     story: "Bram keeps his stock as pairs of a name and how many he has. “Just give me the names of the things I've still got at least one of.”",
     task: 'Write <code>inStock</code>, which gives the names whose count is more than 0, in the same order.',
     fn: 'inStock', sig: 'inStock :: [(String, Int)] -> [String]',
@@ -68,6 +115,18 @@ export const ERRANDS: Errand[] = [
     starter: 'inStock :: [(String, Int)] -> [String]\n',
     solution: 'inStock :: [(String, Int)] -> [String]\ninStock items = map fst (filter (\\(_, n) -> n > 0) items)\n',
     explanation: 'First <code>filter</code> the pairs, then <code>map fst</code> to keep just the names. A list comprehension says the same thing: <code>[name | (name, n) &lt;- items, n &gt; 0]</code>.',
+  },
+
+  {
+    id: 'bigLabels', topic: 'filter', resident: 'bram', title: 'The Big Shelf',
+    story: "Bram's top shelf has wide labels. “Only things with names longer than four letters go up there. Which ones are they?”",
+    task: 'Write <code>bigShelf</code>, which keeps the names that are longer than 4 letters, in the same order.',
+    fn: 'bigShelf', sig: 'bigShelf :: [String] -> [String]',
+    examples: [['bigShelf ["jam", "biscuits", "tea", "honey"]', '["biscuits", "honey"]']],
+    tests: [['bigShelf ["jam", "biscuits", "tea", "honey"]', '["biscuits", "honey"]'], ['bigShelf []', '[]'], ['bigShelf ["oats"]', '[]'], ['bigShelf ["apple"]', '["apple"]']],
+    starter: 'bigShelf :: [String] -> [String]\n',
+    solution: 'bigShelf :: [String] -> [String]\nbigShelf names = filter (\\n -> length n > 4) names\n',
+    explanation: '<code>filter</code> keeps the items its test says <code>True</code> for. The test here is a lambda, <code>\\n -> length n > 4</code>. You could also write it as <code>(> 4) . length</code>.',
   },
 
   // ---------- recursion ----------

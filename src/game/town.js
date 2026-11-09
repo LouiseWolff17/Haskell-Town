@@ -1,9 +1,10 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
-import { CHALLENGES, EXPANSIONS, RESIDENTS } from '../content/index.ts';
-import { $, byId, state, status } from './state.js';
+import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
+import { $, byId, save, state, status } from './state.js';
 import { openChallenge } from './notebook.js';
-import { solvedErrands, villageBuilt, waitingResidents } from './errands.js';
-import { nextExpansion, openExpansions, stripsShown } from './rewards.ts';
+import { hearts, practised, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
+import { openLetters } from './journal.js';
+import { nextExpansion, nightness, stripsShown } from './rewards.ts';
 
 const cv = $('#town'), ctx = cv.getContext('2d');
 // The village is 400×340. Once errands start opening new land, strips of STRIP px are added below the railway.
@@ -204,7 +205,7 @@ function stationDeco(x, y, t) {
   R(x + 85, y + 27, 3, 3, ph > 0.15 && ph < 0.75 ? '#81d18a' : '#e85a4f');
 }
 // the train: drawn separately, after the trees, so it rides on top of them
-function train(t) {
+function train(t, heartOnFront) {
   const period = 16000, ph = (t % period) / period;
   const len = 76, px = Math.round(ph * (W + len + 40)) - len - 20, ty = 313;
   const car = (cx, col) => { R(cx, ty + 2, 22, 9, col); R(cx, ty + 2, 22, 1, 'rgba(255,255,255,.35)'); for (let w = 0; w < 3; w++) R(cx + 3 + w * 6, ty + 4, 4, 3, '#fff2c8'); R(cx + 3, ty + 11, 3, 3, '#2b2b2b'); R(cx + 16, ty + 11, 3, 3, '#2b2b2b'); };
@@ -212,7 +213,8 @@ function train(t) {
   const lx = px + 48;
   R(lx, ty + 3, 22, 8, '#c8553d'); R(lx + 2, ty - 2, 8, 6, '#9b3d2a'); R(lx + 3, ty - 1, 6, 3, '#fff2c8');
   R(lx + 15, ty - 3, 4, 6, '#3b2a2a'); R(lx + 20, ty + 6, 4, 4, '#3b2a2a'); R(lx + 22, ty + 4, 2, 2, '#ffe08a');
-  [3, 9, 16].forEach(o => R(lx + o, ty + 11, 4, 3, '#2b2b2b')); R(px + 22, ty + 7, 2, 1, '#3b2a2a'); R(px + 46, ty + 7, 2, 1, '#3b2a2a');
+  [3, 9, 16].forEach(o => R(lx + o, ty + 11, 4, 3, '#2b2b2b'));
+  if (heartOnFront) heart(lx + 12, ty + 5, '#ffd1dc'); R(px + 22, ty + 7, 2, 1, '#3b2a2a'); R(px + 46, ty + 7, 2, 1, '#3b2a2a');
   for (let i = 0; i < 4; i++) { const k = ((t / 500) + i / 4) % 1; ctx.globalAlpha = 0.6 * (1 - k); R(lx + 16 - k * 14, ty - 6 - k * 10, 3 + k * 3, 3 + k * 2, '#f2efe9'); ctx.globalAlpha = 1; }
 }
 function park(x, y, t) {
@@ -363,6 +365,7 @@ function draw(t) {
     } else if (p.small) { if (status(m) === 'open') smallLot(p); }
     else lot(p, status(m) === 'locked');
   }
+  drawFriends(t);
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
   const shown = new Set();
   for (const c of CHALLENGES) {
@@ -379,9 +382,11 @@ function draw(t) {
       if (waiting.has(rid)) errandBubble(pos[0] - 1, pos[1] - 13, t);
     }
   }
+  drawLife(t);
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
-    if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t); }
+    if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
+  drawNight(t);
   if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover.split(':')[1]).slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
   if (hover && PLOTS[hover]) { const p = PLOTS[hover]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
   requestAnimationFrame(draw);
@@ -397,6 +402,7 @@ function plotAt(ev) {
 function challengeForPlot(pid) { if (pid.includes(':')) return null; const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
 export function plotLabel(id) {
   if (!id) return villageBuilt() ? 'The village is built! Residents with a <b>?</b> have pinned an errand to the Notice Board (the Errands tab).' : 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
+  if (id === 'mailbox' && unreadLetters().length) { const n = unreadLetters().length; return `📬 <b>You've got mail!</b> ${n} letter${n === 1 ? '' : 's'} waiting. Click the mailbox to read.`; }
   if (id.startsWith('exp:') || id.startsWith('fog:')) {
     const x = EXPANSIONS.find(e => e.id === id.slice(4)), n = solvedErrands();
     if (id.startsWith('exp:')) return `<b>${x.title}</b> ✓ — opened by solving errands. ${RESIDENTS[x.resident].name} looks after it.`;
@@ -420,9 +426,12 @@ export function portrait(rid, size = 40) {
 
 export function initTown() {
   paintBackground(); requestAnimationFrame(draw);
-  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && challengeForPlot(id) ? 'pointer' : 'default'; });
+  $('#nightBtn').onclick = () => { state.clockOff = !state.clockOff; save(); renderNightBtn(); };
+  renderNightBtn();
+  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
-  cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return; const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
+  cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return;
+    if (id === 'mailbox' && unreadLetters().length) { openLetters(); return; } const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
 }
 
 
@@ -539,3 +548,139 @@ const EXPANSION_ART = {
     for (let i = 0; i < 3; i++) { const fx = x + 180 + i * 14, fy = y + 20 + i * 9; R(fx, fy, 1, 2, '#4f8a4a'); R(fx, fy - 1, 1, 1, ['#fff2a8', '#f7c6d0', '#ffffff'][i]); }
   },
 };
+
+
+// ---------- Friendship: letters in the mailbox and lasting changes around town (src/content/friendship.ts) ----------
+const friendsWith = rid => (hearts()[rid] || 0) >= HEARTS.change;
+function heart(x, y, c = '#e85a6f') { R(x + 1, y, 1, 1, c); R(x + 3, y, 1, 1, c); R(x, y + 1, 5, 1, c); R(x + 1, y + 2, 3, 1, c); R(x + 2, y + 3, 1, 1, c); }
+function star(x, y, c) { R(x + 2, y, 1, 5, c); R(x, y + 2, 5, 1, c); R(x + 1, y + 1, 3, 3, c); }
+function envelope(x, y, t) {
+  const by = y + Math.round(Math.sin(t / 250) * 1.5);
+  R(x, by, 10, 7, C.ink); R(x + 1, by + 1, 8, 5, C.white);
+  for (let i = 0; i < 4; i++) { R(x + 1 + i, by + 1 + i, 1, 1, '#c9bca2'); R(x + 8 - i, by + 1 + i, 1, 1, '#c9bca2'); }
+  R(x + 4, by + 4, 2, 2, '#e85a6f');
+}
+// keyed by resident; p is the plot of their building
+const FRIEND_PLOT = { wren: 'house', hazel: 'bakery', moss: 'garden', bram: 'store', iris: 'library', juniper: 'school', fern: 'hall', sorrel: 'clinic', rowan: 'park', brine: 'harbour', marigold: 'market', orla: 'observatory' };
+const FRIEND_ART = {
+  wren(p) { const x = p.x + 21, y = p.y + 34; R(x, y, 7, 1, '#4f8a4a'); R(x, y + 5, 7, 1, '#4f8a4a'); R(x - 1, y + 1, 1, 4, '#4f8a4a'); R(x + 7, y + 1, 1, 4, '#4f8a4a'); R(x + 1, y + 1, 1, 1, '#6aa85e'); R(x + 5, y + 4, 1, 1, '#6aa85e'); R(x + 2, y + 5, 3, 2, '#d1495b'); },
+  hazel(p) { const x = p.x + 38, y = p.y + 34; R(x + 2, y - 2, 1, 2, C.wood2); R(x + 13, y - 2, 1, 2, C.wood2); R(x, y, 16, 8, C.wood); R(x + 1, y + 1, 14, 6, '#fff4e0'); heart(x + 2, y + 2); R(x + 8, y + 3, 5, 1, '#c58a4a'); R(x + 8, y + 5, 4, 1, '#c58a4a'); },
+  moss(p, t) { const x = p.x + 64, y = p.y + 2, sw = Math.round(Math.sin(t / 900)); R(x + 4, y + 8, 1, 16, C.wood2); R(x, y + 11, 9, 1, C.wood2); R(x + 2, y + 4, 5, 4, '#f2cc8f'); R(x + 3, y + 5, 1, 1, C.ink); R(x + 5, y + 5, 1, 1, C.ink); R(x + 1, y + 2, 7, 2, '#8a5a3b'); R(x + 2, y + 1, 5, 1, '#8a5a3b'); R(x + 2, y + 9, 5, 6, '#4a7fa7'); R(x - 1 + sw, y + 12, 2, 1, '#f2cc8f'); R(x + 8 + sw, y + 12, 2, 1, '#f2cc8f'); },
+  bram(p, t) { star(p.x + 18, p.y + 47, Math.floor(t / 700) % 3 ? '#e0b040' : '#fff2a8'); },
+  iris(p) { const x = p.x + 29, y = p.y + 19; R(x, y, 18, 1, C.wood2); R(x + 1, y + 1, 16, 7, '#8e6fb5'); R(x + 3, y + 8, 3, 2, '#8e6fb5'); R(x + 12, y + 8, 3, 2, '#8e6fb5'); heart(x + 2, y + 2, '#fff2a8'); R(x + 8, y + 3, 7, 1, '#e8dcf5'); R(x + 8, y + 5, 5, 1, '#e8dcf5'); },
+  juniper(p, t) { const x = p.x + 52, y = p.y + 17; star(x, y, '#e0b040'); if (Math.floor(t / 500) % 4 === 0) R(x + 2, y + 2, 1, 1, '#fffaf0'); },
+  fern(p, t) { const x = p.x + 76, y = p.y + 4, f = Math.floor(t / 350) % 2; R(x, y, 1, 12, '#3b2a2a'); R(x + 1, y, 9 + f, 6, '#2f6f73'); R(x + 3, y + 1, 1, 1, C.white); R(x + 4, y + 2, 1, 1, C.white); R(x + 5, y + 3, 1, 1, C.white); R(x + 3, y + 4, 1, 1, C.white); R(x + 6, y + 4, 1, 1, C.white); },
+  sorrel(p) { heart(p.x + 14, p.y + 28, '#e85a6f'); heart(p.x + 52, p.y + 28, '#e85a6f'); },
+  rowan(p, t) { const x = p.x + 40, y = p.y + 4; const fl = ['#e8a0bf', '#d1495b', '#f7c6d0'];
+    [[1, 0], [3, 0], [7, 0], [9, 0], [0, 2], [2, 2], [4, 2], [6, 2], [8, 2], [10, 2], [2, 4], [4, 4], [6, 4], [8, 4], [4, 6], [6, 6], [5, 8]].forEach(([a, b], i) => { R(x + a, y + b + 1, 2, 1, '#4f8a4a'); R(x + a, y + b, 2, 1, fl[(i + Math.floor(t / 900)) % 3]); }); },
+  brine(p, t) { const bob = Math.round(Math.sin(t / 650 + 1)); const x = p.x + 74, y = p.y + 22 + bob; R(x, y + 4, 12, 3, '#4a7fa7'); R(x + 1, y + 7, 10, 1, '#365f7f'); R(x + 5, y - 4, 1, 8, '#6b4429'); R(x + 6, y - 3, 4, 5, '#fffaf0'); heart(x + 4, y + 4, '#fff2a8'); },
+  marigold(p, t) { const x = p.x + 58, y = p.y + 6;
+    [['#e85a6f', 0, 0], ['#f2cc8f', 5, -3], ['#81b29a', 9, 1]].forEach(([c, dx, dy], i) => { const sx = x + dx + Math.round(Math.sin(t / 900 + i)), sy = y + dy; R(sx, sy, 4, 5, c); R(sx + 1, sy - 1, 2, 1, c); R(sx + 1, sy + 1, 1, 1, 'rgba(255,255,255,.6)'); for (let k = 0; k < 12; k++) R(sx + 2 + Math.round((x + 4 - sx - 2) * k / 12), sy + 5 + k, 1, 1, '#9a8f80'); }); },
+  orla(p, t) { const x = p.x + 8, y = p.y - 2, g = 0.4 + Math.sin(t / 500) * 0.3; ctx.globalAlpha = g; R(x - 2, y + 2, 9, 1, '#fff2a8'); R(x + 2, y - 2, 1, 9, '#fff2a8'); ctx.globalAlpha = 1; star(x, y, '#ffe08a'); R(x + 2, y + 2, 1, 1, C.white); },
+};
+function drawFriends(t) {
+  const h = hearts();
+  for (const [rid, pid] of Object.entries(FRIEND_PLOT)) {
+    const p = PLOTS[pid], m = mainOf(pid);
+    if ((h[rid] || 0) < HEARTS.change || !m || !state.done[m.id]) continue;
+    withReveal('friend-' + rid, p, t, () => FRIEND_ART[rid](p, t));
+  }
+  if (unreadLetters().length && state.done.mailbox) envelope(PLOTS.mailbox.x + 1, PLOTS.mailbox.y - 9, t);
+}
+
+
+// ---------- Life in town: one moving detail per errand topic (src/content/life.ts) ----------
+const FOLK = { hair: '#5a4636', shirt: '#b5603f' }, FOLK2 = { hair: '#e0b040', shirt: '#4a7fa7' }, FOLK3 = { hair: '#2f2a28', shirt: '#81b29a' }, KID = { hair: '#c98a3d', shirt: '#e07a5f' }, KID2 = { hair: '#3b2a2a', shirt: '#f2cc8f' };
+/** A walker going back and forth between x0 and x1 along y, taking `period` ms each way. Returns [x, facingRight]. */
+const pace = (t, x0, x1, period) => { const k = (t % (period * 2)) / period, f = k < 1 ? k : 2 - k; return [x0 + (x1 - x0) * f, k < 1]; };
+function cat(x, y, t) {
+  const tail = Math.round(Math.sin(t / 500) * 1.5);
+  R(x, y + 2, 8, 4, '#e0a458'); R(x + 1, y + 3, 6, 1, '#c98a3d'); R(x + 7, y, 4, 4, '#e0a458'); R(x + 7, y - 1, 1, 1, '#e0a458'); R(x + 10, y - 1, 1, 1, '#e0a458');
+  R(x + 8, y + 1, 1, 1, C.ink); R(x - 3, y + 3 + tail, 3, 1, '#e0a458');
+  if (Math.floor(t / 1600) % 3 === 0) { const k = (t % 1600) / 1600; ctx.globalAlpha = 1 - k; R(x + 12 + k * 3, y - 3 - k * 6, 2, 1, C.white); R(x + 13 + k * 3, y - 4 - k * 6, 1, 1, C.white); ctx.globalAlpha = 1; }
+}
+function bike(x, y, t, right) {
+  const s = right ? 1 : -1, cx = x + 6, spin = Math.floor(t / 120) % 2;
+  [cx - 5 * s, cx + 5 * s].forEach(wx => { R(wx - 2, y + 8, 5, 1, C.ink); R(wx - 2, y + 12, 5, 1, C.ink); R(wx - 3, y + 9, 1, 3, C.ink); R(wx + 2, y + 9, 1, 3, C.ink); R(wx - 1 + spin, y + 10, 1, 1, '#8d8d8d'); });
+  R(cx - 4, y + 9, 9, 1, '#c8553d'); R(cx + 5 * s - 1, y + 4, 4, 4, '#a86a32'); R(cx + 5 * s, y + 3, 2, 2, '#e0b070');
+  person(cx - 4 - s, y - 6, { hair: '#b5452f', shirt: '#f4efe2' }, t, false);
+}
+function flock(t) {
+  const period = 21000, k = (t % period) / period; if (k > 0.45) return;
+  const bx = -20 + k / 0.45 * (W + 40), by = 60 + Math.sin(k * 9) * 8, f = Math.floor(t / 180) % 2;
+  [[0, 0], [-7, -4], [-7, 4], [-14, -8], [-14, 8]].forEach(([dx, dy]) => { R(bx + dx, by + dy, 1, 1, C.ink); R(bx + dx - 2, by + dy - f, 2, 1, C.ink); R(bx + dx + 1, by + dy - f, 2, 1, C.ink); });
+}
+function gull(cx, cy, r, t, ph) { const a = t / 2200 + ph, x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.5, f = Math.floor(t / 220 + ph) % 2; R(x, y, 1, 1, C.white); R(x - 3, y - f, 3, 1, C.white); R(x + 1, y - f, 3, 1, C.white); }
+const LIFE_ART = {
+  functions: t => cat(34, 112, t),
+  patterns: t => { const [x, right] = pace(t, -10, W - 4, 13000); bike(x, 102, t, right); },
+  map: t => {
+    flock(t);
+    [[52, 150], [96, 162], [70, 172]].forEach(([x, y], i) => { const hop = Math.floor(t / 400 + i * 3) % 5 === 0 ? 1 : 0; R(x, y - hop, 3, 2, '#7d5a3c'); R(x + 2, y - 1 - hop, 2, 2, '#7d5a3c'); R(x + 4, y - hop, 1, 1, '#e0a458'); });
+  },
+  filter: t => { const k = (t % 9000) / 9000; if (k > 0.8) return; const y = k < 0.4 ? 106 - k / 0.4 * 18 : 88 + (k - 0.4) / 0.4 * 18; person(244, y, FOLK2, t, true); },
+  recursion: t => { const x = 260, y = 164; person(x, y, FOLK3, t, false); R(x + 1, y + 7, 6, 4, '#f6e7cf'); R(x + 4, y + 7, 1, 4, '#c9bca2'); if (Math.floor(t / 1800) % 2) R(x + 5, y + 6, 2, 1, '#f6e7cf'); },
+  data: t => { [0, Math.PI].forEach((o, i) => { const a = t / 900 + o; person(98 + Math.cos(a) * 9, 226 + Math.sin(a) * 5, i ? KID2 : KID, t * 2, true); }); },
+  io: t => { const [x] = pace(t, 8, 380, 30000); person(x, 249, FOLK, t, true); },
+  maybe: t => {
+    const [x, right] = pace(t + 4000, 20, 370, 17000), hop = Math.floor(t / 150) % 2, s = right ? 1 : -1;
+    R(x, 257 - hop, 8, 4, '#f2efe9'); R(x + (right ? 7 : -2), 255 - hop, 3, 3, '#f2efe9'); R(x + (right ? 9 : -2), 256 - hop, 1, 1, C.ink); R(x + (right ? 8 : -1), 254 - hop, 1, 2, '#a86a32');
+    R(x + (right ? -1 : 8), 256 - hop * 2, 1, 2, '#f2efe9'); R(x + 1, 261, 1, 2, '#f2efe9'); R(x + 6, 261 - hop, 1, 2, '#f2efe9'); R(x + 3 * s + 2, 258 - hop, 2, 1, '#e8a0bf');
+  },
+  hof: t => { person(192, 298, FOLK3, t, true); person(202, 299, KID, t + 500, true); R(212, 304, 6, 6, '#a0764e'); R(213, 304, 4, 1, '#c49a6c'); },
+  classes: t => {
+    const kx = 352 + Math.sin(t / 1500) * 6, ky = 22 + Math.sin(t / 900) * 3;
+    for (let k = 0; k < 20; k++) R(kx + 3 + (340 - kx - 3) * k / 20, ky + 7 + (64 - ky - 7) * k / 20 + Math.sin(k / 3) , 1, 1, '#9a8f80');
+    R(kx + 2, ky, 2, 1, '#d1495b'); R(kx + 1, ky + 1, 4, 2, '#d1495b'); R(kx + 2, ky + 3, 2, 3, '#e0b040'); R(kx + 3, ky + 6, 1, 1, '#e0b040');
+    for (let k = 0; k < 3; k++) R(kx + 3 + Math.sin(t / 300 + k) , ky + 8 + k * 2, 2, 1, ['#4a7fa7', '#81b29a', '#e07a5f'][k]);
+  },
+  functor: t => { gull(378, 172, 14, t, 0); gull(372, 200, 10, t, 2.5); },
+  monoid: t => { person(292, 168, FOLK, t, true); person(323, 169, FOLK2, t + 700, true); },
+  lazy: t => {
+    const period = 9000, k = (t % period) / period; if (k > 0.12) return;
+    const p = k / 0.12, sx = 120 + p * 140, sy = 6 + p * 40;
+    for (let i = 0; i < 10; i++) { ctx.globalAlpha = (1 - i / 10) * (1 - p * 0.6); R(sx - i * 3.5, sy - i, 2, 1, i ? '#fff2a8' : C.white); }
+    ctx.globalAlpha = 1;
+  },
+};
+function drawLife(t) {
+  if (!state.reviews) return;
+  for (const topic of practised()) LIFE_ART[topic]?.(t);
+}
+
+// ---------- Night: once the Observatory is built, the map follows the player's clock ----------
+// windows that light up after dark, as [plot, x, y, w, h] relative to the plot
+const WINDOWS = [
+  ['house', 8, 31, 8, 8], ['house', 33, 31, 8, 8], ['bakery', 8, 42, 24, 16], ['store', 8, 44, 18, 14], ['library', 15, 26, 6, 12], ['library', 55, 26, 6, 12],
+  ['school', 9, 36, 12, 10], ['school', 51, 36, 12, 10], ['hall', 37, 5, 10, 9], ['clinic', 10, 25, 12, 10], ['clinic', 48, 25, 12, 10],
+  ['railway', 26, 29, 10, 8], ['railway', 60, 29, 10, 8], ['harbour', 8, 26, 8, 6], ['harbour', 42, 26, 8, 6], ['observatory', 17, 31, 5, 5], ['observatory', 43, 31, 5, 5],
+];
+/** The hour of day used for night, from the clock (the DEV panel can override it with state.devHour). */
+export const hourNow = () => state.devHour ?? (new Date().getHours() + new Date().getMinutes() / 60);
+export const nightOn = () => !!state.done.observatory && !state.clockOff;
+function drawNight(t) {
+  if (!nightOn()) return;
+  const n = nightness(hourNow()); if (n <= 0) return;
+  ctx.globalAlpha = 0.5 * n; ctx.fillStyle = n < 0.6 ? '#3a3a78' : '#1d2350'; ctx.fillRect(0, 0, W, cv.height);
+  ctx.globalAlpha = 1;
+  if (n < 0.35) return;
+  const glow = Math.min(1, (n - 0.35) / 0.4);
+  for (const [pid, dx, dy, w, h] of WINDOWS) {
+    const p = PLOTS[pid], m = mainOf(pid); if (!m || !state.done[m.id]) continue;
+    ctx.globalAlpha = 0.18 * glow; R(p.x + dx - 2, p.y + dy - 2, w + 4, h + 4, '#ffd970');
+    ctx.globalAlpha = 0.85 * glow; R(p.x + dx, p.y + dy, w, h, '#ffd970');
+  }
+  // the lighthouse lamp and the windmill window
+  ctx.globalAlpha = 0.9 * glow; if (state.done.harbour2) R(384, 133, 6, 5, '#fff2a8');
+  // a few fireflies over the grass
+  for (let i = 0; i < 10; i++) { const fx = (hsh(i, 41) * W + Math.sin(t / 1300 + i) * 8) | 0, fy = (hsh(i, 43) * cv.height + Math.cos(t / 1100 + i) * 6) | 0; ctx.globalAlpha = glow * (0.4 + 0.6 * Math.max(0, Math.sin(t / 400 + i * 2))); R(fx, fy, 1, 1, '#f6ff9a'); }
+  ctx.globalAlpha = 1;
+}
+
+/** The night toggle in the corner of the map, shown once the Observatory is built. */
+export function renderNightBtn() {
+  const b = $('#nightBtn'); if (!b) return;
+  b.hidden = !state.done.observatory;
+  b.textContent = state.clockOff ? '☀️ Always day' : '🌙 Night follows your clock';
+  b.title = state.clockOff ? 'Let the town get dark in the evening, like your clock' : 'Keep the town in daylight';
+}
