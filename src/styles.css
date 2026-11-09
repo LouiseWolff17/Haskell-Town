@@ -240,3 +240,23 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 }
 @media (max-width:620px){ .ws-btn{padding:5px 8px; font-size:13px} .progress span{display:none} }
 @media (max-width:520px){ .loop{grid-template-columns:repeat(2,1fr)} .bar{width:80px} .brand small{display:none} }
+
+/* ---------- Rewards: new land and the Journal ---------- */
+.land-prog{margin:8px 0 4px; padding:9px 12px; background:#eef5e8; border:2px solid #cfe2c2; border-radius:11px; font-size:13px}
+.land-prog .cal-bar{display:block; margin-top:6px}
+.land-line{margin-top:8px; font-size:13.5px; color:var(--ink2)}
+.land-line.opened{color:var(--ink)}
+.jpage{border:2px solid var(--line); border-radius:11px; margin-bottom:6px; background:var(--paper)}
+.jpage summary, .jlocked{display:flex; gap:10px; align-items:center; padding:7px 10px; cursor:pointer; list-style:none}
+.jpage summary::-webkit-details-marker{display:none}
+.jlocked{cursor:default; opacity:.5; border-style:dashed}
+.jstamp{flex:none; display:grid; place-items:center; width:34px; height:34px; border:2px dashed #d9b98f; border-radius:7px; background:#fbf3e3; font-size:18px; color:var(--ink2); transform:rotate(-4deg)}
+.jt{display:flex; flex-direction:column; min-width:0}
+.jt b{font-family:var(--pixel); font-weight:500; font-size:15px}
+.jt small{font-size:12px; color:var(--ink2)}
+.jbody{padding:0 10px 8px}
+.jbody p{margin:4px 0 6px; font-size:13.5px}
+.jconcept{font-weight:700; color:var(--terra)}
+.jstamps{display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 8px}
+.jstamps span{display:grid; place-items:center; width:26px; height:26px; border:2px dashed var(--line); border-radius:6px; font-size:14px; color:var(--ink2)}
+.jstamps span.on{border-style:solid; border-color:#d9b98f; background:#fbf3e3}

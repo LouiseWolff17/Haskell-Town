@@ -10,6 +10,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **Real Haskell, checked like GHC.** Your code is type-checked before anything runs, and the error messages are written for beginners.
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
 - **The Notice Board** brings each topic back over days and weeks: 22 errands on 11 topics, solved from memory, with feedback after you try.
+- **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
 
 Play it at **https://louisewolff17.github.io/Haskell-Town/** (it goes live after the first deploy, see below).
@@ -41,6 +42,7 @@ src/
     types.ts            Challenge, Resident, … (start here)
     challenges/         one file per building, e.g. 06-library.ts
     errands.ts          review topics and errands for the Notice Board
+    expansions.ts       land that opens as errands are solved
     residents.ts  workshop-examples.ts  unsupported.ts  coming-soon.ts
   runner/               the boundary between the game and "something that runs Haskell"
     types.ts            the CodeRunner interface and its result types
@@ -55,6 +57,8 @@ src/
     sidebar.js          request list, learning library
     errands.js          the Notice Board tab
     schedule.ts         when errands come back (pure functions, tested)
+    rewards.ts          map growth and Journal stamps (pure functions, tested)
+    journal.js          the Journal tab
     notebook.js         challenge window and Workshop
     highlight.js        syntax highlighting
 tests/
@@ -62,6 +66,7 @@ tests/
   runner-contract.test.ts  every reference solution passes; wrong answers don't
   worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
   schedule.test.ts         Notice Board scheduling: boxes, gaps, retries
+  rewards.test.ts          new land and Journal stamps
 docs/                   design notes and the runner API
 ```
 
@@ -77,6 +82,10 @@ The UI never calls the interpreter directly. Player code runs in a background We
 ## Adding an errand
 
 Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add a topic to `REVIEW_TOPICS`; each topic needs at least two errands, so reviews can vary). Give it a small `starter` that doesn't pass and a `solution` that does; `npm test` checks both. In dev mode (`npm run dev`), the DEV panel's **+1 day** button moves the clock forward so you can try the schedule.
+
+## Adding new land
+
+Add an entry to `EXPANSIONS` in `src/content/expansions.ts` with the next `slot` and a larger `needs` (total errands solved), and a drawing in `EXPANSION_ART` in `src/game/town.js`. Slots fill a strip of land west then east of the path; the map grows by one strip whenever a new one is needed, and the unopened half shows as mist. In dev mode, the DEV panel's **Solve errands** and **+1 day** buttons get you there quickly.
 
 ## Deploying
 

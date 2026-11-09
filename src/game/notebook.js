@@ -1,6 +1,6 @@
 // The notebook: the challenge window (problem, hints, editor, results) and the Workshop.
 // All Haskell goes through the runner; this file only turns its results into HTML.
-import { CHALLENGES, RESIDENTS, WORKSHOP_EXAMPLES } from '../content/index.ts';
+import { CHALLENGES, EXPANSIONS, RESIDENTS, WORKSHOP_EXAMPLES } from '../content/index.ts';
 import { createRunner } from '../runner/index.ts';
 import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.js';
 import { codeBlock, highlight } from './highlight.js';
@@ -8,6 +8,7 @@ import { buildAnim, plotLabel, portrait } from './town.js';
 import { notSupportedHTML, renderSidebar } from './sidebar.js';
 import { ERRANDS_BY_TOPIC, cueHTML, errandById, reviews, today, topicById, villageBuilt, whenText } from './errands.js';
 import { completeItem, isOpen, showAnswer } from './schedule.ts';
+import { newlyOpened, nextExpansion } from './rewards.ts';
 
 const runner = createRunner();
 
@@ -42,7 +43,27 @@ export function openChallenge(id) {
   $('#notebook').hidden = false; document.body.classList.add('modal-open');
   setTimeout(() => ed.focus(), 50);
 }
-export function closeNotebook() { if (activeRun) runner.cancel?.(); $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; }
+export function closeNotebook() { if (activeRun) runner.cancel?.(); $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; revealLand(); }
+
+// New land opened by an errand is revealed once the notebook closes, so the player sees the mist lift.
+let pendingLand = [];
+export function queueLand(opened) { pendingLand.push(...opened); }
+export function revealLand() {
+  if (!pendingLand.length) return;
+  const opened = pendingLand; pendingLand = [];
+  const t = performance.now();
+  opened.forEach(x => { buildAnim['exp-' + x.id] = t + 300; });
+  const last = opened[opened.length - 1];
+  toast(`<b>${last.title} has opened!</b> ${last.note}`);
+  document.querySelector('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+/** One line for the win box: what just opened, or how far it is to the next piece of land. */
+function landLine(opened, solved) {
+  if (opened.length) return `<div class="land-line opened">🌱 <b>${opened.map(x => x.title).join(' and ')}</b> just opened south of the railway. Close the notebook to see it.</div>`;
+  const next = nextExpansion(EXPANSIONS, solved); if (!next) return '';
+  const left = next.needs - solved;
+  return `<div class="land-line">🌫 ${left} more errand${left === 1 ? '' : 's'} until the mist lifts on new land.</div>`;
+}
 function renderProblem() {
   const c = current, r = RESIDENTS[c.resident];
   const p = $('#problem');
@@ -183,7 +204,10 @@ function noteCard(title, msg) {
 function markLine(line) { gutter.querySelectorAll('.bad').forEach(x => x.classList.remove('bad')); if (!line) return; const lines = ed.value.split('\n').length; gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1 === line ? `<span class="bad">${i + 1}</span>` : i + 1).join('<br>'); }
 
 export function build(c) {
-  state.done[c.id] = true; save();
+  state.done[c.id] = true;
+  // a Journal page: the code that built it, and the day
+  (state.journal ||= {})[c.id] = { code: state.code[c.id] ?? '', day: today() };
+  save();
   closeNotebook(); renderSidebar();
   const next = CHALLENGES.filter(x => status(x) === 'open');
   buildAnim[c.upgrade ? c.plot + '-deco' : (c.plot || c.id)] = performance.now();
@@ -267,7 +291,12 @@ async function checkErrand() {
   if (current !== c) return;
   let { html, all } = checkHTML(c, r);
   if (all && counts) {
-    const outcome = completeItem(state.reviews, item, today()); save();
+    const before = state.reviews.log.length;
+    const outcome = completeItem(state.reviews, item, today());
+    (state.errandCode ||= {})[c.errandId] = ed.value; // shown on the errand's Journal stamp
+    const opened = newlyOpened(EXPANSIONS, before, state.reviews.log.length);
+    pendingLand.push(...opened);
+    save();
     const p = state.reviews.topics[item.topic], t = topicById(item.topic), who = RESIDENTS[c.resident].name;
     const headline = { recalled: 'Remembered, first try!', effortful: 'Done — and that effort counts.', relearned: 'Relearned!' }[outcome];
     const body = {
@@ -283,7 +312,7 @@ async function checkErrand() {
         : item.confidence === 'unsure' && first ? 'You knew more than you thought!' : 'Nicely judged.'}</p>`;
     }
     html += `<div class="win"><h3>${headline}</h3><p>${body}</p>${conf}<details class="compare"><summary>Compare with one way to write it</summary>${answerHTML(c)}</details>
-      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
+      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div>${landLine(opened, state.reviews.log.length)}<button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
     renderSidebar(); renderErrandAssistant();
   } else if (all) {
     html += `<div class="win"><h3>All tests pass</h3><p>${item.sawAnswer ? `Now try the new ${topicById(item.topic).title} errand on the Notice Board, from memory.` : 'This errand is already done for today.'}</p><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
