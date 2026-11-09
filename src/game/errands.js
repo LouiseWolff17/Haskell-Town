@@ -1,7 +1,7 @@
 // The Notice Board: once the village is built, residents pin up errands — small new problems on
 // old topics, solved from memory and spaced out over days. The scheduling rules are in schedule.ts.
 import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS, LEGACY_TOPICS, MAX_HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
-import { heartsByResident, nextExpansion } from './rewards.ts';
+import { heartsByResident, nextExpansion, topicsPractised } from './rewards.ts';
 import { $, byId, esc, save, state } from './state.js';
 import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
@@ -21,6 +21,8 @@ export const solvedErrands = () => state.reviews?.log.length || 0;
 export const hearts = (log = state.reviews?.log || []) => heartsByResident(log, id => errandById(id)?.resident, MAX_HEARTS);
 /** Residents whose letter has arrived but hasn't been opened yet. */
 export const unreadLetters = () => Object.entries(hearts()).filter(([rid, h]) => h >= HEARTS.letter && !state.lettersRead?.[rid]).map(([rid]) => rid);
+/** Topics with at least one solved errand: each brings a bit of life to the map (src/content/life.ts). */
+export const practised = (log = state.reviews?.log || []) => topicsPractised(log, LEGACY_TOPICS);
 export const heartRow = n => '♥'.repeat(n) + '♡'.repeat(Math.max(0, MAX_HEARTS - n));
 
 /** The review state, started when the village is finished, with today's errands planned. Null before that. */

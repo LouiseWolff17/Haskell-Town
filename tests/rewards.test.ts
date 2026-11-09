@@ -83,3 +83,24 @@ test('friend rewards arrive at their heart counts, once', () => {
   assert.deepEqual(newFriendRewards(HEARTS.change, HEARTS.change + 1, HEARTS), []);
   assert.deepEqual(newFriendRewards(HEARTS.gift, HEARTS.change, HEARTS), ['change']);
 });
+
+import { LIFE, REVIEW_TOPICS } from '../src/content/index.ts';
+import { nightness, topicsPractised } from '../src/game/rewards.ts';
+
+test('every review topic has exactly one life touch', () => {
+  assert.deepEqual(LIFE.map(l => l.topic).sort(), REVIEW_TOPICS.map(t => t.id).sort());
+});
+
+test('topicsPractised counts old split topics for each new topic', () => {
+  const log = [{ ...entry(1, 'crust'), topic: 'basics' }, { ...entry(2, 'evens'), topic: 'lazy' }];
+  assert.deepEqual([...topicsPractised(log, { basics: ['functions', 'patterns'] })].sort(), ['functions', 'lazy', 'patterns']);
+});
+
+test('nightness: day, dusk, night, dawn', () => {
+  assert.equal(nightness(12), 0);
+  assert.equal(nightness(17), 0);
+  assert.ok(nightness(18.5) > 0.4 && nightness(18.5) < 0.6);
+  assert.equal(nightness(23), 1);
+  assert.equal(nightness(3), 1);
+  assert.equal(nightness(6), 0.5);
+});

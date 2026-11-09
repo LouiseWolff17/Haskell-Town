@@ -12,6 +12,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **The Notice Board** brings each topic back over days and weeks: 26 errands on 13 topics, one topic per resident, solved from memory, with feedback after you try.
 - **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
 - **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift for the Journal, then a lasting change to their building on the map.
+- **Life in town.** The first errand on each topic brings something to the map: a sleepy cat, the bread bike, birds, a kite, gulls, shooting stars… Once the Observatory is built, the town gets dark in the evening, following your clock (there's a toggle on the map).
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
 
 Play it at **https://louisewolff17.github.io/Haskell-Town/** (it goes live after the first deploy, see below).
@@ -45,6 +46,7 @@ src/
     errands.ts          review topics and errands for the Notice Board
     expansions.ts       land that opens as errands are solved
     friendship.ts       letters, gifts and building changes for each resident
+    life.ts             the bit of life each errand topic brings to the map
     residents.ts  workshop-examples.ts  unsupported.ts  coming-soon.ts
   runner/               the boundary between the game and "something that runs Haskell"
     types.ts            the CodeRunner interface and its result types

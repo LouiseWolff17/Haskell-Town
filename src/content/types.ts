@@ -143,3 +143,11 @@ export interface Friendship {
   /** ♥ 4: a lasting change to their building on the map (drawn in town.js FRIEND_ART). */
   change: string;
 }
+
+/** A bit of life on the map that appears the first time you solve an errand on a topic. */
+export interface LifeTouch {
+  /** A ReviewTopic id. */
+  topic: string;
+  title: string;
+  note: string;
+}

@@ -270,3 +270,6 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .letter .sig{text-align:right; font-style:italic; margin:0}
 .gift{display:flex; gap:10px; align-items:flex-start; margin:6px 0; padding:8px 10px; background:#fbf3e3; border:2px dashed #d9b98f; border-radius:9px; font-size:13px}
 .gift > span{font-size:22px}
+.town-frame{position:relative}
+.night-btn{position:absolute; top:16px; right:16px; z-index:2; border:0; border-radius:8px; padding:4px 9px; font:700 12px var(--body); background:rgba(255,250,240,.88); color:var(--ink); cursor:pointer; box-shadow:0 2px 0 rgba(0,0,0,.15)}
+.night-btn:hover{background:#fffaf0}
