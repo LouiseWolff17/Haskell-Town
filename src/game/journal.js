@@ -25,6 +25,7 @@ export function renderJournal() {
   const el = $('#journal'); if (!el) return;
   const built = CHALLENGES.filter(c => state.done[c.id]).length;
   let html = `<p class="lib-intro">Your keepsake book: everything you've made in Haskell Town, and the code you wrote for it.</p>`;
+  if (built) html += `<button class="btn-soft" id="printJournal">🖨 Print it, or save it as a PDF</button>`;
 
   html += friendsHTML();
   html += `<h4 class="board-h">Buildings · ${built} of ${CHALLENGES.length}</h4>`;
@@ -60,6 +61,7 @@ export function renderJournal() {
     }
   }
   el.innerHTML = html;
+  const pb = el.querySelector('#printJournal'); if (pb) pb.onclick = printJournal;
   el.querySelectorAll('[data-friend]').forEach(d => {
     d.querySelector('.jstamp')?.appendChild(portrait(d.dataset.friend, 30));
     d.addEventListener('toggle', () => { if (d.open && d.dataset.unread) markRead(d); });
@@ -99,4 +101,55 @@ export function openLetters() {
   document.querySelector('.tabs button[data-tab=journal]')?.click();
   const rid = unreadLetters()[0], d = rid && document.querySelector(`#journal details[data-friend="${rid}"]`);
   if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+
+
+// ---------- The printable Journal: a little "what I learned" booklet ----------
+// Built into #printArea and printed with the browser's print dialog, which can also save a PDF.
+// The print styles (styles.css, @media print) hide the game and show only the booklet.
+const pre = code => `<pre>${esc(code.replace(/\s+$/, ''))}</pre>`;
+export function printJournal() {
+  const log = state.reviews?.log || [], h = hearts(), stamps = errandStamps(log), on = openedOn(EXPANSIONS, log);
+  const doneC = CHALLENGES.filter(c => state.done[c.id]);
+  const days = [...doneC.map(c => state.journal?.[c.id]?.day), ...log.map(e => e.date)].filter(d => d != null);
+  const span = days.length ? `${dateOf(Math.min(...days))} – ${dateOf(Math.max(...days))}` : '';
+  const year = new Date().getFullYear();
+  const friends = FRIENDSHIP.filter(f => (h[f.resident] || 0) >= HEARTS.letter);
+
+  let html = `<section class="pj-cover"><div class="pj-logo">λ</div><h1>My Haskell Town Journal</h1><p class="pj-span">${span ? `${span} ${year}` : ''}</p>
+    <ul class="pj-stats"><li><b>${doneC.length}</b> of ${CHALLENGES.length} buildings</li><li><b>${log.length}</b> errands solved</li><li><b>${friends.length}</b> letters from friends</li><li><b>${Object.keys(on).length}</b> pieces of new land</li></ul>
+    <p class="pj-note">Everything here is real Haskell, written by me.</p></section>`;
+
+  html += `<h2>What I learned</h2>`;
+  for (const c of doneC) {
+    const j = state.journal?.[c.id], code = j?.code || state.code[c.id] || '';
+    html += `<article class="pj-page"><div class="pj-h"><span class="pj-stamp">${STAMP[plotOf(c)] || '⭐'}</span><div><h3>${c.num}. ${c.title}</h3><p>${c.concept} · ${c.reward} · for ${RESIDENTS[c.resident].name}${j ? ` · ${dateOf(j.day)}` : ''}</p></div></div>
+      <p class="pj-learn"><b>${c.learn.title}.</b> ${c.learn.body}</p>${code.trim() ? pre(code) : ''}</article>`;
+  }
+
+  const solved = ERRANDS.filter(e => stamps[e.id]);
+  if (solved.length) {
+    html += `<h2>Errands from the Notice Board</h2><p class="pj-intro">Small problems on old ideas, solved from memory, days or weeks after first learning them.</p>`;
+    for (const e of solved) {
+      const code = state.errandCode?.[e.id] || state.code['errand:' + e.id] || '', s = stamps[e.id];
+      html += `<article class="pj-page pj-small"><div class="pj-h"><span class="pj-stamp">${topicStamp(e.topic)}</span><div><h3>${e.title}</h3><p>${REVIEW_TOPICS.find(t => t.id === e.topic)?.title ?? ''} · for ${RESIDENTS[e.resident].name} · ${dateOf(s.first)}${s.times > 1 ? ` · solved ${s.times}×` : ''}</p></div></div>${code.trim() ? pre(code) : ''}</article>`;
+    }
+  }
+
+  if (friends.length) {
+    html += `<h2>Letters from friends</h2>`;
+    for (const f of friends) {
+      const n = h[f.resident], r = RESIDENTS[f.resident];
+      html += `<article class="pj-page pj-letter"><p>Dear neighbour,</p><p>${f.letter}</p><p class="pj-sig">— ${r.name}, the ${r.role}</p>
+        ${n >= HEARTS.gift ? `<p class="pj-gift">${f.gift.icon} <b>${f.gift.name}.</b> ${f.gift.note}</p>` : ''}${n >= HEARTS.change ? `<p class="pj-gift">🏡 ${f.change}</p>` : ''}</article>`;
+    }
+  }
+
+  const land = EXPANSIONS.filter(x => on[x.id] != null);
+  if (land.length) html += `<h2>New land</h2><ul class="pj-land">${land.map(x => `<li>${LAND[x.id] || '🌿'} <b>${x.title}</b>, ${dateOf(on[x.id])}. ${x.note}</li>`).join('')}</ul>`;
+
+  let area = document.getElementById('printArea');
+  if (!area) { area = document.createElement('div'); area.id = 'printArea'; document.body.appendChild(area); }
+  area.innerHTML = html;
+  window.print();
 }

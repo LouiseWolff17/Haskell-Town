@@ -14,4 +14,5 @@ if (!state.welcomed) { $('#welcome').hidden = false; document.body.classList.add
 renderSidebar();
 $('#hoverLabel').innerHTML = plotLabel(null);
 
-if (import.meta.env.DEV) import('./game/devtools.js').then(m => m.initDevTools());
+// The DEV panel: always under `npm run dev`, and on the live site with ?dev in the address.
+if (import.meta.env.DEV || new URLSearchParams(location.search).has('dev')) import('./game/devtools.js').then(m => m.initDevTools());
