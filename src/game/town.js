@@ -10,10 +10,10 @@ const C = { grass: '#93c47d', grass2: '#86b870', grass3: '#a4d18c', road: '#e2c5
 
 // Plots: where each building stands. stand = where its resident waits with a request; road = which street its path joins.
 const PLOTS = {
-  house:   { x: 30, y: 38, w: 48, h: 50, door: 54, road: 'main', stand: [50, 100], art: (p, t) => house(p.x, p.y - 2, t) },
+  house:   { x: 30, y: 36, w: 48, h: 50, door: 54, road: 'main', stand: [50, 100], art: (p, t) => house(p.x, p.y, t) },
   mailbox: { x: 84, y: 66, w: 12, h: 22, small: true, stand: [82, 88], art: p => mailbox(p.x, p.y) },
-  bakery:  { x: 116, y: 22, w: 64, h: 66, door: 160, road: 'main', stand: [144, 100], art: (p, t) => bakery(p.x, p.y, t) },
-  store:   { x: 206, y: 22, w: 64, h: 66, door: 248, road: 'main', stand: [234, 100], art: p => store(p.x, p.y) },
+  bakery:  { x: 114, y: 22, w: 64, h: 66, door: 160, road: 'main', stand: [144, 100], art: (p, t) => bakery(p.x, p.y, t) },
+  store:   { x: 210, y: 22, w: 64, h: 66, door: 248, road: 'main', stand: [234, 100], art: p => store(p.x, p.y) },
   garden:  { x: 36, y: 136, w: 84, h: 44, door: 78, road: 'up', stand: [74, 122], art: (p, t) => garden(p.x, p.y - 2, t) },
   library: { x: 190, y: 136, w: 76, h: 46, door: 228, road: 'up', stand: [224, 122], art: (p, t) => library(p.x, p.y, t), deco: (p, t) => libraryDeco(p.x, p.y, t) },
   school:  { x: 22, y: 194, w: 72, h: 56, door: 58, road: 'lane', stand: [54, 252], art: (p, t) => school(p.x, p.y, t), deco: (p, t) => schoolDeco(p.x, p.y, t) },
@@ -23,7 +23,7 @@ const PLOTS = {
   park:    { x: 302, y: 18, w: 90, h: 72, door: 347, road: 'main', stand: [342, 100], art: (p, t) => park(p.x, p.y, t), deco: (p, t) => parkDeco(p.x, p.y, t) },
   harbour: { x: 288, y: 188, w: 64, h: 60, door: 318, road: 'lane', stand: [318, 252], art: (p, t) => harbour(p.x, p.y, t), deco: (p, t) => harbourDeco(p.x, p.y, t) },
   observatory: { x: 316, y: 268, w: 64, h: 52, door: 348, road: 'down', stand: [296, 252], art: (p, t) => observatory(p.x, p.y, t), deco: (p, t) => observatoryDeco(p.x, p.y, t) },
-  market:  { x: 280, y: 134, w: 68, h: 50, door: 314, road: 'up', stand: [300, 121], art: (p, t) => market(p.x, p.y, t), deco: (p, t) => marketDeco(p.x, p.y, t) },
+  market:  { x: 280, y: 134, w: 68, h: 50, door: 314, road: 'up', pathEnd: 42, stand: [300, 121], art: (p, t) => market(p.x, p.y, t), deco: (p, t) => marketDeco(p.x, p.y, t) },
 };
 const HOMES = { wren: [60, 93], hazel: [174, 93], moss: [26, 116], bram: [262, 93], iris: [270, 116], juniper: [100, 245], fern: [168, 266], sorrel: [112, 266], pip: [292, 300], rowan: [378, 93], brine: [372, 252], marigold: [340, 116], orla: [388, 296] };
 const TREES = [[4, 4], [8, 64], [96, 10], [98, 44], [186, 4], [188, 50], [282, 4], [284, 66], [6, 150], [126, 128], [124, 164], [170, 140], [104, 196], [122, 222], [0, 186], [110, 280], [132, 296], [290, 270], [2, 296]];
@@ -40,11 +40,16 @@ function paintBackground() {
   for (let i = 0; i < 700; i++) S(Math.floor(rnd() * W), Math.floor(rnd() * H), 1 + (rnd() < .3 ? 1 : 0), 1, rnd() < .5 ? C.grass2 : C.grass3);
   for (let i = 0; i < 90; i++) { const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H); S(x, y, 1, 2, C.grass2); S(x + 2, y + 1, 1, 2, C.grass2); }
   // the sea along the east coast
-  S(352, 122, 48, 128, '#e8d7a8'); S(358, 122, 42, 128, '#5aa0c0'); S(356, 126, 2, 120, '#7fb9d2');
-  for (let i = 0; i < 40; i++) { const x = 362 + Math.floor(rnd() * 36), y = 126 + Math.floor(rnd() * 118); S(x, y, 3, 1, '#86c1d8'); }
+  // sand beach on the north, west and south shores, with the water inset inside it (rounded corners)
+  S(352, 122, 48, 128, '#e8d7a8');
+  S(360, 128, 40, 116, '#5aa0c0'); S(358, 130, 2, 112, '#5aa0c0');
+  // surf line just inside the shoreline
+  S(360, 128, 40, 1, '#7fb9d2'); S(360, 243, 40, 1, '#7fb9d2'); S(358, 130, 1, 112, '#7fb9d2');
+  S(359, 129, 1, 1, '#7fb9d2'); S(359, 242, 1, 1, '#7fb9d2');
+  for (let i = 0; i < 40; i++) { const x = 362 + Math.floor(rnd() * 35), y = 131 + Math.floor(rnd() * 110); S(x, y, 3, 1, '#86c1d8'); }
   S(380, 160, 14, 8, '#8d8a84'); S(378, 164, 18, 6, '#77746e'); S(382, 159, 8, 2, '#a5a29c');
   const fl = ['#f7c6d0', '#fff2a8', '#ffffff', '#e8a0bf'];
-  for (let i = 0; i < 60; i++) { const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H); if ((y > 92 && y < 128) || (y > 248 && y < 268) || (y > 318 && y < 336)) continue; S(x, y, 1, 1, fl[i % 4]); }
+  for (let i = 0; i < 60; i++) { const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H); if ((x >= 352 && y >= 122 && y < 250) || (y > 92 && y < 128) || (y > 248 && y < 268) || (y > 318 && y < 336)) continue; S(x, y, 1, 1, fl[i % 4]); }
 }
 function roadLayer() {
   R(0, 98, W, 22, C.road); R(0, 98, W, 1, C.road2); R(0, 119, W, 1, C.road2);
@@ -187,7 +192,10 @@ function stationDeco(x, y, t) {
   R(x + 86, y + 30, 1, 12, '#3b2a2a'); R(x + 84, y + 26, 5, 5, '#3b2a2a');
   const period = 16000, ph = (t % period) / period;
   R(x + 85, y + 27, 3, 3, ph > 0.15 && ph < 0.75 ? '#81d18a' : '#e85a4f');
-  // the train
+}
+// the train: drawn separately, after the trees, so it rides on top of them
+function train(t) {
+  const period = 16000, ph = (t % period) / period;
   const len = 76, px = Math.round(ph * (W + len + 40)) - len - 20, ty = 313;
   const car = (cx, col) => { R(cx, ty + 2, 22, 9, col); R(cx, ty + 2, 22, 1, 'rgba(255,255,255,.35)'); for (let w = 0; w < 3; w++) R(cx + 3 + w * 6, ty + 4, 4, 3, '#fff2c8'); R(cx + 3, ty + 11, 3, 3, '#2b2b2b'); R(cx + 16, ty + 11, 3, 3, '#2b2b2b'); };
   car(px, '#4a7fa7'); car(px + 24, '#e0a458');
@@ -325,7 +333,7 @@ function draw(t) {
   ctx.drawImage(bg, 0, 0); roadLayer();
   for (const [pid, p] of Object.entries(PLOTS)) {
     const m = mainOf(pid); if (!m || !state.done[m.id] || p.small) continue;
-    if (p.road === 'up') path(p.door, 120, p.y + 6); else if (p.road === 'down') path(p.door, 264, p.y + 6); else if (p.road === 'lane') path(p.door, p.y + p.h, 250); else path(p.door, p.y + p.h, 98);
+    if (p.road === 'up') path(p.door, 120, p.y + (p.pathEnd ?? 6)); else if (p.road === 'down') path(p.door, 264, p.y + 6); else if (p.road === 'lane') path(p.door, p.y + p.h, 250); else path(p.door, p.y + p.h, 98);
   }
   TREES.forEach(([x, y]) => { if (y < 120) tree(x, y); });
   for (const [pid, p] of Object.entries(PLOTS)) {
@@ -349,6 +357,8 @@ function draw(t) {
     if (CHALLENGES.some(c => c.resident === rid && state.done[c.id])) person(pos[0], pos[1], RESIDENTS[rid], t + pos[0] * 50, false);
   }
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
+  { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
+    if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t); }
   if (hover && PLOTS[hover]) { const p = PLOTS[hover]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
   requestAnimationFrame(draw);
 }
