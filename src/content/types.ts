@@ -116,3 +116,19 @@ export interface Errand extends Checkable {
   /** Shown after the errand is solved, or when the player asks for the answer. */
   explanation: string;
 }
+
+// ---------- Rewards: the town keeps growing after the village is built ----------
+
+/** A new piece of land south of the railway, opened by solving errands from the Notice Board. */
+export interface Expansion {
+  id: string;
+  title: string;
+  /** Total errands solved (any outcome) before it opens. Errands are capped per day, so this paces growth. */
+  needs: number;
+  /** Where it goes: slot 0 and 1 share the first strip of land (west, east), 2 and 3 the second, and so on. */
+  slot: number;
+  /** The resident who welcomes you there. */
+  resident: string;
+  /** Shown in the toast and the Journal when it opens. */
+  note: string;
+}

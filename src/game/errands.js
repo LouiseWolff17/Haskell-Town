@@ -1,6 +1,7 @@
 // The Notice Board: once the village is built, residents pin up errands — small new problems on
 // old topics, solved from memory and spaced out over days. The scheduling rules are in schedule.ts.
-import { CHALLENGES, ERRANDS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, ERRANDS, EXPANSIONS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
+import { nextExpansion } from './rewards.ts';
 import { $, byId, esc, save, state } from './state.js';
 import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
@@ -14,6 +15,8 @@ export const ERRANDS_BY_TOPIC = Object.fromEntries(REVIEW_TOPICS.map(t => [t.id,
 /** Today's day number. The dev tools can move the clock forward with state.devDays. */
 export const today = () => dayNumber(new Date()) + (state.devDays || 0);
 export const villageBuilt = () => CHALLENGES.every(c => state.done[c.id]);
+/** Errands solved so far, in any way. New land opens as this grows (src/content/expansions.ts). */
+export const solvedErrands = () => state.reviews?.log.length || 0;
 
 /** The review state, started when the village is finished, with today's errands planned. Null before that. */
 export function reviews() {
@@ -57,6 +60,11 @@ export function renderBoard() {
     ? `Today's errands. Solve each one <b>from memory</b> first: the effort of remembering is what makes it stick.`
     : items.length ? `All of today's errands are done.` : `Nothing is pinned up today.`}</p>`;
   html += `<div class="errand-list"></div>`;
+  const solved = rs.log.length, next = nextExpansion(EXPANSIONS, solved);
+  if (next) {
+    const prev = Math.max(0, ...EXPANSIONS.filter(x => x.needs <= solved).map(x => x.needs)), pct = Math.round((solved - prev) / (next.needs - prev) * 100);
+    html += `<div class="land-prog"><div><b>New land</b> · ${next.needs - solved} more errand${next.needs - solved === 1 ? '' : 's'} until the mist lifts south of the railway</div><span class="cal-bar"><i style="width:${pct}%"></i></span></div>`;
+  } else html += `<div class="land-prog"><div><b>All the land is open.</b> Errands still keep your memory fresh.</div></div>`;
   if (!open.length) {
     html += `<div class="board-rest"><b>Next errands: ${whenText(nextDueDay(rs, today()))}.</b> Coming back after a gap, when things are a little forgotten, does more for your memory than doing extra today.</div>`;
   }

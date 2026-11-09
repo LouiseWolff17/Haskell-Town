@@ -5,6 +5,7 @@ import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
 import { openChallenge, setMode } from './notebook.js';
 import { renderBoard } from './errands.js';
+import { renderJournal } from './journal.js';
 
 export function notSupportedHTML() {
   return `<summary>What Haskell Town can't do yet</summary><p class="ns-intro">Your code runs in a small Haskell made for this game, not the full GHC compiler. These parts of real Haskell aren't available yet:</p><ul class="ns-list">${NOT_SUPPORTED.map(([t, d]) => `<li><b>${t}.</b> ${d}</li>`).join('')}</ul>`;
@@ -38,6 +39,7 @@ export function renderSidebar() {
   const ns = document.createElement('details'); ns.className = 'notsup';
   ns.innerHTML = notSupportedHTML(); lib.appendChild(ns);
   renderBoard();
+  renderJournal();
   document.querySelectorAll('.mode-seg').forEach(seg => renderSeg(seg));
 }
 export function renderSeg(seg) {
@@ -49,7 +51,7 @@ export function renderSeg(seg) {
 export function initSidebar() {
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
     document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
-    for (const id of ['requests', 'errands', 'library']) $('#' + id).hidden = b.dataset.tab !== id;
+    for (const id of ['requests', 'errands', 'library', 'journal']) $('#' + id).hidden = b.dataset.tab !== id;
     if (b.dataset.tab === 'errands') renderBoard(); // a new day may have started since the page was opened
   });
 }

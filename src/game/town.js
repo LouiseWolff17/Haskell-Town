@@ -1,11 +1,13 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
-import { CHALLENGES, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, EXPANSIONS, RESIDENTS } from '../content/index.ts';
 import { $, byId, state, status } from './state.js';
 import { openChallenge } from './notebook.js';
-import { villageBuilt, waitingResidents } from './errands.js';
+import { solvedErrands, villageBuilt, waitingResidents } from './errands.js';
+import { nextExpansion, openExpansions, stripsShown } from './rewards.ts';
 
 const cv = $('#town'), ctx = cv.getContext('2d');
-const W = 400, H = 340;
+// The village is 400×340. Once errands start opening new land, strips of STRIP px are added below the railway.
+const W = 400, H = 340, STRIP = 72;
 const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
 const C = { grass: '#93c47d', grass2: '#86b870', grass3: '#a4d18c', road: '#e2c596', road2: '#cfae7b', dirt: '#c69c6d', dirt2: '#a97f55', wood: '#8a5a3b', wood2: '#6b4429', ink: '#3b2a2a', wall: '#f6e7cf', wall2: '#e3cfae', glass: '#a8dbe8', glass2: '#7cc0d4', door: '#7a4a2c', skin: '#f2c9a0', white: '#fffaf0' };
 
@@ -345,7 +347,9 @@ function withReveal(key, p, t, drawFn, under) {
 }
 function draw(t) {
   const plots = visiblePlots();
+  syncSize();
   ctx.drawImage(bg, 0, 0); roadLayer(plots);
+  drawStrips(t);
   for (const [pid, p] of plots) {
     const m = mainOf(pid); if (!m || !state.done[m.id] || p.small) continue;
     if (p.road === 'up') path(p.door, 120, p.y + (p.pathEnd ?? 6)); else if (p.road === 'down') path(p.door, 264, p.y + 6); else if (p.road === 'lane') path(p.door, p.y + p.h, 250); else path(p.door, p.y + p.h, 98);
@@ -378,19 +382,27 @@ function draw(t) {
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
     if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t); }
+  if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover.split(':')[1]).slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
   if (hover && PLOTS[hover]) { const p = PLOTS[hover]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
   requestAnimationFrame(draw);
 }
 
 function plotAt(ev) {
-  const r = cv.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * H / r.height;
+  const r = cv.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * cv.height / r.height;
+  if (y >= H) { const x0 = EXPANSIONS.find(e => { const r = slotRect(e.slot); return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }); return x0 && Math.floor(x0.slot / 2) < stripsShown(EXPANSIONS, solvedErrands()) ? (isOpenExp(x0) ? 'exp:' : 'fog:') + x0.id : null; }
   for (const [id, p] of visiblePlots()) { const [sx, sy] = p.stand; if ((x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 4) || (x >= sx - 4 && x <= sx + 12 && y >= sy - 14 && y <= sy + 14)) return id; }
   return null;
 }
 // which challenge a click on a plot should open: the open one, else the last one solved
-function challengeForPlot(pid) { const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
+function challengeForPlot(pid) { if (pid.includes(':')) return null; const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
 export function plotLabel(id) {
   if (!id) return villageBuilt() ? 'The village is built! Residents with a <b>?</b> have pinned an errand to the Notice Board (the Errands tab).' : 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
+  if (id.startsWith('exp:') || id.startsWith('fog:')) {
+    const x = EXPANSIONS.find(e => e.id === id.slice(4)), n = solvedErrands();
+    if (id.startsWith('exp:')) return `<b>${x.title}</b> ✓ — opened by solving errands. ${RESIDENTS[x.resident].name} looks after it.`;
+    const next = nextExpansion(EXPANSIONS, n), left = x.needs - n;
+    return `Misty land. ${next && next.id === x.id ? `<b>${left} more errand${left === 1 ? '' : 's'}</b> from the Notice Board and the mist lifts.` : 'Keep solving errands and it will open one day.'}`;
+  }
   const cs = plotChallenges(id), open = cs.find(c => status(c) === 'open');
   if (open) return `<b>${RESIDENTS[open.resident].name}</b> has a request: “${open.title}” · ${open.concept}. Click to help!`;
   const m = mainOf(id);
@@ -412,3 +424,118 @@ export function initTown() {
   cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
   cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return; const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
 }
+
+
+// ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------
+const isOpenExp = x => solvedErrands() >= x.needs;
+/** The rectangle of an expansion slot: even slots are west of the path, odd slots east of it. */
+function slotRect(slot) {
+  const y = H + Math.floor(slot / 2) * STRIP;
+  return slot % 2 ? { x: 157, y, w: W - 157, h: STRIP } : { x: 0, y, w: 145, h: STRIP };
+}
+/** Grow the canvas when a new strip of land is shown. The CSS keeps the same width and scales the height. */
+function syncSize() {
+  const h = H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
+  if (cv.height !== h) { cv.height = h; cv.style.aspectRatio = `${W} / ${h}`; }
+}
+// a stable pseudo-random number for (i, k), so the art doesn't flicker frame to frame
+const hsh = (i, k = 0) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
+const stripBg = [];
+function stripBackground(i) {
+  if (stripBg[i]) return stripBg[i];
+  const c = document.createElement('canvas'); c.width = W; c.height = STRIP; const b = c.getContext('2d');
+  const S = (x, y, w, h, col) => { b.fillStyle = col; b.fillRect(x, y, w, h); };
+  S(0, 0, W, STRIP, C.grass);
+  for (let n = 0; n < 160; n++) S(Math.floor(hsh(n, i + 1) * W), Math.floor(hsh(n, i + 7) * STRIP), 1 + (hsh(n, i + 3) < .3 ? 1 : 0), 1, hsh(n, i + 5) < .5 ? C.grass2 : C.grass3);
+  return (stripBg[i] = c);
+}
+function mist(r, t) {
+  ctx.globalAlpha = 0.82; R(r.x, r.y, r.w, r.h, '#dfe6da'); ctx.globalAlpha = 1;
+  for (let i = 0; i < 9; i++) {
+    const px = r.x + ((hsh(i, 2) * r.w + t / (60 + i * 9)) % (r.w + 30)) - 20, py = r.y + 6 + hsh(i, 4) * (r.h - 16);
+    ctx.globalAlpha = 0.55; R(px, py, 22, 5, '#f4f7f1'); R(px + 4, py - 2, 12, 2, '#f4f7f1'); ctx.globalAlpha = 1;
+  }
+  // a little signpost with a ?
+  const sx = r.x + r.w / 2 - 6, sy = r.y + r.h / 2 - 8;
+  R(sx + 5, sy + 8, 2, 10, C.wood2); R(sx, sy, 12, 9, C.wood); R(sx + 4, sy + 2, 3, 1, C.white); R(sx + 6, sy + 3, 1, 1, C.white); R(sx + 5, sy + 4, 1, 1, C.white); R(sx + 5, sy + 6, 1, 1, C.white);
+}
+function drawStrips(t) {
+  const n = stripsShown(EXPANSIONS, solvedErrands()); if (!n) return;
+  for (let i = 0; i < n; i++) ctx.drawImage(stripBackground(i), 0, H + i * STRIP);
+  // a path from the south lane over the railway (a level crossing) down through the new land
+  const end = H + n * STRIP;
+  R(146, 264, 10, end - 264, C.road); R(145, 264, 1, end - 264, C.road2); R(156, 264, 1, end - 264, C.road2);
+  for (let y = 323; y < 334; y += 3) R(145, y, 12, 2, '#c49a6c');
+  for (const x of EXPANSIONS) {
+    if (Math.floor(x.slot / 2) >= n) continue;
+    const r = slotRect(x.slot);
+    if (isOpenExp(x)) withReveal('exp-' + x.id, r, t, () => EXPANSION_ART[x.id]?.(r.x, r.y, r.w, r.h, t), () => mist(r, t));
+    else mist(r, t);
+  }
+}
+function fence(x, y, w) { R(x, y + 2, w, 1, C.wood); R(x, y + 5, w, 1, C.wood); for (let i = 0; i <= w; i += 8) R(x + i, y, 2, 8, C.wood2); }
+function sheep(x, y, t, i) {
+  const dx = Math.round(Math.sin(t / 4000 + i * 2) * 10), f = Math.floor(t / 600 + i) % 2;
+  x += dx;
+  R(x + 1, y + 7, 2, 3, '#3b2a2a'); R(x + 7, y + 7, 2, 3, '#3b2a2a');
+  R(x, y + 1, 10, 7, '#f6f2ea'); R(x + 1, y, 8, 1, '#f6f2ea'); R(x, y + 7, 10, 1, '#ddd6c8');
+  const hx = Math.sin(t / 4000 + i * 2 + 0.1) * 10 > dx ? x + 9 : x - 3; R(hx, y + 2 + f, 4, 4, '#3b2a2a'); R(hx + 1, y + 3 + f, 1, 1, C.white);
+}
+function beehive(x, y, t, i) {
+  R(x, y + 14, 12, 2, C.wood2); R(x + 1, y + 2, 10, 12, '#e0b040'); for (let k = 0; k < 3; k++) R(x + 1, y + 5 + k * 3, 10, 1, '#c4952c');
+  R(x, y, 12, 3, '#a86a32'); R(x + 5, y + 11, 2, 2, '#3b2a2a');
+  for (let b = 0; b < 3; b++) { const a = t / (500 + b * 90) + b * 2 + i; R(x + 6 + Math.cos(a) * (8 + b * 2), y + 4 + Math.sin(a * 1.3) * 5, 1, 1, '#3b2a2a'); R(x + 6 + Math.cos(a) * (8 + b * 2), y + 3 + Math.sin(a * 1.3) * 5, 1, 1, '#fff2a8'); }
+}
+const EXPANSION_ART = {
+  meadow(x, y, w, h, t) {
+    const fl = ['#f7c6d0', '#fff2a8', '#ffffff', '#e8a0bf', '#b48ad1', '#e07a5f'];
+    for (let i = 0; i < 70; i++) { const fx = x + 4 + hsh(i, 11) * (w - 8), fy = y + 4 + hsh(i, 13) * (h - 8), sw = Math.round(Math.sin(t / 800 + i) * 0.6); R(fx, fy + 1, 1, 2, '#4f8a4a'); R(fx + sw, fy, 1, 1, fl[i % fl.length]); }
+    fence(x + 4, y + 4, 60);
+    beehive(x + 12, y + 20, t, 0); beehive(x + 30, y + 22, t, 1);
+    sheep(x + 80, y + 18, t, 0); sheep(x + 110, y + 34, t, 1); sheep(x + 70, y + 46, t, 2);
+  },
+  orchard(x, y, w, h, t) {
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) {
+      const tx = x + 10 + c * 36 + (r % 2) * 14, ty = y + 4 + r * 32;
+      R(tx + 7, ty + 15, 4, 9, C.wood2); R(tx + 1, ty + 3, 16, 12, '#5d9a52'); R(tx + 3, ty, 12, 4, '#5d9a52'); R(tx + 4, ty + 3, 5, 3, '#77b56a');
+      for (let a = 0; a < 4; a++) R(tx + 3 + hsh(a, r * 6 + c) * 11, ty + 4 + hsh(a + 9, r * 6 + c) * 9, 2, 2, '#d1495b');
+    }
+    // a ladder, a basket of apples, and now and then an apple falls
+    R(x + 46, y + 10, 1, 18, C.wood); R(x + 50, y + 10, 1, 18, C.wood); for (let k = 0; k < 5; k++) R(x + 46, y + 12 + k * 4, 5, 1, C.wood);
+    R(x + 196, y + 56, 12, 7, '#a86a32'); R(x + 196, y + 56, 12, 1, '#8a5a3b'); [[198, 54], [201, 53], [204, 54]].forEach(([a, b]) => R(x + a, y + b, 3, 3, '#d1495b'));
+    const k = (t % 7000) / 7000; if (k < 0.12) R(x + 120, y + 14 + k / 0.12 * 12, 2, 2, '#d1495b'); else R(x + 120, y + 26, 2, 2, '#d1495b');
+  },
+  pond(x, y, w, h, t) {
+    const cx = x + 72, cy = y + 36, rx = 52, ry = 22;
+    for (let i = -ry; i <= ry; i++) { const half = Math.round(rx * Math.sqrt(1 - (i / ry) ** 2)); R(cx - half - 2, cy + i, half * 2 + 4, 1, '#e8d7a8'); }
+    for (let i = -ry + 2; i <= ry - 2; i++) { const half = Math.round((rx - 3) * Math.sqrt(1 - (i / (ry - 2)) ** 2)); R(cx - half, cy + i, half * 2, 1, '#5aa0c0'); }
+    for (let i = 0; i < 8; i++) { const wx = cx - 36 + hsh(i, 21) * 72 + Math.sin(t / 900 + i) * 2, wy = cy - 12 + hsh(i, 23) * 24; R(wx, wy, 4, 1, '#86c1d8'); }
+    [[cx - 30, cy + 6], [cx + 24, cy - 8], [cx + 8, cy + 12]].forEach(([lx, ly]) => { R(lx, ly, 5, 3, '#6aa85e'); R(lx + 2, ly - 1, 1, 1, '#f7c6d0'); });
+    // reeds on the west bank, a jetty on the east
+    for (let i = 0; i < 7; i++) { const sw = Math.round(Math.sin(t / 700 + i) * 0.7); R(x + 14 + i * 3 + sw, y + 22 + (i % 3) * 3, 1, 9, '#4f8a4a'); R(x + 14 + i * 3 + sw, y + 21 + (i % 3) * 3, 1, 3, '#8a5a3b'); }
+    R(cx + 30, cy - 2, 28, 5, '#a0764e'); R(cx + 30, cy - 2, 28, 1, '#c49a6c'); for (let i = 0; i < 28; i += 9) R(cx + 32 + i, cy + 3, 2, 4, '#6b4429');
+    // a duck family paddling round
+    for (let d = 0; d < 3; d++) {
+      const a = t / 5200 - d * 0.22, dx = cx + Math.cos(a) * 30, dy = cy + Math.sin(a) * 11, s = d ? 0 : 1;
+      R(dx, dy, 5 + s, 3 + s, d ? '#f2cc8f' : '#fffaf0'); R(dx + (Math.sin(a) > 0 ? -2 : 4 + s), dy - 2, 3, 3, d ? '#f2cc8f' : '#3f7a3a'); R(dx + (Math.sin(a) > 0 ? -3 : 7 + s), dy - 1, 1, 1, '#e0a458');
+    }
+  },
+  windmill(x, y, w, h, t) {
+    // a little hill, the mill and its turning sails
+    for (let i = 0; i < 24; i++) { const half = Math.round(70 * Math.sqrt(1 - ((24 - i) / 24) ** 2)); R(x + 120 - half, y + 48 + i, half * 2, 1, i < 2 ? '#bfe0a6' : '#a6d28e'); }
+    const mx = x + 110, my = y + 18;
+    for (let i = 0; i < 34; i++) { const ww = 14 + Math.round(i / 3); R(mx + 10 - ww / 2, my + i, ww, 1, i % 6 === 0 ? '#e3cfae' : C.wall); }
+    roofSteps(mx - 2, my - 8, 24, 5, '#9b3d2a', '#7d2c22');
+    R(mx + 6, my + 24, 8, 10, C.door); R(mx + 7, my + 10, 5, 5, C.glass); R(mx + 7, my + 10, 5, 1, C.ink);
+    const hx = mx + 10, hy = my + 2, a0 = t / 1400;
+    for (let s = 0; s < 4; s++) {
+      const a = a0 + s * Math.PI / 2;
+      for (let k = 3; k < 28; k++) { R(hx + Math.cos(a) * k, hy + Math.sin(a) * k, 1, 1, C.wood2); if (k > 8) R(hx + Math.cos(a) * k + Math.cos(a + 1.57) * 3, hy + Math.sin(a) * k + Math.sin(a + 1.57) * 3, 2, 2, '#fffaf0'); }
+    }
+    R(hx - 1, hy - 1, 3, 3, C.ink);
+    // flour sacks, and a cart waiting to take them to the bakery
+    [[mx - 18, my + 30], [mx - 12, my + 31]].forEach(([sx, sy]) => { R(sx, sy, 6, 7, '#efe6d2'); R(sx + 1, sy - 1, 4, 1, '#d8ccb4'); });
+    R(x + 30, y + 52, 26, 8, C.wood); R(x + 30, y + 52, 26, 1, '#a0764e'); R(x + 33, y + 60, 5, 5, '#3b2a2a'); R(x + 48, y + 60, 5, 5, '#3b2a2a'); R(x + 34, y + 49, 6, 4, '#efe6d2'); R(x + 42, y + 49, 6, 4, '#efe6d2');
+    for (let i = 0; i < 3; i++) { const fx = x + 180 + i * 14, fy = y + 20 + i * 9; R(fx, fy, 1, 2, '#4f8a4a'); R(fx, fy - 1, 1, 1, ['#fff2a8', '#f7c6d0', '#ffffff'][i]); }
+  },
+};
