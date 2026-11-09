@@ -1,12 +1,12 @@
 // The Notice Board: once the village is built, residents pin up errands — small new problems on
 // old topics, solved from memory and spaced out over days. The scheduling rules are in schedule.ts.
-import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS, MAX_HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS, LEGACY_TOPICS, MAX_HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
 import { heartsByResident, nextExpansion } from './rewards.ts';
 import { $, byId, esc, save, state } from './state.js';
 import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
 import { openErrand } from './notebook.js';
-import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, startReviews } from './schedule.ts';
+import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, startReviews, syncTopics } from './schedule.ts';
 
 export const errandById = id => ERRANDS.find(e => e.id === id);
 export const topicById = id => REVIEW_TOPICS.find(t => t.id === id);
@@ -28,6 +28,7 @@ export function reviews() {
   if (!villageBuilt() && !state.reviews) return null;
   let changed = false;
   if (!state.reviews) { state.reviews = startReviews(REVIEW_TOPICS.map(t => t.id), today()); changed = true; }
+  if (syncTopics(state.reviews, REVIEW_TOPICS.map(t => t.id), today(), LEGACY_TOPICS, id => errandById(id)?.topic)) changed = true;
   if (ensureDay(state.reviews, ERRANDS_BY_TOPIC, today())) changed = true;
   if (changed) save();
   return state.reviews;

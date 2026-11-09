@@ -167,3 +167,26 @@ export function calibration(log: LogEntry[]): Record<Confidence, { total: number
   }
   return out;
 }
+
+/**
+ * Bring an older save up to date with the current topics. Topics that were split (`legacy`, old id →
+ * new ids) pass their progress on to each new topic; brand-new topics start due today; topics that no
+ * longer exist are dropped. Today's items on an old topic move to their errand's new topic.
+ * Returns true if anything changed.
+ */
+export function syncTopics(rs: ReviewState, topicIds: string[], today: number, legacy: Record<string, string[]>, topicOfErrand: (errandId: string) => string | undefined): boolean {
+  let changed = false;
+  for (const id of topicIds) {
+    if (rs.topics[id]) continue;
+    const from = Object.entries(legacy).find(([old, news]) => news.includes(id) && rs.topics[old]);
+    rs.topics[id] = from ? { ...rs.topics[from[0]], reviews: 0 } : { box: 0, due: today, reviews: 0, lapses: 0 };
+    changed = true;
+  }
+  for (const item of rs.day?.items || []) {
+    if (topicIds.includes(item.topic)) continue;
+    const t = topicOfErrand(item.errand);
+    if (t) { item.topic = t; changed = true; }
+  }
+  for (const id of Object.keys(rs.topics)) if (!topicIds.includes(id)) { delete rs.topics[id]; changed = true; }
+  return changed;
+}

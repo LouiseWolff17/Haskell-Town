@@ -9,7 +9,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **23 challenges, 13 residents, 14 buildings.** Every building teaches one idea, and its upgrade practises it again.
 - **Real Haskell, checked like GHC.** Your code is type-checked before anything runs, and the error messages are written for beginners.
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
-- **The Notice Board** brings each topic back over days and weeks: 22 errands on 11 topics, solved from memory, with feedback after you try.
+- **The Notice Board** brings each topic back over days and weeks: 26 errands on 13 topics, one topic per resident, solved from memory, with feedback after you try.
 - **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
 - **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift for the Journal, then a lasting change to their building on the map.
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
