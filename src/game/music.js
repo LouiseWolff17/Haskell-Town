@@ -38,10 +38,10 @@ function newRound() {
 }
 function schedule() {
   while (nextTime < ctx.currentTime + 0.25) {
-    if (step % round.length === 0) newRound();
+    if (!round.length || step % round.length === 0) newRound(); // the first round, then a new one each time round
     const i = step % round.length, s = round[i];
-    if (s >= 0) { note(SCALE[s] + 12, nextTime, 1.4, 0.11, 'triangle'); note(SCALE[s] + 24, nextTime, 0.5, 0.02, 'sine'); }
-    if (i % 8 === 0) note(BASS[(i / 8) % 4], nextTime, STEP * 7, 0.06, 'sine');
+    if (s >= 0) { note(SCALE[s] + 12, nextTime, 1.4, 0.18, 'triangle'); note(SCALE[s] + 24, nextTime, 0.5, 0.03, 'sine'); }
+    if (i % 8 === 0) note(BASS[(i / 8) % 4] + 12, nextTime, STEP * 7, 0.08, 'triangle');
     nextTime += STEP; step++;
   }
 }
@@ -54,7 +54,7 @@ export function startMusic() {
   if (!master) { master = ctx.createGain(); master.gain.value = 0.7; master.connect(ctx.destination); }
   ctx.resume?.();
   master.gain.setTargetAtTime(0.7, ctx.currentTime, 0.3);
-  nextTime = ctx.currentTime + 0.1; step = 0;
+  nextTime = ctx.currentTime + 0.1; step = 0; round = [];
   timer = setInterval(schedule, 100); schedule();
 }
 export function stopMusic() {

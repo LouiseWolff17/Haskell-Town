@@ -429,9 +429,10 @@ export function portrait(rid, size = 40) {
 export function initTown() {
   paintBackground(); requestAnimationFrame(draw);
   $('#nightBtn').onclick = () => { state.clockOff = !state.clockOff; save(); renderNightBtn(); };
-  $('#musicBtn').onclick = () => { state.music = !state.music; save(); if (state.music) startMusic(); else stopMusic(); renderNightBtn(); };
-  // browsers only play sound after a click, so music that was left on starts at the first click
-  if (state.music) document.addEventListener('pointerdown', () => { if (state.music && state.done.market) { startMusic(); renderNightBtn(); } }, { once: true });
+  // the button follows what's actually playing, so it always does what it says
+  $('#musicBtn').onclick = () => { if (musicPlaying()) stopMusic(); else startMusic(); state.music = musicPlaying(); save(); renderNightBtn(); };
+  // browsers only play sound after a click, so music that was left on starts at the first click (unless that click is the music button)
+  if (state.music) document.addEventListener('pointerdown', ev => { if (state.music && state.done.market && !ev.target.closest?.('#musicBtn')) { startMusic(); renderNightBtn(); } }, { once: true });
   renderNightBtn();
   cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
