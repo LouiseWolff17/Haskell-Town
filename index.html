@@ -16,7 +16,11 @@
 </header>
 
 <main class="layout">
-  <section>
+  <aside class="panel friends-panel">
+    <h3>Friends <span class="tab-badge" id="friendsBadge" hidden></span></h3>
+    <div id="friends"></div>
+  </aside>
+  <section class="town-col">
     <div class="town-frame"><div class="map-btns"><button class="night-btn" id="musicBtn" hidden></button><button class="night-btn" id="nightBtn" hidden></button></div><canvas id="town" width="400" height="340" aria-label="Pixel-art map of Haskell Town"></canvas></div>
     <div class="town-caption" id="hoverLabel"></div>
   </section>

@@ -11,7 +11,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
 - **The Notice Board** brings each topic back over days and weeks: 26 errands on 13 topics, one topic per resident, solved from memory, with feedback after you try.
 - **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
-- **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift for the Journal, then a lasting change to their building on the map.
+- **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift, then a lasting change to their building on the map. Friends have their own panel to the left of the map.
 - **Life in town.** The first errand on each topic brings something to the map: a sleepy cat, the bread bike, birds, a kite, gulls, shooting stars… Once the Observatory is built, the town gets dark in the evening, following your clock (there's a toggle on the map).
 - **Market music and a printable Journal.** Once the Market is built, a 🎵 button plays a soft music-box tune (made on the fly, no sound files) while a fiddler plays by the stalls. The Journal can be printed or saved as a PDF: a little "what I learned" booklet with every building's code, your errands, letters and land.
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
@@ -64,6 +64,7 @@ src/
     schedule.ts         when errands come back (pure functions, tested)
     rewards.ts          map growth, Journal stamps, friendship hearts (pure functions, tested)
     journal.js          the Journal tab and the printable booklet
+    friends.js          the Friends panel left of the map (hearts, letters, gifts)
     music.js            market music (Web Audio, no sound files)
     notebook.js         challenge window and Workshop
     highlight.js        syntax highlighting

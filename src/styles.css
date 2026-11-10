@@ -21,7 +21,15 @@ kbd{font-family:var(--mono); font-size:.78em; background:var(--paper); border:1p
 .bar{width:150px; height:12px; background:var(--paper); border:2px solid var(--ink); border-radius:7px; overflow:hidden}
 .bar i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--sage),#9cc58a); transition:width .8s}
 
-.layout{display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:20px; max-width:1240px; margin:0 auto; padding:0 22px 28px}
+.layout{display:grid; grid-template-columns:250px minmax(0,1fr) 330px; grid-template-areas:"friends town side"; gap:20px; max-width:1500px; margin:0 auto; padding:0 22px 28px; align-items:start}
+.town-col{grid-area:town; min-width:0} .side{grid-area:side} .friends-panel{grid-area:friends}
+.friends-panel h3{margin:0; padding:10px 14px; border-bottom:2px solid var(--line); background:var(--paper2); font-family:var(--pixel); font-size:16px; font-weight:500}
+#friends{padding:10px; max-height:calc(100vh - 140px); overflow:auto}
+#friends .jpage summary, #friends .jlocked{padding:6px 8px; align-items:flex-start}
+@media (max-width:1180px){
+  .layout{grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:"town side" "friends side"}
+  #friends{max-height:none; display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:0 8px; align-items:start}
+}
 .town-frame{background:#6b4429; padding:10px; border-radius:14px; box-shadow:0 5px 0 #4b2f1c, 0 14px 30px rgba(80,50,20,.18)}
 .town-frame canvas{display:block; width:100%; height:auto; aspect-ratio:400/340; image-rendering:pixelated; image-rendering:crisp-edges; border-radius:6px}
 .town-caption{margin-top:12px; padding:10px 14px; background:var(--paper); border:2px solid var(--line); border-radius:10px; min-height:46px; font-size:14px}
@@ -233,7 +241,7 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 @keyframes pop{from{transform:scale(.97); opacity:0} to{transform:none; opacity:1}}
 
 @media (max-width:960px){
-  .layout{grid-template-columns:1fr}
+  .layout{grid-template-columns:1fr; grid-template-areas:"town" "friends" "side"}
   .nb-grid{grid-template-columns:1fr}
   .nb-head{flex-wrap:wrap} .nb-head .mode-seg{width:100%; order:3}
   .tabpanel{max-height:none}

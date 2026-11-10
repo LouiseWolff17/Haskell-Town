@@ -6,6 +6,7 @@ import { portrait, renderNightBtn } from './town.js';
 import { openChallenge, setMode } from './notebook.js';
 import { renderBoard } from './errands.js';
 import { renderJournal } from './journal.js';
+import { renderFriends } from './friends.js';
 
 export function notSupportedHTML() {
   return `<summary>What Haskell Town can't do yet</summary><p class="ns-intro">Your code runs in a small Haskell made for this game, not the full GHC compiler. These parts of real Haskell aren't available yet:</p><ul class="ns-list">${NOT_SUPPORTED.map(([t, d]) => `<li><b>${t}.</b> ${d}</li>`).join('')}</ul>`;
@@ -40,6 +41,7 @@ export function renderSidebar() {
   ns.innerHTML = notSupportedHTML(); lib.appendChild(ns);
   renderBoard();
   renderJournal();
+  renderFriends();
   renderNightBtn();
   document.querySelectorAll('.mode-seg').forEach(seg => renderSeg(seg));
 }

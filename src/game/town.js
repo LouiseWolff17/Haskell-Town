@@ -3,7 +3,7 @@ import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
 import { $, byId, save, state, status } from './state.js';
 import { openChallenge } from './notebook.js';
 import { hearts, practised, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
-import { openLetters } from './journal.js';
+import { openLetters } from './friends.js';
 import { musicPlaying, startMusic, stopMusic } from './music.js';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
 
