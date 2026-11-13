@@ -56,7 +56,9 @@ src/
     worker-runner.ts    WorkerRunner: the same, in a Web Worker, with Stop and a 10 s timeout
     worker.ts           the code that runs inside the worker
   haskell/
-    interpreter.js      Mini-Haskell: lexer, parser, type checker, lazy evaluator
+    interpreter.js      Mini-Haskell's public API (HS): compile, evalIn, runMain …
+    context.js          the state the stages share (let-level, fixities, the program's data context)
+    lexer.js  parser.js  types.js  typecheck.js  evaluator.js  errors.js   the stages
   game/                 the UI
     state.js            saved progress (localStorage) + helpers
     town.js             the pixel-art map

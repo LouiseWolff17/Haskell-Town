@@ -23,7 +23,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 ### Project health
 - [x] Commit `package-lock.json` and switch CI to `npm ci`.
 - [x] Run player code in a **Web Worker**, with a Stop button and a 10-second timeout, so slow code can't freeze the page.
-- [ ] Split `src/haskell/interpreter.js` into lexer / parser / types / evaluator modules. Its parts share mutable state (`curLevel`, the current data context), so that becomes an explicit context object first.
+- [x] Split `src/haskell/interpreter.js` into lexer / parser / types / typecheck / evaluator modules, sharing their mutable state (let-level, fixities, the current data context) through one explicit context object (`src/haskell/context.js`).
 - [ ] Move `src/game/*.js` to TypeScript, one file at a time (`state` and `highlight` first).
 - [ ] Browser tests (Playwright) for the main flows: solve a challenge, build, Workshop.
 

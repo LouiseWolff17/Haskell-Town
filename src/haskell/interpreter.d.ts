@@ -1,5 +1,5 @@
 // Types for the parts of the interpreter that src/runner/browser.ts uses.
-// The interpreter itself is plain JavaScript (interpreter.js); values and type
+// The interpreter itself is plain JavaScript (interpreter.js and the stage modules next to it); values and type
 // representations are opaque here on purpose — only the runner looks inside them.
 
 export type Value = unknown;
