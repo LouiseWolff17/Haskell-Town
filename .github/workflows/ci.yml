@@ -65,6 +65,8 @@ jobs:
         run: node --test tests/runner-contract.test.ts
         env:
           GHC_RUNNER_URL: http://localhost:8080
+      - name: TEMP samples
+        run: node server/samples.ts http://localhost:8080
       - name: Service logs
         if: always()
         run: docker compose -f server/compose.yaml logs --no-color --tail 300

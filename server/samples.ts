@@ -1,0 +1,32 @@
+// TEMPORARY: print what the service answers for some typical mistakes.
+const url = process.argv[2] ?? 'http://localhost:8080';
+const post = async (path: string, body: unknown) => {
+  const t = Date.now();
+  const r = await fetch(url + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  console.log(`\n### ${path} ${JSON.stringify(body).slice(0, 160)}  (${Date.now() - t} ms)\n${JSON.stringify(j, null, 1).slice(0, 1500)}`);
+};
+await post('/compile', { source: 'add :: Int -> Int -> Int\nadd x y = (x + y\n' });
+await post('/compile', { source: 'add :: Int -> Int -> Int\nadd x y = x ++ y\n' });
+await post('/check', { challengeId: 'house', source: 'add :: Int -> Int -> Int\nadd x y = ___\n' });
+await post('/compile', { source: 'total :: Int\ntotal = sum (map dobule [1, 2])\n\ndouble :: Int -> Int\ndouble x = x * 2\n' });
+await post('/check', { challengeId: 'school', source: 'data Grade = Seedling | Sprout | Sapling\ngradeFor :: Int -> Grade\ngradeFor _ = Seedling\n' });
+await post('/run', { source: 'main :: IO ()\nmain = print (head ([] :: [Int]))\n', input: '' });
+await post('/evaluate', { source: 'x = 1\n', expr: '[1..]', input: '' });
+await post('/evaluate', { source: 'x = 1\n', expr: 'foo 3', input: '' });
+await post('/check', { challengeId: 'bakery', source: 'loavesFor :: String -> Int\nloavesFor "Saturday" = 24\n' });
+await post('/evaluate', { source: 'x = 1\n', expr: '(+ 1)', input: '' });
+await post('/compile', { source: 'import System.IO.Unsafe\nx = 1\n' });
+await post('/compile', { source: '{-# LANGUAGE CPP #-}\nx = 1\n' });
+await post('/check', { challengeId: 'house', source: 'add :: Int -> Int -> Int\nadd x y = x + y + read "x"\n' });
+await post('/compile', { source: 'data Crate = Crate Int\ninstance Functor Crate where\n  fmap f (Crate x) = Crate (f x)\n' });
+await post('/compile', { source: 'add :: Int -> Int -> Int\nadd2 x y = x + y\n' });
+await post('/compile', { source: 'gradeFor :: Int -> String\ngradeFor n = if n > 3 then "big" else 5\n' });
+await post('/run', { source: 'main = mapM_ print [1 ..]\n', input: '' });
+await post('/run', { source: 'main = do\n  a <- getLine\n  b <- getLine\n  putStrLn (a ++ b)\n', input: 'one' });
+await post('/evaluate', { source: 'import qualified Data.Map as M\nm = M.fromList [(1, "a"), (2, "b")]\n', expr: 'M.lookup 2 m', input: '' });
+await post('/evaluate', { source: 'data T = A | B deriving Show\n', expr: '[A ..]', input: '' });
+await post('/check', { challengeId: 'mailbox', source: 'countLetters :: [String] -> Int\ncountLetters letters = length letters + 2 * "x"\n' });
+await post('/compile', { source: 'module Main (main) where\nimport Data.List (sortBy)\nmain = print (sortBy compare [3, 1, 2])\nsort = 1\n' });
+await post('/check', { challengeId: 'harbour', source: 'data Crate a = Empty | Crate a deriving (Show, Functor)\n' });
+await post('/run', { source: 'main = let loop n = loop (n + 1) in print (loop 0)\n', input: '' });

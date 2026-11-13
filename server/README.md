@@ -12,7 +12,7 @@ VITE_GHC_URL=http://localhost:8080 npm run dev        # the game, using it
 GHC_RUNNER_URL=http://localhost:8080 node --test tests/runner-contract.test.ts
 ```
 
-With `VITE_GHC_URL` set at build time, the game uses GHC, and falls back to the in-browser interpreter when the service can't be reached or is busy. Without it, nothing changes. For a deployed game, set `ALLOWED_ORIGINS` (for example `https://louisewolff17.github.io`) so only the game's page can call the service, and put HTTPS in front of port 8080.
+With `VITE_GHC_URL` set at build time, the game uses GHC, and falls back to the in-browser interpreter when the service can't be reached or is busy. Without it, nothing changes. To use it from the deployed game, run the service somewhere public with HTTPS in front of port 8080, set `ALLOWED_ORIGINS` (for example `https://louisewolff17.github.io`) so only the game's page can call it, and set the repository variable `GHC_URL` to its address: the Pages build passes it on as `VITE_GHC_URL`.
 
 ## How a request is handled
 
