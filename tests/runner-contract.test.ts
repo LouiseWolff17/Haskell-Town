@@ -1,16 +1,23 @@
 // The contract every CodeRunner must meet. It runs against BrowserRunner and against
 // WorkerRunner (with an in-process stand-in for the Web Worker, so the messaging is tested).
-// When a GHC runner exists, add it to RUNNERS and the same tests must pass.
+// With GHC_RUNNER_URL set (e.g. http://localhost:8080, the service in server/), it also runs
+// against GhcRunner and real GHC; CI does that in the `ghc` job.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { BrowserRunner } from '../src/runner/browser.ts';
 import { WorkerRunner } from '../src/runner/worker-runner.ts';
+import { GhcRunner } from '../src/runner/ghc-runner.ts';
 import { InProcessWorker } from './helpers/fake-worker.ts';
 import type { CodeRunner, CheckResult } from '../src/runner/types.ts';
 import { CHALLENGES, ERRANDS, WORKSHOP_EXAMPLES } from '../src/content/index.ts';
 import type { Challenge } from '../src/content/types.ts';
 
-const RUNNERS: CodeRunner[] = [new BrowserRunner(), new WorkerRunner(() => new InProcessWorker())];
+const GHC_URL = process.env.GHC_RUNNER_URL;
+const RUNNERS: CodeRunner[] = [
+  new BrowserRunner(),
+  new WorkerRunner(() => new InProcessWorker()),
+  ...(GHC_URL ? [new GhcRunner({ url: GHC_URL })] : []),
+];
 const byId = (id: string): Challenge => {
   const c = CHALLENGES.find(x => x.id === id);
   if (!c) throw new Error('no challenge ' + id);

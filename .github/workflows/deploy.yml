@@ -28,6 +28,9 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # The GHC service's address (server/README.md), if one is deployed: set it as a
+          # repository variable. Unset, the game uses the in-browser interpreter only.
+          VITE_GHC_URL: ${{ vars.GHC_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

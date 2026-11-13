@@ -23,9 +23,9 @@ Every method is async, and every result is plain JSON. A runner can therefore li
 |---|---|---|
 | `BrowserRunner` (`src/runner/browser.ts`) | ✅ | Mini-Haskell interpreter in `src/haskell`. Works offline, but only covers a subset of Haskell (see ROADMAP.md). Runs on the page, so slow code freezes it. Used in tests and where Web Workers aren't available. |
 | `WorkerRunner` (`src/runner/worker-runner.ts`) | ✅ in use | The same interpreter in a Web Worker (`worker.ts`). One call at a time. A call is stopped after 10 s, or by `cancel()` (the Stop button), by terminating the worker and starting a new one. |
-| GHC runner | 💭 planned | Real GHC in a sandbox (container with CPU/memory/time limits, no network). Covers all of Haskell. |
+| `GhcRunner` (`src/runner/ghc-runner.ts`) | ✅ with `VITE_GHC_URL` | Real GHC on the sandboxed service in `server/` (no network, read-only, CPU/memory/time limits, an unprivileged user per job). Covers all of Haskell. Calls run side by side; `cancel()` stops them all. Falls back to the in-browser runner when the service can't be reached or is busy. See [server/README.md](../server/README.md). |
 
-`createRunner()` in `src/runner/index.ts` picks the runner. A likely setup is GHC when it's reachable, with the browser runner as the offline fallback.
+`createRunner()` in `src/runner/index.ts` picks the runner: `GhcRunner` when the game was built with `VITE_GHC_URL` set, with `WorkerRunner` as its fallback, and otherwise `WorkerRunner` (or `BrowserRunner` where there are no Web Workers).
 
 ## What `check` must do
 
@@ -44,17 +44,26 @@ Error messages are shown to beginners. Raw GHC output should be translated into 
 
 ## The contract test
 
-`tests/runner-contract.test.ts` runs against every runner in its `RUNNERS` list (today BrowserRunner, plus WorkerRunner with an in-process stand-in for the worker). It checks that all 23 reference solutions pass, that no starter code passes, and that each kind of failure produces the right status. A new runner is ready when that file passes with it added.
+`tests/runner-contract.test.ts` runs against every runner in its `RUNNERS` list: BrowserRunner, WorkerRunner with an in-process stand-in for the worker, and GhcRunner when `GHC_RUNNER_URL` points at a GHC service (CI's `ghc` job builds the service's image, starts it with `server/compose.yaml` and does this). It checks that every reference solution passes, that no starter code passes, and that each kind of failure produces the right status. A new runner is ready when that file passes with it added.
 
-## A possible HTTP shape for the GHC runner
+## The GHC service's HTTP API
 
-This is only a sketch, nothing implements it yet:
+`server/main.ts` serves this (behind `server/gateway.ts`, which adds CORS and rate limits):
 
 ```
 POST /check     { challengeId, source }        → CheckResult
 POST /compile   { source }                     → CompileResult
 POST /run       { source, input }              → RunMainResult
 POST /evaluate  { source, expr, input }        → EvalResult
+GET  /health                                   → { ok, ghc, running, waiting }
 ```
 
-The server would load the challenge definitions itself, so the browser can't change the tests. The rule checks (`forbid`, `recursive`) can be done on GHC's renamed AST or with `-ddump-rn`.
+The service has its own copy of the challenges and errands (`src/content`), so `check` only takes an id and the browser can't change the tests. An unknown id is a 404, a full queue a 503, a bad request a 400 with `{ error }`; GhcRunner sends the first two to its fallback runner. A request the client drops (Stop) is killed on the server.
+
+How the service gives the same answers as the interpreter:
+
+- **The same names without imports.** Every program gets `import HTown.Prelude`: the interpreter's built-in extras (`sort`, `sortOn`, `toUpper`, `fromMaybe`, `when`, `toList`, `Sum`, `Product`, …). Names the program defines itself are hidden from it (and from the Prelude), so a player's own `toList` wins.
+- **`forbid` and `recursive`** come from GHC's renamed program: the names its expressions use, and whether any binding group (top-level or local) is recursive.
+- **Signatures** are checked as `htownSig' :: <sig>; htownSig' = <fn>`, so a type variable in `sig` must stay polymorphic and a more general function is fine.
+- **Expression tests** compare with `==`, or with `show` when the type has no `Eq` instance (the interpreter compares any two values structurally). Each test has its own time limit, so an endless loop fails its tests instead of stopping the check.
+- **Messages** are translated into the same short style, on the player's own line numbers (`server/diagnostics.ts`).

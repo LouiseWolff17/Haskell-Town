@@ -38,3 +38,33 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # The GHC runner against the real, sandboxed GHC service (server/).
+  ghc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the GHC service image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          tags: haskell-town-ghc
+          load: true
+          cache-from: type=gha,scope=ghc
+          cache-to: type=gha,mode=max,scope=ghc
+      - name: Start the service
+        run: docker compose -f server/compose.yaml up --detach --no-build --wait
+      - name: Runner contract test against GHC
+        run: node --test tests/runner-contract.test.ts
+        env:
+          GHC_RUNNER_URL: http://localhost:8080
+      - name: Service logs
+        if: always()
+        run: docker compose -f server/compose.yaml logs --no-color --tail 300

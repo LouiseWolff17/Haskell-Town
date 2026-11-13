@@ -48,4 +48,6 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Market music (Web Audio) and a printable Journal booklet.
 
 ### Real GHC
-- [ ] A sandboxed GHC service implementing the [runner API](docs/runner-api.md), and a `GhcRunner` that passes `tests/runner-contract.test.ts`.
+- [x] A sandboxed GHC service implementing the [runner API](docs/runner-api.md), and a `GhcRunner` that passes `tests/runner-contract.test.ts` (`server/`, CI's `ghc` job).
+- [ ] Deploy the GHC service somewhere public and set `GHC_URL` for the Pages build.
+- [ ] With GHC in use, say so in the Library's "What Haskell Town can't do yet" (most of it doesn't apply).
