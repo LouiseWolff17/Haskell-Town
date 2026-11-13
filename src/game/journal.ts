@@ -1,27 +1,31 @@
 // The Journal: a keepsake book of everything the player has made. One page per building, with the
 // code that built it, a stamp for each errand solved, and the land that has opened. (Friends and
-// their letters live in their own panel left of the map: friends.js.) No scores or
+// their letters live in their own panel left of the map: friends.ts.) No scores or
 // hint counts: the Journal shows what you made, not how much help you used.
 import { CHALLENGES, ERRANDS, EXPANSIONS, FRIENDSHIP, HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
-import { $, esc, state } from './state.js';
-import { codeBlock } from './highlight.js';
-import { hearts, villageBuilt } from './errands.js';
+import { $, esc, state } from './state.ts';
+import { codeBlock } from './highlight.ts';
+import { hearts, villageBuilt } from './errands.ts';
 import { errandStamps, openedOn } from './rewards.ts';
+import type { Challenge } from '../content/index.ts';
 
-const STAMP = { house: '🏡', mailbox: '📬', bakery: '🥖', garden: '🌱', store: '🛒', library: '📚', school: '🎒', hall: '🏛️', clinic: '🩺', railway: '🚂', park: '🌳', harbour: '⚓', market: '🧺', observatory: '🔭' };
-const LAND = { meadow: '🐝', orchard: '🍎', pond: '🦆', windmill: '🌾' };
-const plotOf = c => c.plot || c.id;
-const topicStamp = topicId => STAMP[plotOf(CHALLENGES.find(c => c.id === REVIEW_TOPICS.find(t => t.id === topicId).from[0]))] || '📌';
+const STAMP: Record<string, string> = { house: '🏡', mailbox: '📬', bakery: '🥖', garden: '🌱', store: '🛒', library: '📚', school: '🎒', hall: '🏛️', clinic: '🩺', railway: '🚂', park: '🌳', harbour: '⚓', market: '🧺', observatory: '🔭' };
+const LAND: Record<string, string> = { meadow: '🐝', orchard: '🍎', pond: '🦆', windmill: '🌾' };
+const plotOf = (c: Challenge): string => c.plot || c.id;
+const topicStamp = (topicId: string): string => {
+  const first = REVIEW_TOPICS.find(t => t.id === topicId)?.from[0], c = CHALLENGES.find(c => c.id === first);
+  return (c && STAMP[plotOf(c)]) || '📌';
+};
 /** A day number (see schedule.ts dayNumber) as a short date, e.g. "9 Nov". */
-const dateOf = day => new Date(day * 86400000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const dateOf = (day: number): string => new Date(day * 86400000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
-function page(stamp, title, meta, body, open) {
+function page(stamp: string, title: string, meta: string, body: string, open: boolean): string {
   return open
     ? `<details class="jpage"><summary><span class="jstamp">${stamp}</span><span class="jt"><b>${title}</b><small>${meta}</small></span></summary><div class="jbody">${body}</div></details>`
     : `<div class="jpage jlocked"><span class="jstamp">?</span><span class="jt"><b>${title}</b><small>${meta}</small></span></div>`;
 }
 
-export function renderJournal() {
+export function renderJournal(): void {
   const el = $('#journal'); if (!el) return;
   const built = CHALLENGES.filter(c => state.done[c.id]).length;
   let html = `<p class="lib-intro">Your keepsake book: everything you've made in Haskell Town, and the code you wrote for it.</p>`;
@@ -60,14 +64,14 @@ export function renderJournal() {
     }
   }
   el.innerHTML = html;
-  const pb = el.querySelector('#printJournal'); if (pb) pb.onclick = printJournal;
+  const pb = el.querySelector<HTMLElement>('#printJournal'); if (pb) pb.onclick = printJournal;
 }
 
 // ---------- The printable Journal: a little "what I learned" booklet ----------
 // Built into #printArea and printed with the browser's print dialog, which can also save a PDF.
 // The print styles (styles.css, @media print) hide the game and show only the booklet.
-const pre = code => `<pre>${esc(code.replace(/\s+$/, ''))}</pre>`;
-export function printJournal() {
+const pre = (code: string): string => `<pre>${esc(code.replace(/\s+$/, ''))}</pre>`;
+export function printJournal(): void {
   const log = state.reviews?.log || [], h = hearts(), stamps = errandStamps(log), on = openedOn(EXPANSIONS, log);
   const doneC = CHALLENGES.filter(c => state.done[c.id]);
   const days = [...doneC.map(c => state.journal?.[c.id]?.day), ...log.map(e => e.date)].filter(d => d != null);

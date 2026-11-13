@@ -1,9 +1,9 @@
 // Entry point: load the styles, wire up the game, show the welcome screen once.
 import './styles.css';
-import { $, save, state } from './game/state.js';
-import { initTown, plotLabel } from './game/town.js';
-import { initSidebar, renderSidebar } from './game/sidebar.js';
-import { initNotebook } from './game/notebook.js';
+import { $, save, state } from './game/state.ts';
+import { initTown, plotLabel } from './game/town.ts';
+import { initSidebar, renderSidebar } from './game/sidebar.ts';
+import { initNotebook } from './game/notebook.ts';
 
 initTown();
 initSidebar();
@@ -15,4 +15,4 @@ renderSidebar();
 $('#hoverLabel').innerHTML = plotLabel(null);
 
 // The DEV panel: always under `npm run dev`, and on the live site with ?dev in the address.
-if (import.meta.env.DEV || new URLSearchParams(location.search).has('dev')) import('./game/devtools.js').then(m => m.initDevTools());
+if (import.meta.env.DEV || new URLSearchParams(location.search).has('dev')) import('./game/devtools.ts').then(m => m.initDevTools());

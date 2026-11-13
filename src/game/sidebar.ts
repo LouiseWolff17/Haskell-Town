@@ -1,23 +1,24 @@
 // The sidebar: request list, learning library and learning-assistance buttons.
 import { CHALLENGES, RESIDENTS, COMING_SOON, NOT_SUPPORTED } from '../content/index.ts';
-import { $, MODES, esc, state, status } from './state.js';
-import { codeBlock } from './highlight.js';
-import { goToChallenge, portrait, renderNightBtn } from './town.js';
-import { setMode } from './notebook.js';
-import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from './errands.js';
-import { renderJournal } from './journal.js';
-import { renderFriends } from './friends.js';
+import { $, MODES, esc, state, status } from './state.ts';
+import { codeBlock } from './highlight.ts';
+import { goToChallenge, portrait, renderNightBtn } from './town.ts';
+import { setMode } from './notebook.ts';
+import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from './errands.ts';
+import { renderJournal } from './journal.ts';
+import { renderFriends } from './friends.ts';
+import type { AssistMode } from '../content/index.ts';
 
-export function notSupportedHTML() {
+export function notSupportedHTML(): string {
   return `<summary>What Haskell Town can't do yet</summary><p class="ns-intro">Your code runs in a small Haskell made for this game, not the full GHC compiler. These parts of real Haskell aren't available yet:</p><ul class="ns-list">${NOT_SUPPORTED.map(([t, d]) => `<li><b>${t}.</b> ${d}</li>`).join('')}</ul>`;
 }
 
-export function renderSidebar() {
+export function renderSidebar(): void {
   const n = Object.keys(state.done).length;
   $('#progressText').textContent = `${n} of ${CHALLENGES.length} requests`;
   $('#progressBar').style.width = (n / CHALLENGES.length * 100) + '%';
   const list = $('#requests'); list.innerHTML = '';
-  let lastStage = null;
+  let lastStage: string | null = null;
   CHALLENGES.forEach(c => {
     if (c.stage !== lastStage) { lastStage = c.stage; const h = document.createElement('div'); h.className = 'stage-h'; h.textContent = c.stage; list.appendChild(h); }
     const s = status(c), r = RESIDENTS[c.resident];
@@ -32,13 +33,13 @@ export function renderSidebar() {
     : `<div class="soon-i"><span>Every building in the plan is open. Once they're all built, residents pin errands to the Notice Board (the Errands tab), and the Workshop is always there for your own experiments.</span></div>`);
   list.appendChild(soon);
   const lib = $('#library'); lib.innerHTML = `<p class="lib-intro">Every concept you learn is kept here, so you can come back to it whenever you like.</p>`;
-  const rv = revisits(), flagged = new Set(rv.flatMap(r => topicById(r.topic).from));
+  const rv = revisits(), flagged = new Set(rv.flatMap(r => topicById(r.topic)?.from ?? []));
   if (rv.length) {
     const box = document.createElement('div'); box.className = 'revisit';
     box.innerHTML = `<h4 class="board-h">Worth a second look</h4>
       <p class="board-small">From your errands on the Notice Board, these ideas have been slipping lately. Read their cards, then close them and try writing an example from memory in the Workshop: that does more for remembering than reading again.</p>
-      <ul>${rv.map(r => `<li><button class="btn-soft" data-revisit="${r.topic}">${esc(topicById(r.topic).title)}</button><span>${revisitReason(r)}</span></li>`).join('')}</ul>`;
-    box.querySelectorAll('[data-revisit]').forEach(b => b.onclick = () => showInLibrary(b.dataset.revisit));
+      <ul>${rv.map(r => `<li><button class="btn-soft" data-revisit="${r.topic}">${esc(topicById(r.topic)?.title)}</button><span>${revisitReason(r)}</span></li>`).join('')}</ul>`;
+    box.querySelectorAll<HTMLElement>('[data-revisit]').forEach(b => b.onclick = () => showInLibrary(b.dataset.revisit!));
     lib.appendChild(box);
   }
   CHALLENGES.forEach(c => {
@@ -53,16 +54,16 @@ export function renderSidebar() {
   renderJournal();
   renderFriends();
   renderNightBtn();
-  document.querySelectorAll('.mode-seg').forEach(seg => renderSeg(seg));
+  document.querySelectorAll<HTMLElement>('.mode-seg').forEach(seg => renderSeg(seg));
 }
-export function renderSeg(seg) {
+export function renderSeg(seg: HTMLElement): void {
   seg.innerHTML = Object.entries(MODES).map(([k, m]) => `<button data-mode="${k}" class="${state.mode === k ? 'on' : ''}" title="${m.desc}">${m.label}</button>`).join('');
-  seg.querySelectorAll('button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
-  const d = seg.parentElement.querySelector('.mode-desc'); if (d) d.textContent = MODES[state.mode].desc;
+  seg.querySelectorAll('button').forEach(b => b.onclick = () => setMode(b.dataset.mode as AssistMode));
+  const d = seg.parentElement?.querySelector('.mode-desc'); if (d) d.textContent = MODES[state.mode].desc;
 }
 
-export function initSidebar() {
-  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+export function initSidebar(): void {
+  document.querySelectorAll<HTMLButtonElement>('.tabs button').forEach(b => b.onclick = () => {
     document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
     for (const id of ['requests', 'errands', 'library', 'journal']) $('#' + id).hidden = b.dataset.tab !== id;
     if (b.dataset.tab === 'errands') renderBoard(); // a new day may have started since the page was opened

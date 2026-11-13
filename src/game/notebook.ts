@@ -2,25 +2,44 @@
 // All Haskell goes through the runner; this file only turns its results into HTML.
 import { CHALLENGES, EXPANSIONS, FRIENDSHIP, HEARTS, LIFE, RESIDENTS, WORKSHOP_EXAMPLES } from '../content/index.ts';
 import { createRunner } from '../runner/index.ts';
-import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.js';
-import { codeBlock, highlight } from './highlight.js';
-import { buildAnim, plotLabel, portrait } from './town.js';
-import { notSupportedHTML, renderSidebar } from './sidebar.js';
-import { ERRANDS_BY_TOPIC, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, villageBuilt, whenText } from './errands.js';
+import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.ts';
+import { codeBlock, highlight } from './highlight.ts';
+import { buildAnim, portrait } from './town.ts';
+import { notSupportedHTML, renderSidebar } from './sidebar.ts';
+import { ERRANDS_BY_TOPIC, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, villageBuilt, whenText } from './errands.ts';
 import { completeItem, isOpen, showAnswer } from './schedule.ts';
 import { newFriendRewards, newlyOpened, nextExpansion } from './rewards.ts';
+import type { FriendReward } from './rewards.ts';
+import type { AssistMode, Challenge, Errand, Expansion, IOTest, ExprTest, LifeTouch } from '../content/index.ts';
+import type { CheckResult, Diagnostic, MissingPart, ProgramSummary, RunOutput, Stopped } from '../runner/index.ts';
+import type { Confidence, Outcome } from './schedule.ts';
+
+/** What the notebook has open: a challenge, an errand from the Notice Board, or the Workshop. */
+type ChallengeSession = Challenge & { workshop?: never; errand?: never };
+interface ErrandSession extends Omit<Errand, 'id'> {
+  /** The key for state.code: `errand:<errand id>`. */
+  id: string;
+  errandId: string;
+  errand: true;
+  workshop?: never;
+  /** Where it is in the day's list, and which day, so a new day can be noticed. */
+  index: number;
+  date: number;
+}
+interface WorkshopSession { id: 'workshop'; workshop: true; errand?: never }
+type Session = ChallengeSession | ErrandSession | WorkshopSession;
 
 const runner = createRunner();
 
-let current = null;
-const ed = $('#code'), hl = $('#hl'), gutter = $('#gutter');
-function syncEditor() {
+let current: Session | null = null;
+const ed = $<HTMLTextAreaElement>('#code'), hl = $('#hl'), gutter = $('#gutter');
+function syncEditor(): void {
   hl.innerHTML = highlight(ed.value) + (ed.value.endsWith('\n') ? ' ' : '');
   const lines = ed.value.split('\n').length; gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join('<br>');
   hl.scrollTop = ed.scrollTop; hl.scrollLeft = ed.scrollLeft; gutter.scrollTop = ed.scrollTop;
 }
-function starterFor(c, mode = state.mode) { return c.starter[mode]; }
-export function setMode(m) {
+function starterFor(c: Challenge, mode: AssistMode = state.mode): string { return c.starter[mode]; }
+export function setMode(m: AssistMode): void {
   if (current && (current.workshop || current.errand)) { state.mode = m; save(); renderSidebar(); return; }
   const prev = state.mode; state.mode = m; save(); renderSidebar();
   if (current) {
@@ -30,8 +49,8 @@ export function setMode(m) {
     renderProblem(); renderAssistant();
   }
 }
-export function openChallenge(id) {
-  const c = byId(id); if (status(c) === 'locked') return;
+export function openChallenge(id: string): void {
+  const c = byId(id); if (!c || status(c) === 'locked') return;
   current = c; $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop', 'is-errand'); $('#runBtn').textContent = '▶ Run tests';
   $('#nbEyebrow').textContent = `Challenge ${String(c.num).padStart(2, '0')} · ${c.stage}`;
   $('#nbTitle').textContent = c.title;
@@ -43,56 +62,57 @@ export function openChallenge(id) {
   $('#notebook').hidden = false; document.body.classList.add('modal-open');
   setTimeout(() => ed.focus(), 50);
 }
-export function closeNotebook() { if (activeRun) runner.cancel?.(); $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; revealLand(); }
+export function closeNotebook(): void { if (activeRun) runner.cancel?.(); $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; revealLand(); }
 
 // New land opened by an errand is revealed once the notebook closes, so the player sees the mist lift.
-let pendingLand = [], pendingFriends = [], pendingLife = [];
+let pendingLand: Expansion[] = [], pendingFriends: [rid: string, rewards: FriendReward[]][] = [], pendingLife: LifeTouch[] = [];
 /** A new bit of life on the map (src/content/life.ts), announced when the notebook closes. */
-export function queueLife(touches) { pendingLife.push(...touches); }
-export function queueLand(opened) { pendingLand.push(...opened); }
+export function queueLife(touches: LifeTouch[]): void { pendingLife.push(...touches); }
+export function queueLand(opened: Expansion[]): void { pendingLand.push(...opened); }
 /** After an errand: [resident, rewards just reached] for the friendship toast and the map change. */
-export function queueFriend(rid, rewards) { if (rewards.length) pendingFriends.push([rid, rewards]); }
-export function revealLand() {
+export function queueFriend(rid: string, rewards: FriendReward[]): void { if (rewards.length) pendingFriends.push([rid, rewards]); }
+export function revealLand(): void {
   if (!pendingLand.length && !pendingFriends.length && !pendingLife.length) return;
   const opened = pendingLand, friends = pendingFriends, life = pendingLife; pendingLand = []; pendingFriends = []; pendingLife = [];
-  const t = performance.now(), msgs = [];
+  const t = performance.now(), msgs: string[] = [];
   opened.forEach(x => { buildAnim['exp-' + x.id] = t + 300; });
   if (opened.length) { const last = opened[opened.length - 1]; msgs.push(`<b>${last.title} has opened!</b> ${last.note}`); }
   for (const [rid, rewards] of friends) {
-    const name = RESIDENTS[rid].name, f = FRIENDSHIP.find(x => x.resident === rid);
+    const name = RESIDENTS[rid].name, f = FRIENDSHIP.find(x => x.resident === rid)!;
     if (rewards.includes('change')) { buildAnim['friend-' + rid] = t + 300; msgs.push(`<b>${f.change}</b>`); }
     if (rewards.includes('letter')) msgs.push(`📬 <b>A letter from ${name}</b> is in Wren's mailbox.`);
     if (rewards.includes('gift')) msgs.push(`🎁 ${name} left you a gift: <b>${f.gift.name}</b> (in your Journal).`);
   }
   for (const l of life) msgs.push(`✨ ${l.note}`);
   toast(msgs.join(' '));
-  document.querySelector('.town-frame').scrollIntoView({ behavior: 'smooth', block: opened.length ? 'end' : 'center' });
+  $('.town-frame').scrollIntoView({ behavior: 'smooth', block: opened.length ? 'end' : 'center' });
 }
 /** One line for the win box: the resident's hearts, and anything their friendship just brought. */
-function friendLine(rid, rewards) {
-  const name = RESIDENTS[rid].name, f = FRIENDSHIP.find(x => x.resident === rid), h = hearts()[rid] || 0;
-  const what = { letter: `${name} has written you a letter`, gift: `${name} left you a gift: ${f.gift.icon} ${f.gift.name}`, change: f.change };
+function friendLine(rid: string, rewards: FriendReward[]): string {
+  const name = RESIDENTS[rid].name, f = FRIENDSHIP.find(x => x.resident === rid)!, h = hearts()[rid] || 0;
+  const what: Record<FriendReward, string> = { letter: `${name} has written you a letter`, gift: `${name} left you a gift: ${f.gift.icon} ${f.gift.name}`, change: f.change };
   return `<div class="land-line friend-line"><span class="hearts">${heartRow(h)}</span> ${name}${rewards.length ? ` · <b>${rewards.map(k => what[k]).join('. ')}.</b> Close the notebook to see.` : h >= HEARTS.change ? ' · best friends' : ''}</div>`;
 }
 /** One line for the win box: what just opened, or how far it is to the next piece of land. */
-function landLine(opened, solved) {
+function landLine(opened: Expansion[], solved: number): string {
   if (opened.length) return `<div class="land-line opened">🌱 <b>${opened.map(x => x.title).join(' and ')}</b> just opened south of the railway. Close the notebook to see it.</div>`;
   const next = nextExpansion(EXPANSIONS, solved); if (!next) return '';
   const left = next.needs - solved;
   return `<div class="land-line">🌫 ${left} more errand${left === 1 ? '' : 's'} until the mist lifts on new land.</div>`;
 }
-function renderProblem() {
-  const c = current, r = RESIDENTS[c.resident];
+function renderProblem(): void {
+  const c = current; if (!c || c.workshop || c.errand) return;
+  const r = RESIDENTS[c.resident];
   const p = $('#problem');
   p.innerHTML = `<div class="story"><div class="story-p"></div><div><div class="who">${r.name} <span>the ${r.role}</span></div><p>${c.story}</p></div></div>
     <h3>Your task</h3><p>${c.task}${state.mode !== 'independent' || !c.fn ? '' : ` Name it <code>${c.fn}</code>.`}</p>
     ${state.mode !== 'independent' && c.sig ? `<div class="sig-line">Type signature ${codeBlock(c.sig)}</div>` : ''}
-    ${c.ioExamples ? `<h3>Example run</h3>${c.ioExamples.map(x => `<div class="io-ex"><div><span>You type</span><pre class="console">${esc(x.input)}</pre></div><div><span>It prints</span><pre class="console">${esc(x.out)}</pre></div></div>`).join('')}`
-      : `<h3>Examples</h3>${codeBlock(c.examples.map(([a, b]) => `${a.padEnd(Math.max(...c.examples.map(e => e[0].length)) + 2)}-- ${b}`).join('\n'))}`}`;
-  p.querySelector('.story-p').appendChild(portrait(c.resident, 52));
+    ${examplesHTML(c)}`;
+  p.querySelector('.story-p')!.appendChild(portrait(c.resident, 52));
 }
-function renderAssistant() {
-  const c = current, n = state.hints[c.id] || 0;
+function renderAssistant(): void {
+  const c = current; if (!c || c.workshop || c.errand) return;
+  const n = state.hints[c.id] || 0;
   const a = $('#assistant');
   const primer = `<div class="primer"><div class="primer-h">Today's concept · ${c.concept}</div><p>${c.primer}</p>${codeBlock(c.primerCode)}</div>`;
   let html = state.mode === 'guided' ? primer : `<details class="primer-d"><summary>Concept refresher · ${c.concept}</summary>${primer}</details>`;
@@ -108,22 +128,29 @@ function renderAssistant() {
   const us = $('#useSol'); if (us) us.onclick = () => { ed.value = c.solution; state.code[c.id] = ed.value; save(); syncEditor(); };
 }
 
-const compileTitle = e => e.kind === 'type' ? "The types don't fit together yet" : e.kind === 'scope' ? 'An unknown name' : 'The compiler has a note for you';
-const MISSING = {
-  type: m => `a data type called <code>${m.name}</code>`,
-  constructor: m => `a constructor called <code>${m.name}</code>`,
-  field: m => `a record field called <code>${m.name}</code>`,
-  class: m => `a class called <code>${m.name}</code>`,
-  instance: m => `<code>instance ${m.cls} ${m.type}</code>`,
+/** The Examples (or Example run) section of a challenge or errand. */
+function examplesHTML(c: { ioExamples?: IOTest[]; examples?: ExprTest[] }): string {
+  if (c.ioExamples) return `<h3>Example run</h3>${c.ioExamples.map(x => `<div class="io-ex"><div><span>You type</span><pre class="console">${esc(x.input)}</pre></div><div><span>It prints</span><pre class="console">${esc(x.out)}</pre></div></div>`).join('')}`;
+  const ex = c.examples ?? [], width = Math.max(...ex.map(e => e[0].length)) + 2;
+  return `<h3>Examples</h3>${codeBlock(ex.map(([a, b]) => `${a.padEnd(width)}-- ${b}`).join('\n'))}`;
+}
+
+const compileTitle = (e: Diagnostic): string => e.kind === 'type' ? "The types don't fit together yet" : e.kind === 'scope' ? 'An unknown name' : 'The compiler has a note for you';
+const MISSING: Record<Exclude<MissingPart['what'], 'instance'>, string> = {
+  type: 'a data type called',
+  constructor: 'a constructor called',
+  field: 'a record field called',
+  class: 'a class called',
 };
+const missingHTML = (m: MissingPart): string => m.what === 'instance' ? `<code>instance ${m.cls} ${m.type}</code>` : `${MISSING[m.what]} <code>${m.name}</code>`;
 
 // ---------- Running code ----------
 // The runner works in the background (a Web Worker), so while code runs the Run
 // button becomes Stop, and slow code is stopped after a while instead of freezing the page.
-let activeRun = null;
-const runLabel = () => (current && current.workshop ? '▶ Check & run' : '▶ Run tests');
+let activeRun: Promise<unknown> | null = null;
+const runLabel = (): string => (current && current.workshop ? '▶ Check & run' : '▶ Run tests');
 // Run `task` unless something is already running. With restart, stop the current run first.
-function whileRunning(task, restart = false) {
+function whileRunning(task: () => Promise<unknown>, restart = false): Promise<unknown> {
   if (activeRun) {
     if (!restart) return activeRun;
     runner.cancel?.();
@@ -138,17 +165,17 @@ function whileRunning(task, restart = false) {
   })();
   return activeRun;
 }
-function stoppedCard(r) {
+function stoppedCard(r: Stopped): string {
   if (r.reason === 'cancelled') return noteCard('Stopped', `You stopped your code after ${r.seconds} seconds. Change something and run it again whenever you like.`);
   return noteCard(`Still running after ${r.seconds} seconds`, "I stopped your code so the page wouldn't freeze. It might be stuck in an endless loop, or doing far more work than it needs to: a function that recomputes the same values again and again, like a naive `fib`, can take ages.\nTip: Check that every recursive call gets closer to a base case, and try a smaller input first.");
 }
 
-function runTests() { return whileRunning(checkNotebook); }
-function workshopRun(forceMain) { return whileRunning(() => doWorkshopRun(forceMain)); }
-function workshopEval() { return whileRunning(doWorkshopEval); }
+function runTests(): Promise<unknown> { return whileRunning(checkNotebook); }
+function workshopRun(forceMain: boolean): Promise<unknown> { return whileRunning(() => doWorkshopRun(forceMain)); }
+function workshopEval(): Promise<unknown> { return whileRunning(doWorkshopEval); }
 
 // Check the notebook against the current challenge (via the runner) and show the results.
-async function checkNotebook() {
+async function checkNotebook(): Promise<void> {
   const c = current; if (!c) return;
   if (c.workshop) return doWorkshopRun();
   if (c.errand) return checkErrand();
@@ -167,8 +194,8 @@ async function checkNotebook() {
   const bb = $('#buildBtn'); if (bb) bb.onclick = () => build(c);
 }
 // Turn a CheckResult into HTML. `all` is true when every test passed and no rule was broken.
-function checkHTML(c, r) {
-  const early = html => ({ html, all: false });
+function checkHTML(c: ChallengeSession | ErrandSession, r: CheckResult): { html: string; all: boolean } {
+  const early = (html: string) => ({ html, all: false });
   if (r.status === 'stopped') return early(stoppedCard(r));
   if (r.status === 'compile-error') {
     const e = r.error;
@@ -180,20 +207,20 @@ function checkHTML(c, r) {
     return early(noteCard(`I couldn't find ${r.fn}`, `The tests call a function named <code>${r.fn}</code>, but there's no definition for it in your notebook yet. Check the spelling — Haskell names are case-sensitive.`));
   }
   if (r.status === 'missing-parts') {
-    return early(noteCard('Something the challenge needs is missing', `This challenge needs ${r.missing.map(m => MISSING[m.what](m)).join(', ')} — check the task description and the spelling.`));
+    return early(noteCard('Something the challenge needs is missing', `This challenge needs ${r.missing.map(missingHTML).join(', ')} — check the task description and the spelling.`));
   }
   if (r.status === 'signature-mismatch') {
     return early(noteCard("The types don't fit the challenge", r.message) + `<p class="nudge">The tests call <code>${c.fn}</code> with the types above, so they can't run until it fits.</p>`);
   }
   const typeLine = r.fnType ? `<div class="typeok"><span>✓ Types check out</span><code>${esc(r.fnType.fn)} :: ${esc(r.fnType.type)}</code>${r.fnType.hasSignature ? '' : '<em>(worked out by Haskell — you didn\'t even write a signature!)</em>'}</div>`
-    : `<div class="typeok"><span>✓ Types check out</span><code>${r.instances.map(i => 'instance ' + esc(i)).join(' · ')}</code></div>`;
+    : `<div class="typeok"><span>✓ Types check out</span><code>${(r.instances ?? []).map(i => 'instance ' + esc(i)).join(' · ')}</code></div>`;
   const rows = r.tests;
   const passed = rows.filter(t => t.ok).length, all = r.passed;
   let ruleNote = '';
   if (r.ruleBreak) {
     const who = RESIDENTS[c.resident].name;
     if (r.ruleBreak.rule === 'forbidden') ruleNote = noteCard('It works — but not quite the way ' + who + ' asked', `All the tests pass, but this challenge is about writing it yourself, so please don't use ${r.ruleBreak.used.map(u => '`' + u + '`').join(' or ')}. Try making <code>${c.fn}</code> call itself instead.`);
-    else ruleNote = noteCard('It works — but where is the recursion?', `All the tests pass, but this challenge is about recursion: <code>${c.fn}</code> (or a helper) should call itself.${c.hints ? ' Hint 1 shows the two cases to write.' : ''}`);
+    else ruleNote = noteCard('It works — but where is the recursion?', `All the tests pass, but this challenge is about recursion: <code>${c.fn}</code> (or a helper) should call itself.${!c.errand && c.hints ? ' Hint 1 shows the two cases to write.' : ''}`);
   }
   let html = `<div class="res-head ${all ? 'ok' : ''}"><span>${all ? 'All tests pass!' : `${passed} of ${rows.length} tests pass`}</span><span class="dots">${rows.map(r => `<i class="${r.ok ? 'ok' : 'no'}"></i>`).join('')}</span></div>${typeLine}<ul class="tests">`;
   rows.forEach(r => {
@@ -209,52 +236,54 @@ function checkHTML(c, r) {
   }
   return { html, all };
 }
-function noteCard(title, msg) {
+function noteCard(title: string, msg: string): string {
   const [first, ...rest] = msg.split('\n');
-  const fmt = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
-  const exp = rest.filter(l => /^\s+(Expected|Found):/.test(l)).map(l => { const m = l.trim().match(/^(Expected|Found):\s*(.*)$/); return `<div class="tm-row"><span>${m[1]}</span><code>${esc(m[2])}</code></div>`; }).join('');
+  const fmt = (s: string): string => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+  const exp = rest.filter(l => /^\s+(Expected|Found):/.test(l)).map(l => { const m = l.trim().match(/^(Expected|Found):\s*(.*)$/)!; return `<div class="tm-row"><span>${m[1]}</span><code>${esc(m[2])}</code></div>`; }).join('');
   const tip = rest.filter(l => l.startsWith('Tip:')).map(l => `<div class="tip">💡 ${fmt(l.slice(4).trim())}</div>`).join('');
   const codeLines = rest.filter(l => !/^\s+(Expected|Found):/.test(l) && !l.startsWith('Tip:'));
   const code = codeLines.length ? codeBlock(codeLines.map(l => l.replace(/^  /, '')).join('\n')) : '';
   return `<div class="note"><div class="note-h">${title}</div><div>${fmt(first)}</div>${exp ? `<div class="tm">${exp}</div>` : ''}${code}${tip}</div>`;
 }
-function markLine(line) { gutter.querySelectorAll('.bad').forEach(x => x.classList.remove('bad')); if (!line) return; const lines = ed.value.split('\n').length; gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1 === line ? `<span class="bad">${i + 1}</span>` : i + 1).join('<br>'); }
+function markLine(line: number | null): void { gutter.querySelectorAll('.bad').forEach(x => x.classList.remove('bad')); if (!line) return; const lines = ed.value.split('\n').length; gutter.innerHTML = Array.from({ length: lines }, (_, i) => i + 1 === line ? `<span class="bad">${i + 1}</span>` : i + 1).join('<br>'); }
 
-export function build(c) {
+export function build(c: Challenge): void {
   state.done[c.id] = true;
   // a Journal page: the code that built it, and the day
   (state.journal ||= {})[c.id] = { code: state.code[c.id] ?? '', day: today() };
   save();
   closeNotebook(); renderSidebar();
   const next = CHALLENGES.filter(x => status(x) === 'open');
-  buildAnim[c.upgrade ? c.plot + '-deco' : (c.plot || c.id)] = performance.now();
+  buildAnim[c.upgrade ? (c.plot ?? c.id) + '-deco' : (c.plot || c.id)] = performance.now();
   const noun = c.upgrade ? `${c.reward} — added!` : `${c.reward} ${['mailbox', 'garden'].includes(c.id) ? 'is ready' : 'has been built'}!`;
   toast(`<b>${noun}</b> ` + (next.length ? `New request from ${[...new Set(next.map(x => RESIDENTS[x.resident].name))].join(' & ')}.`
     : villageBuilt() ? `The whole village is built! From now on, residents pin small errands to the <b>Notice Board</b> (the Errands tab) — a few each day.` : `You've finished every request in town so far. Try the Workshop meanwhile!`));
-  if (villageBuilt()) document.querySelector('.tabs button[data-tab=errands]')?.click();
-  document.querySelector('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (villageBuilt()) document.querySelector<HTMLElement>('.tabs button[data-tab=errands]')?.click();
+  $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
-let toastT; function toast(html) { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
+let toastT: ReturnType<typeof setTimeout> | undefined;
+function toast(html: string): void { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
 
 
 // ---------- Errands: retrieval practice from the Notice Board ----------
 // The player solves a small new problem on an old topic from memory. There are no hints up
 // front: a peek at the Library or the full answer is there, but only after trying, and each
 // one changes when the topic comes back (see schedule.ts).
-const CONF = { unsure: 'Not sure', fairly: 'Fairly sure', sure: 'Sure' };
+const CONF: Record<Confidence, string> = { unsure: 'Not sure', fairly: 'Fairly sure', sure: 'Sure' };
 function errandItem() {
   const rs = reviews(), c = current;
-  if (!rs || !c || !c.errand || rs.day.date !== c.date) return null;
+  if (!rs?.day || !c?.errand || rs.day.date !== c.date) return null;
   return rs.day.items[c.index] || null;
 }
-export function openErrand(index) {
-  const rs = reviews(); const item = rs && rs.day.items[index]; if (!item) return;
-  const e = errandById(item.errand), t = topicById(item.topic);
-  current = { ...e, id: 'errand:' + e.id, errandId: e.id, errand: true, index, date: rs.day.date };
+export function openErrand(index: number): void {
+  const rs = reviews(), item = rs?.day?.items[index]; if (!rs?.day || !item) return;
+  const e = errandById(item.errand)!, t = topicById(item.topic)!;
+  const session: ErrandSession = { ...e, id: 'errand:' + e.id, errandId: e.id, errand: true, index, date: rs.day.date };
+  current = session;
   $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop'); $('.nb').classList.add('is-errand'); $('#runBtn').textContent = '▶ Run tests';
   $('#nbEyebrow').textContent = `Errand · ${t.title} · from memory`;
   $('#nbTitle').textContent = e.title;
-  ed.value = state.code[current.id] != null ? state.code[current.id] : e.starter; syncEditor(); markLine(null);
+  ed.value = state.code[session.id] != null ? state.code[session.id] : e.starter; syncEditor(); markLine(null);
   renderErrandProblem(); renderErrandAssistant();
   $('#results').innerHTML = item.outcome ? `<div class="res-empty done-note">You've done this errand today. Feel free to run it again.</div>`
     : item.sawAnswer ? `<div class="res-empty">You've seen the answer to this one. Study it, then try the new errand on ${t.title} on the Notice Board, from memory.</div>`
@@ -262,17 +291,16 @@ export function openErrand(index) {
   $('#notebook').hidden = false; document.body.classList.add('modal-open');
   setTimeout(() => ed.focus(), 50);
 }
-function renderErrandProblem() {
-  const c = current, r = RESIDENTS[c.resident];
-  const ex = c.ioExamples ? `<h3>Example run</h3>${c.ioExamples.map(x => `<div class="io-ex"><div><span>You type</span><pre class="console">${esc(x.input)}</pre></div><div><span>It prints</span><pre class="console">${esc(x.out)}</pre></div></div>`).join('')}`
-    : `<h3>Examples</h3>${codeBlock(c.examples.map(([a, b]) => `${a.padEnd(Math.max(...c.examples.map(e => e[0].length)) + 2)}-- ${b}`).join('\n'))}`;
+function renderErrandProblem(): void {
+  const c = current; if (!c?.errand) return;
+  const r = RESIDENTS[c.resident], ex = examplesHTML(c);
   $('#problem').innerHTML = `<div class="story"><div class="story-p"></div><div><div class="who">${r.name} <span>the ${r.role}</span></div><p>${c.story}</p></div></div>
     <h3>Your task</h3><p>${c.task}</p>${c.sig ? `<div class="sig-line">Type signature ${codeBlock(c.sig)}</div>` : ''}${ex}`;
-  $('#problem').querySelector('.story-p').appendChild(portrait(c.resident, 52));
+  $('#problem').querySelector('.story-p')!.appendChild(portrait(c.resident, 52));
 }
-function renderErrandAssistant() {
-  const item = errandItem(); if (!item) return;
-  const c = current, t = topicById(item.topic), a = $('#assistant');
+function renderErrandAssistant(): void {
+  const item = errandItem(), c = current; if (!item || !c?.errand) return;
+  const t = topicById(item.topic)!, a = $('#assistant');
   let html = `<div class="primer recall"><div class="primer-h">From memory · ${t.title}</div><p>No hints up front this time. Give it a real try before looking anything up: struggling to remember is what makes it stick.</p></div>`;
   html += `<div class="hints-h"><span>How sure are you?</span></div>`;
   if (item.runs === 0 && isOpen(item)) {
@@ -289,42 +317,43 @@ function renderErrandAssistant() {
     html += answerHTML(c);
   }
   a.innerHTML = html;
-  a.querySelectorAll('[data-conf]').forEach(b => b.onclick = () => { item.confidence = b.dataset.conf; save(); renderErrandAssistant(); });
+  a.querySelectorAll<HTMLElement>('[data-conf]').forEach(b => b.onclick = () => { item.confidence = b.dataset.conf as Confidence; save(); renderErrandAssistant(); });
   const cb = $('#cueBtn'); if (cb) cb.onclick = () => { item.cue = true; save(); renderErrandAssistant(); };
   const ab = $('#answerBtn'); if (ab) ab.onclick = () => {
-    showAnswer(state.reviews, item, ERRANDS_BY_TOPIC[item.topic]); save(); renderSidebar(); renderErrandAssistant();
+    showAnswer(state.reviews!, item, ERRANDS_BY_TOPIC[item.topic]); save(); renderSidebar(); renderErrandAssistant();
     $('#results').innerHTML = `<div class="res-empty">Read the answer through and make sense of it. Then close this: a <b>new errand on ${t.title}</b> is now at the end of today's list, to do from memory.</div>`;
   };
 }
-function answerHTML(c) {
+function answerHTML(c: ErrandSession): string {
   return `<div class="solution"><div class="hint-lv">One way to write it</div>${codeBlock(c.solution)}<p>${c.explanation}</p></div>`;
 }
-async function checkErrand() {
-  const c = current, item = errandItem();
+async function checkErrand(): Promise<void> {
+  const c = current, item = errandItem(); if (!c?.errand) return;
   if (!item) { $('#results').innerHTML = noteCard('A new day has started', 'Today has new errands. Close this and open one from the Notice Board.'); return; }
   const counts = isOpen(item);
   if (counts) { item.runs++; save(); if (item.runs === 1) renderErrandAssistant(); } // the confidence guess is locked once you run
   const r = await runner.check(c, ed.value);
   if (current !== c) return;
   let { html, all } = checkHTML(c, r);
+  const rs = state.reviews!;
   if (all && counts) {
-    const before = state.reviews.log.length, heartsBefore = hearts()[c.resident] || 0, lifeBefore = practised();
-    const outcome = completeItem(state.reviews, item, today());
+    const before = rs.log.length, heartsBefore = hearts()[c.resident] || 0, lifeBefore = practised();
+    const outcome = completeItem(rs, item, today());
     (state.errandCode ||= {})[c.errandId] = ed.value; // shown on the errand's Journal stamp
-    const opened = newlyOpened(EXPANSIONS, before, state.reviews.log.length);
+    const opened = newlyOpened(EXPANSIONS, before, rs.log.length);
     pendingLand.push(...opened);
     const friendNew = newFriendRewards(heartsBefore, hearts()[c.resident] || 0, HEARTS);
     queueFriend(c.resident, friendNew);
     const lifeNew = LIFE.filter(l => practised().has(l.topic) && !lifeBefore.has(l.topic));
     queueLife(lifeNew);
     save();
-    const p = state.reviews.topics[item.topic], t = topicById(item.topic), who = RESIDENTS[c.resident].name;
-    const headline = { recalled: 'Remembered, first try!', effortful: 'Done — and that effort counts.', relearned: 'Relearned!' }[outcome];
-    const body = {
+    const p = rs.topics[item.topic], t = topicById(item.topic)!, who = RESIDENTS[c.resident].name;
+    const headline = ({ recalled: 'Remembered, first try!', effortful: 'Done — and that effort counts.', relearned: 'Relearned!' } satisfies Record<Outcome, string>)[outcome];
+    const body = ({
       recalled: `You pulled it straight from memory. ${t.title} will come back after a longer gap.`,
       effortful: `Getting there after ${item.runs > 1 ? 'a few runs' : 'a peek'} is still real practice: you had to work to remember, and that strengthens it.`,
       relearned: `You saw an answer earlier and then solved a new one yourself. That second recall is the one that sticks.`,
-    }[outcome];
+    } satisfies Record<Outcome, string>)[outcome];
     let conf = '';
     if (item.confidence) {
       const first = outcome === 'recalled';
@@ -333,20 +362,23 @@ async function checkErrand() {
         : item.confidence === 'unsure' && first ? 'You knew more than you thought!' : 'Nicely judged.'}</p>`;
     }
     html += `<div class="win"><h3>${headline}</h3><p>${body}</p>${conf}<details class="compare"><summary>Compare with one way to write it</summary>${answerHTML(c)}</details>
-      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div>${friendLine(c.resident, friendNew)}${lifeNew.map(l => `<div class="land-line opened">✨ <b>Life in town:</b> ${l.note}</div>`).join('')}${landLine(opened, state.reviews.log.length)}<button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
+      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div>${friendLine(c.resident, friendNew)}${lifeNew.map(l => `<div class="land-line opened">✨ <b>Life in town:</b> ${l.note}</div>`).join('')}${landLine(opened, rs.log.length)}<button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
     renderSidebar(); renderErrandAssistant();
   } else if (all) {
-    html += `<div class="win"><h3>All tests pass</h3><p>${item.sawAnswer ? `Now try the new ${topicById(item.topic).title} errand on the Notice Board, from memory.` : 'This errand is already done for today.'}</p><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
+    html += `<div class="win"><h3>All tests pass</h3><p>${item.sawAnswer ? `Now try the new ${topicById(item.topic)?.title} errand on the Notice Board, from memory.` : 'This errand is already done for today.'}</p><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
   } else if (counts && r.status === 'tested') {
     html += `<p class="nudge">Not quite yet. Look at what failed and try again: a wrong try followed by a fix is still good practice.</p>`;
   }
   $('#results').innerHTML = html;
-  const bb = $('#boardBtn'); if (bb) bb.onclick = () => { closeNotebook(); document.querySelector('.tabs button[data-tab=errands]')?.click(); };
+  const bb = $('#boardBtn'); if (bb) bb.onclick = () => { closeNotebook(); document.querySelector<HTMLElement>('.tabs button[data-tab=errands]')?.click(); };
 }
 
 // ---------- Workshop: free play with the whole language ----------
-const WORKSHOP = { id: 'workshop', workshop: true };
-function openWorkshop() {
+// The expression and stdin boxes only exist while the Workshop is open.
+const wsExpr = () => $<HTMLInputElement>('#wsExpr');
+const wsInput = () => $<HTMLTextAreaElement>('#wsInput');
+const WORKSHOP: WorkshopSession = { id: 'workshop', workshop: true };
+function openWorkshop(): void {
   current = WORKSHOP; $('#modeNote').textContent = '';
   $('.nb').classList.remove('is-errand'); $('.nb').classList.add('is-workshop'); $('#runBtn').textContent = '▶ Check & run';
   $('#nbEyebrow').textContent = 'Free play · no tests, no pressure';
@@ -355,53 +387,54 @@ function openWorkshop() {
   $('#problem').innerHTML = `<p>The Workshop is your own corner of town for trying anything: your own <b>data types</b>, <b>records</b>, <b>list comprehensions</b> and <b>IO with do blocks</b>. These are the tools for the School, the Library and City Hall later on.</p>
     <details class="notsup ws-ns">${notSupportedHTML()}</details>
     <h3>Start from an example</h3><div class="ex-list">${WORKSHOP_EXAMPLES.map((x, i) => `<button class="ex" data-i="${i}"><b>${x.title}</b><span>${x.blurb}</span></button>`).join('')}</div>`;
-  $('#problem').querySelectorAll('.ex').forEach(b => b.onclick = () => loadExample(+b.dataset.i));
+  $('#problem').querySelectorAll<HTMLElement>('.ex').forEach(b => b.onclick = () => loadExample(Number(b.dataset.i)));
   $('#assistant').innerHTML = `<h3 style="margin-top:0">Try an expression</h3>
     <div class="evalrow"><span class="prompt">λ&gt;</span><input id="wsExpr" spellcheck="false" autocomplete="off" placeholder="e.g. map area [Circle 1]"><button class="btn-soft" id="wsEval">Evaluate</button></div>
     <h3>Input for getLine</h3><textarea id="wsInput" spellcheck="false" rows="3" placeholder="One line per getLine"></textarea>
     <button class="btn-soft" id="wsMain" style="margin-top:8px">▶ Run main</button>
     <p class="no-penalty">Everything here is checked for types first, just like in the challenges.</p>`;
-  $('#wsExpr').value = state.wsExpr || ''; $('#wsInput').value = state.wsInput || '';
-  $('#wsExpr').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); workshopEval(); } });
-  $('#wsExpr').addEventListener('input', e => { state.wsExpr = e.target.value; save(); });
-  $('#wsInput').addEventListener('input', e => { state.wsInput = e.target.value; save(); });
+  const ex = wsExpr(), inp = wsInput();
+  ex.value = state.wsExpr || ''; inp.value = state.wsInput || '';
+  ex.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); workshopEval(); } });
+  ex.addEventListener('input', () => { state.wsExpr = ex.value; save(); });
+  inp.addEventListener('input', () => { state.wsInput = inp.value; save(); });
   $('#wsEval').onclick = workshopEval; $('#wsMain').onclick = () => workshopRun(true);
   $('#results').innerHTML = `<div class="res-empty">Press <b>Check &amp; run</b> to type-check your code (and run <code>main</code> if there is one), or evaluate an expression on the left.</div>`;
   $('#notebook').hidden = false; document.body.classList.add('modal-open'); setTimeout(() => ed.focus(), 50);
 }
-function loadExample(i) {
+function loadExample(i: number): void {
   const x = WORKSHOP_EXAMPLES[i];
   ed.value = x.code; state.code.workshop = x.code; syncEditor();
-  $('#wsExpr').value = state.wsExpr = x.expr || ''; $('#wsInput').value = state.wsInput = x.input || ''; save();
+  wsExpr().value = state.wsExpr = x.expr || ''; wsInput().value = state.wsInput = x.input || ''; save();
   markLine(null);
   whileRunning(x.expr ? doWorkshopEval : () => doWorkshopRun(true), true);
 }
-function showCompileError(e) { $('#results').innerHTML = noteCard(compileTitle(e), e.message); markLine(e.line); }
+function showCompileError(e: Diagnostic): void { $('#results').innerHTML = noteCard(compileTitle(e), e.message); markLine(e.line); }
 // summary: a ProgramSummary from the runner
-function typesBlock(summary) {
+function typesBlock(summary: ProgramSummary): string {
   const names = Object.keys(summary.types);
   const lines = [...summary.datas.map(d => `data ${d.name}${d.params.map(p => ' ' + p).join('')}  -- ${d.cons.join(' | ')}`),
     ...summary.classes.flatMap(c => [`class ${c.name} ${c.param}`, ...c.methods.map(m => '  ' + m)]), ...summary.instances.map(i => `instance ${i}`),
     ...names.map(n => `${/^[a-z_]/.test(n) ? n : '(' + n + ')'} :: ${summary.types[n]}`)];
   return lines.length ? `<div class="typeok ws"><span>✓ Types check out</span></div>${codeBlock(lines.join('\n'))}` : `<div class="typeok ws"><span>✓ Nothing to check yet</span></div>`;
 }
-function outputBlock(r) {
+function outputBlock(r: RunOutput): string {
   return `<div class="ws-h">Output</div><pre class="console">${esc(r.out || '')}${r.out ? '' : '<span class="dim">(nothing printed)</span>'}</pre>${r.error ? noteCard('The program stopped', r.error.message) : ''}`;
 }
-async function doWorkshopRun(forceMain) {
-  const r = await runner.runMain(ed.value, $('#wsInput') ? $('#wsInput').value : '');
+async function doWorkshopRun(forceMain = false): Promise<void> {
+  const r = await runner.runMain(ed.value, document.querySelector<HTMLTextAreaElement>('#wsInput')?.value ?? '');
   if (current !== WORKSHOP) return;
   if (r.status === 'stopped') { $('#results').innerHTML = stoppedCard(r); return; }
   if (r.status === 'compile-error') { showCompileError(r.error); return; }
   markLine(null);
   let html = typesBlock(r.summary);
   if (r.status === 'ran') html += outputBlock(r.output);
-  else if (forceMain === true) html += noteCard('No main yet', 'There is no `main` to run. Write one, like:  main = putStrLn "Hello!"');
+  else if (forceMain) html += noteCard('No main yet', 'There is no `main` to run. Write one, like:  main = putStrLn "Hello!"');
   $('#results').innerHTML = html;
 }
-async function doWorkshopEval() {
-  const expr = $('#wsExpr').value.trim(); if (!expr) return doWorkshopRun();
-  const r = await runner.evaluate(ed.value, expr, $('#wsInput').value);
+async function doWorkshopEval(): Promise<void> {
+  const expr = wsExpr().value.trim(); if (!expr) return doWorkshopRun();
+  const r = await runner.evaluate(ed.value, expr, wsInput().value);
   if (current !== WORKSHOP) return;
   if (r.status === 'stopped') { $('#results').innerHTML = `<div class="ws-h">λ&gt; ${esc(expr)}</div>` + stoppedCard(r); return; }
   if (r.status === 'compile-error') { showCompileError(r.error); return; }
@@ -416,7 +449,7 @@ async function doWorkshopEval() {
   $('#results').innerHTML = html + `<details class="ws-defs"><summary>Types in your file</summary>${typesBlock(r.summary)}</details>`;
 }
 
-export function initNotebook() {
+export function initNotebook(): void {
   ed.addEventListener('input', () => { if (current) { state.code[current.id] = ed.value; save(); } syncEditor(); });
   ed.addEventListener('scroll', syncEditor);
   ed.addEventListener('keydown', e => {
@@ -424,7 +457,7 @@ export function initNotebook() {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runTests(); }
   });
   $('#nbClose').onclick = closeNotebook;
-  $('#notebook').addEventListener('click', e => { if (e.target.id === 'notebook') closeNotebook(); });
+  $('#notebook').addEventListener('click', e => { if ((e.target as Element).id === 'notebook') closeNotebook(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#notebook').hidden) closeNotebook(); });
   $('#resetBtn').onclick = () => { if (!current) return; if (current.workshop) { loadExample(0); return; } ed.value = current.errand ? current.starter : starterFor(current); state.code[current.id] = ed.value; save(); syncEditor(); $('#modeNote').textContent = ''; ed.focus(); };
   $('#runBtn').onclick = () => (activeRun ? runner.cancel?.() : runTests());
@@ -440,7 +473,7 @@ export function initNotebook() {
   $('#workshopBtn').onclick = openWorkshop;
 
   $('#nsLink').onclick = () => {
-    document.querySelector('.tabs button[data-tab=library]').click();
-    const d = document.querySelector('#library .notsup'); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    $('.tabs button[data-tab=library]').click();
+    const d = document.querySelector<HTMLDetailsElement>('#library .notsup'); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
   };
 }
