@@ -6,7 +6,7 @@ import { $, byId, esc, save, state } from './state.js';
 import { codeBlock } from './highlight.js';
 import { portrait } from './town.js';
 import { openErrand } from './notebook.js';
-import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, startReviews, syncTopics } from './schedule.ts';
+import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, revisitSuggestions, startReviews, syncTopics } from './schedule.ts';
 
 export const errandById = id => ERRANDS.find(e => e.id === id);
 export const topicById = id => REVIEW_TOPICS.find(t => t.id === id);
@@ -38,6 +38,27 @@ export function reviews() {
 export const openItems = () => (reviews()?.day.items || []).filter(isOpen);
 /** Residents with an errand waiting today (drawn with a ? on the map). */
 export const waitingResidents = () => new Set(openItems().map(i => errandById(i.errand).resident));
+
+/** Topics worth a second look in the Library, from recent lapses and over-confidence on the Notice Board. */
+export const revisits = () => { const rs = reviews(); return rs ? revisitSuggestions(rs.log, REVIEW_TOPICS.map(t => t.id)) : []; };
+const times = n => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
+/** Why a topic is suggested, in a few words. */
+export function revisitReason(r) {
+  const parts = [];
+  if (r.relearned) parts.push(`you needed to see the answer ${times(r.relearned)}`);
+  if (r.overconfident) parts.push(`you felt sure ${r.overconfident === 1 ? 'but it' : `${times(r.overconfident)}, but it`} didn't pass first time`);
+  else if (r.effortful) parts.push(`it took more than one try${r.effortful > 1 ? ` ${times(r.effortful)}` : ''}`);
+  const s = parts.join(', and ');
+  return s[0].toUpperCase() + s.slice(1) + '.';
+}
+/** Switch to the Library tab and bring a topic's cards into view. */
+export function showInLibrary(topicId) {
+  document.querySelector('.tabs button[data-tab=library]').click();
+  const cards = topicById(topicId).from.map(id => document.getElementById('lib-' + id)).filter(Boolean);
+  if (!cards.length) return;
+  cards[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+  for (const c of cards) { c.classList.remove('lib-flash'); void c.offsetWidth; c.classList.add('lib-flash'); }
+}
 
 export function whenText(day) {
   const d = day - today();
@@ -86,6 +107,8 @@ export function renderBoard() {
     html += `<li><span class="topic-name">${t.title}</span><span class="pips" title="Box ${p.box} of ${MAX_BOX}">${pips}</span><span class="topic-next">${p.reviews === 0 && !inToday ? 'not yet' : inToday ? 'today' : whenText(Math.max(p.due, today() + 1))}</span></li>`;
   }
   html += `</ul>`;
+  const rv = revisits();
+  if (rv.length) html += `<p class="board-small board-revisit">Worth a second look in the Library: ${rv.map(r => `<button class="linkbtn" data-revisit="${r.topic}">${esc(topicById(r.topic).title)}</button>`).join(', ')}.</p>`;
 
   // calibration: did confidence match results?
   const cal = calibration(rs.log), rated = Object.values(cal).reduce((a, b) => a + b.total, 0);
@@ -105,6 +128,7 @@ export function renderBoard() {
     <p class="board-small">Based on Carpenter, Pan &amp; Butler (2022), “The science of effective learning with spacing and retrieval practice”, <i>Nature Reviews Psychology</i> 1, 496–511.</p>
   </details>`;
   el.innerHTML = html;
+  el.querySelectorAll('[data-revisit]').forEach(b => b.onclick = () => showInLibrary(b.dataset.revisit));
 
   const list = el.querySelector('.errand-list');
   items.forEach((item, i) => {

@@ -117,3 +117,35 @@ test('syncTopics: split topics inherit progress, new ones start today, old ones 
   assert.equal(rs.day.items[0].topic, 'patterns');
   assert.equal(syncTopics(rs, ['functions', 'patterns', 'recursion', 'lazy'], 15, { basics: ['functions', 'patterns'] }, () => undefined), false);
 });
+
+import { revisitSuggestions, REVISIT_LIMIT } from '../src/game/schedule.ts';
+import type { LogEntry } from '../src/game/schedule.ts';
+
+const log = (topic: string, outcome: LogEntry['outcome'], confidence: LogEntry['confidence'] = null, date = 1): LogEntry =>
+  ({ date, topic, errand: 'e', outcome, confidence, firstTry: outcome === 'recalled' });
+
+test('revisit: a relearned topic is suggested; one effortful review alone is not', () => {
+  const s = revisitSuggestions([log('a', 'relearned'), log('b', 'effortful'), log('c', 'recalled')], ['a', 'b', 'c']);
+  assert.deepEqual(s.map(r => r.topic), ['a']);
+  assert.equal(s[0].relearned, 1);
+});
+
+test('revisit: feeling sure but needing effort counts extra', () => {
+  const s = revisitSuggestions([log('b', 'effortful', 'sure'), log('c', 'effortful', 'fairly')], ['b', 'c']);
+  assert.deepEqual(s.map(r => [r.topic, r.overconfident]), [['b', 1]]);
+});
+
+test('revisit: a first-try recall since then clears a topic', () => {
+  assert.deepEqual(revisitSuggestions([log('a', 'relearned'), log('a', 'effortful'), log('a', 'recalled')], ['a']), []);
+  const s = revisitSuggestions([log('a', 'recalled'), log('a', 'relearned'), log('a', 'effortful')], ['a']);
+  assert.deepEqual([s[0].relearned, s[0].effortful], [1, 1]);
+});
+
+test('revisit: only the last few reviews count, weakest first, limited', () => {
+  const old = Array.from({ length: 10 }, () => log('a', 'relearned'));
+  assert.equal(revisitSuggestions(old, ['a'])[0].relearned, 3);
+  const many = ['a', 'b', 'c', 'd', 'e'].flatMap((t, i) => Array.from({ length: i + 1 }, () => log(t, 'effortful')));
+  const s = revisitSuggestions(many, ['a', 'b', 'c', 'd', 'e']);
+  assert.equal(s.length, REVISIT_LIMIT);
+  assert.deepEqual(s.map(r => r.topic), ['c', 'd', 'e'], 'b has 2, but c, d, e (capped at 3) tie higher and keep their order');
+});

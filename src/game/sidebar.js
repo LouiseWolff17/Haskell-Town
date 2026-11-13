@@ -1,10 +1,10 @@
 // The sidebar: request list, learning library and learning-assistance buttons.
 import { CHALLENGES, RESIDENTS, COMING_SOON, NOT_SUPPORTED } from '../content/index.ts';
-import { $, MODES, state, status } from './state.js';
+import { $, MODES, esc, state, status } from './state.js';
 import { codeBlock } from './highlight.js';
 import { goToChallenge, portrait, renderNightBtn } from './town.js';
 import { setMode } from './notebook.js';
-import { renderBoard } from './errands.js';
+import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from './errands.js';
 import { renderJournal } from './journal.js';
 import { renderFriends } from './friends.js';
 
@@ -32,9 +32,19 @@ export function renderSidebar() {
     : `<div class="soon-i"><span>Every building in the plan is open. Once they're all built, residents pin errands to the Notice Board (the Errands tab), and the Workshop is always there for your own experiments.</span></div>`);
   list.appendChild(soon);
   const lib = $('#library'); lib.innerHTML = `<p class="lib-intro">Every concept you learn is kept here, so you can come back to it whenever you like.</p>`;
+  const rv = revisits(), flagged = new Set(rv.flatMap(r => topicById(r.topic).from));
+  if (rv.length) {
+    const box = document.createElement('div'); box.className = 'revisit';
+    box.innerHTML = `<h4 class="board-h">Worth a second look</h4>
+      <p class="board-small">From your errands on the Notice Board, these ideas have been slipping lately. Read their cards, then close them and try writing an example from memory in the Workshop: that does more for remembering than reading again.</p>
+      <ul>${rv.map(r => `<li><button class="btn-soft" data-revisit="${r.topic}">${esc(topicById(r.topic).title)}</button><span>${revisitReason(r)}</span></li>`).join('')}</ul>`;
+    box.querySelectorAll('[data-revisit]').forEach(b => b.onclick = () => showInLibrary(b.dataset.revisit));
+    lib.appendChild(box);
+  }
   CHALLENGES.forEach(c => {
-    const d = document.createElement('div'); d.className = 'lib-card' + (state.done[c.id] ? '' : ' lib-locked');
-    d.innerHTML = state.done[c.id] ? `<h4>${c.learn.title}</h4><p>${c.learn.body}</p>${codeBlock(c.learn.code)}` : `<h4>${c.concept}</h4><p>Unlocks when you finish “${c.title}”.</p>`;
+    const d = document.createElement('div'); d.id = 'lib-' + c.id;
+    d.className = 'lib-card' + (state.done[c.id] ? '' : ' lib-locked') + (flagged.has(c.id) ? ' lib-revisit' : '');
+    d.innerHTML = state.done[c.id] ? `<h4>${c.learn.title}${flagged.has(c.id) ? ' <span class="revisit-tag">second look</span>' : ''}</h4><p>${c.learn.body}</p>${codeBlock(c.learn.code)}` : `<h4>${c.concept}</h4><p>Unlocks when you finish “${c.title}”.</p>`;
     lib.appendChild(d);
   });
   const ns = document.createElement('details'); ns.className = 'notsup';

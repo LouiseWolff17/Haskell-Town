@@ -9,7 +9,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **23 challenges, 13 residents, 14 buildings.** Every building teaches one idea, and its upgrade practises it again.
 - **Real Haskell, checked like GHC.** Your code is type-checked before anything runs, and the error messages are written for beginners.
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
-- **The Notice Board** brings each topic back over days and weeks: 26 errands on 13 topics, one topic per resident, solved from memory, with feedback after you try.
+- **The Notice Board** brings each topic back over days and weeks: 26 errands on 13 topics, one topic per resident, solved from memory, with feedback after you try. Topics that keep slipping (an answer you had to see, or feeling sure and still needing a few tries) are suggested for a second look in the Library.
 - **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
 - **Walk around town.** You have a little character in a straw hat: walk with the arrow keys or WASD (or click where to go), and press **E** next to a resident with a **!** or **?** to help them. Clicking a request in the list sends the character walking there.
 - **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift, then a lasting change to their building on the map. Friends have their own panel to the left of the map.
@@ -74,7 +74,7 @@ tests/
   content.test.ts          ids, unlock order, hints… all fit together
   runner-contract.test.ts  every reference solution passes; wrong answers don't
   worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
-  schedule.test.ts         Notice Board scheduling: boxes, gaps, retries
+  schedule.test.ts         Notice Board scheduling: boxes, gaps, retries, revisit suggestions
   rewards.test.ts          new land, Journal stamps and hearts
 docs/                   design notes and the runner API
 ```

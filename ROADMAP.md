@@ -35,7 +35,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 
 ### Learning
 - [x] Spaced retrieval practice after the village is built: the Notice Board (`src/game/schedule.ts`).
-- [ ] Use the Notice Board's data (lapses, calibration) to suggest which topics to revisit in the Library.
+- [x] Use the Notice Board's data (lapses, calibration) to suggest which topics to revisit in the Library (`revisitSuggestions` in `src/game/schedule.ts`).
 - [ ] More errands per topic, and errands that mix two topics.
 - [ ] Larger multi-function projects at City Hall (design doc stage 5: mastery and creativity).
 

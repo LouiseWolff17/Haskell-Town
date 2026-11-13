@@ -64,6 +64,16 @@ kbd{font-family:var(--mono); font-size:.78em; background:var(--paper); border:1p
 .lib-card h4{margin:0 0 4px; font-family:var(--pixel); font-size:16px; font-weight:500}
 .lib-card p{margin:0 0 6px; font-size:13.5px}
 .lib-locked{opacity:.55; border-style:dashed}
+.revisit{margin:0 0 12px; padding:2px 12px 10px; border:2px solid var(--honey); background:var(--paper2); border-radius:11px}
+.revisit .board-h{margin-top:10px}
+.revisit ul{list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:7px}
+.revisit li{display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; font-size:13px}
+.revisit li .btn-soft{padding:4px 10px; font-size:13px}
+.lib-revisit{border-color:var(--honey)}
+.revisit-tag{display:inline-block; margin-left:6px; padding:0 7px; border-radius:20px; background:var(--honey); font-family:var(--body); font-size:11px; font-weight:800; vertical-align:2px}
+.lib-flash{animation:libflash 1.6s ease}
+@keyframes libflash{0%,40%{box-shadow:0 0 0 4px var(--honey)} 100%{box-shadow:0 0 0 0 transparent}}
+.board-revisit .linkbtn{font-size:12px; color:var(--ink)}
 
 .assist-box{padding:12px 14px}
 .assist-box h3{margin:0 0 8px; font-family:var(--pixel); font-size:16px; font-weight:500}

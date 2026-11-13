@@ -190,3 +190,44 @@ export function syncTopics(rs: ReviewState, topicIds: string[], today: number, l
   for (const id of Object.keys(rs.topics)) if (!topicIds.includes(id)) { delete rs.topics[id]; changed = true; }
   return changed;
 }
+
+/** Why a topic is suggested for a second look in the Library. */
+export interface Revisit {
+  topic: string;
+  /** Times the answer had to be seen (the errand was then relearned). */
+  relearned: number;
+  /** Times it was solved only after a wrong run or a peek. */
+  effortful: number;
+  /** Times the player felt sure but it didn't pass first time. */
+  overconfident: number;
+  score: number;
+}
+/** How many recent reviews of a topic count, and how many topics are suggested at once. */
+export const REVISIT_WINDOW = 3;
+export const REVISIT_LIMIT = 3;
+
+/**
+ * Topics worth re-reading in the Library, weakest first, from the Notice Board's log.
+ * Only a topic's reviews since it was last recalled first time count (at most REVISIT_WINDOW of them):
+ * once it's been remembered cleanly, older struggles are behind it. A relearned errand weighs most;
+ * feeling sure and still needing effort adds to the weight, because that's a gap the player can't feel.
+ * A single effortful review isn't enough on its own: some effort is a normal part of remembering.
+ */
+export function revisitSuggestions(log: LogEntry[], topicIds: string[], limit = REVISIT_LIMIT): Revisit[] {
+  const out: Revisit[] = [];
+  for (const topic of topicIds) {
+    const r: Revisit = { topic, relearned: 0, effortful: 0, overconfident: 0, score: 0 };
+    let seen = 0;
+    for (let i = log.length - 1; i >= 0 && seen < REVISIT_WINDOW; i--) {
+      const e = log[i];
+      if (e.topic !== topic) continue;
+      if (e.outcome === 'recalled') break;
+      seen++;
+      if (e.outcome === 'relearned') r.relearned++; else r.effortful++;
+      if (e.confidence === 'sure' && !e.firstTry) r.overconfident++;
+    }
+    r.score = 3 * r.relearned + r.effortful + r.overconfident;
+    if (r.score >= 2) out.push(r);
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit); // stable: ties keep the order topics were taught
+}
