@@ -1,0 +1,76 @@
+# The GHC service, sandboxed. From the repository root:
+#   docker compose -f server/compose.yaml up --build
+# Then point the game at it: VITE_GHC_URL=http://localhost:8080 npm run dev
+#
+# Two containers share one image:
+#   ghc      compiles and runs the player's code. No network at all, read-only file system,
+#            a small tmpfs for jobs, and limits on memory, CPU and processes. The player's
+#            code runs as the unprivileged `sandbox` user, one fresh directory per job.
+#   gateway  the only part on the network: it takes HTTP requests on port 8080 and passes
+#            them to `ghc` over a Unix socket in a shared volume.
+name: haskell-town-ghc
+
+services:
+  ghc:
+    image: haskell-town-ghc
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    command: ["node", "server/main.ts"]
+    environment:
+      SOCKET: /run/haskell-town/ghc.sock
+      SANDBOX_UID: "10001"
+      SANDBOX_GID: "10001"
+      MAX_JOBS: "2"
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,nosuid,nodev,size=512m,mode=1777
+    volumes:
+      - socket:/run/haskell-town
+    # It starts as root only to hand each job to the sandbox user (setuid/setgid), give it
+    # its directory (chown) and stop it (kill). Every other capability is dropped.
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, KILL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "node", "server/healthcheck.ts", "/run/haskell-town/ghc.sock"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  gateway:
+    image: haskell-town-ghc
+    command: ["node", "server/gateway.ts"]
+    environment:
+      PORT: "8080"
+      UPSTREAM_SOCKET: /run/haskell-town/ghc.sock
+      # Which web pages may call the service, e.g. https://you.github.io (default: any).
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-*}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - socket:/run/haskell-town
+    user: "10002:10002"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 64
+    depends_on:
+      ghc:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "server/healthcheck.ts", "http://127.0.0.1:8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  socket:

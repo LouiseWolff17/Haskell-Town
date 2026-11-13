@@ -1,0 +1,11 @@
+cabal-version: 2.4
+name:          htown-support
+version:       0.1.0.0
+synopsis:      Haskell Town's town prelude and test harness for the GHC runner
+build-type:    Simple
+
+library
+  exposed-modules:  HTown.Prelude, HTown.Harness
+  build-depends:    base
+  default-language: Haskell2010
+  ghc-options:      -O1
