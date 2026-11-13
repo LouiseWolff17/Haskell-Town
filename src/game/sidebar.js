@@ -2,8 +2,8 @@
 import { CHALLENGES, RESIDENTS, COMING_SOON, NOT_SUPPORTED } from '../content/index.ts';
 import { $, MODES, state, status } from './state.js';
 import { codeBlock } from './highlight.js';
-import { portrait, renderNightBtn } from './town.js';
-import { openChallenge, setMode } from './notebook.js';
+import { goToChallenge, portrait, renderNightBtn } from './town.js';
+import { setMode } from './notebook.js';
 import { renderBoard } from './errands.js';
 import { renderJournal } from './journal.js';
 import { renderFriends } from './friends.js';
@@ -24,7 +24,7 @@ export function renderSidebar() {
     const b = document.createElement('button'); b.className = `req req-${s}`; b.disabled = s === 'locked';
     b.innerHTML = `<div class="req-body"><div class="req-top"><span class="req-num">#${String(c.num).padStart(2, '0')}</span><span class="chip chip-${s}">${s === 'done' ? 'Built ✓' : s === 'open' ? 'Needs help' : 'Locked'}</span></div><div class="req-title">${c.title}</div><div class="req-meta">${r.name} · <span class="concept">${c.concept}</span></div></div>`;
     b.prepend(portrait(c.resident, 38));
-    b.onclick = () => openChallenge(c.id);
+    b.onclick = () => goToChallenge(c);
     list.appendChild(b);
   });
   const soon = document.createElement('div'); soon.className = 'soon';

@@ -1,8 +1,9 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
 import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
 import { $, byId, save, state, status } from './state.js';
-import { openChallenge } from './notebook.js';
-import { hearts, practised, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
+import { openChallenge, openErrand } from './notebook.js';
+import { errandById, hearts, openItems, practised, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
+import { drawPlayer, drawPrompt, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.js';
 import { openLetters } from './friends.js';
 import { musicPlaying, startMusic, stopMusic } from './music.js';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
@@ -348,9 +349,24 @@ function withReveal(key, p, t, drawFn, under) {
   if (k < 1) { ctx.restore(); for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; ctx.globalAlpha = 1 - k; R(p.x + p.w / 2 + Math.cos(a) * (p.w / 2) * k, p.y + p.h - 4 + Math.sin(a) * 6 * k, 3, 2, '#f2efe9'); ctx.globalAlpha = 1; } }
   else if (anim && t - anim < 2600) { const kk = (t - anim - 900) / 1700; for (let i = 0; i < 5; i++) { ctx.globalAlpha = Math.max(0, 1 - kk); R(p.x + 6 + i * (p.w / 5), p.y + 10 - kk * 14 + (i % 2) * 6, 2, 2, '#fff2a8'); } ctx.globalAlpha = 1; }
 }
+/** Everyone standing on the map: residents waiting by a lot with a request (!), and those at home (with a ? if they pinned an errand). */
+function residentsOnMap() {
+  const out = [], shown = new Set(), waiting = waitingResidents();
+  for (const c of CHALLENGES) {
+    if (status(c) !== 'open' || shown.has(c.resident)) continue;
+    shown.add(c.resident); const [x, y] = PLOTS[c.plot || c.id].stand; out.push({ rid: c.resident, x, y, task: 'request' });
+  }
+  for (const [rid, [x, y]] of Object.entries(HOMES))
+    if (!shown.has(rid) && CHALLENGES.some(c => c.resident === rid && state.done[c.id])) out.push({ rid, x, y, task: waiting.has(rid) ? 'errand' : null });
+  return out;
+}
+let lastT = null;
 function draw(t) {
   const plots = visiblePlots();
-  syncSize();
+  syncSize(); refreshSolids();
+  updatePlayer(lastT == null ? 0 : Math.min(50, t - lastT), solidAt); lastT = t;
+  const near = nearby();
+  if (near?.key !== nearKey) { nearKey = near?.key ?? null; if (!hover) $('#hoverLabel').innerHTML = nearLabel(near); }
   ctx.drawImage(bg, 0, 0); roadLayer(plots);
   drawStrips(t);
   for (const [pid, p] of plots) {
@@ -368,29 +384,25 @@ function draw(t) {
   }
   drawFriends(t);
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
-  const shown = new Set();
-  for (const c of CHALLENGES) {
-    if (status(c) !== 'open' || shown.has(c.resident)) continue;
-    shown.add(c.resident);
-    const [fx, fy] = PLOTS[c.plot || c.id].stand;
-    person(fx, fy, RESIDENTS[c.resident], t, true); bubble(fx - 1, fy - 13, t);
-  }
-  const waiting = waitingResidents();
-  for (const [rid, pos] of Object.entries(HOMES)) {
-    if (shown.has(rid)) continue;
-    if (CHALLENGES.some(c => c.resident === rid && state.done[c.id])) {
-      person(pos[0], pos[1], RESIDENTS[rid], t + pos[0] * 50, waiting.has(rid));
-      if (waiting.has(rid)) errandBubble(pos[0] - 1, pos[1] - 13, t);
-    }
-  }
+  const folk = residentsOnMap(), talking = near?.act ? (near.kind === 'errand' ? near.rid : plotChallenges(near.id).find(c => status(c) === 'open')?.resident) : null;
+  // the resident the character can talk to swaps their ! or ? for the E prompt
+  const drawFolk = f => { person(f.x, f.y, RESIDENTS[f.rid], f.task ? t : t + f.x * 50, !!f.task); if (f.task && f.rid !== talking) (f.task === 'request' ? bubble : errandBubble)(f.x - 1, f.y - 13, t); };
+  folk.forEach(drawFolk);
   drawLife(t);
   if (musicPlaying() && state.done.market) musician(t);
+  drawPlayer(R, t);
+  // residents standing just south of the character are in front of it
+  folk.forEach(f => { if (f.y + 13 > player.y && f.y < player.y && Math.abs(f.x + 4 - player.x) < 10) drawFolk(f); });
+  // trees just south of the character stand in front of it
+  TREES.forEach(([x, y]) => { if (y + 20 > player.y && y < player.y && Math.abs(x + 8 - player.x) < 14) tree(x, y); });
+  if (near && near.act) drawPrompt(R, t);
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
     if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
   drawNight(t);
   if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover.split(':')[1]).slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
-  if (hover && PLOTS[hover]) { const p = PLOTS[hover]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  const outline = hover || (near?.kind === 'plot' ? near.id : null);
+  if (outline && PLOTS[outline]) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
   requestAnimationFrame(draw);
 }
 
@@ -403,7 +415,8 @@ function plotAt(ev) {
 // which challenge a click on a plot should open: the open one, else the last one solved
 function challengeForPlot(pid) { if (pid.includes(':')) return null; const cs = plotChallenges(pid); return cs.find(c => status(c) === 'open') || [...cs].reverse().find(c => state.done[c.id]) || null; }
 export function plotLabel(id) {
-  if (!id) return villageBuilt() ? 'The village is built! Residents with a <b>?</b> have pinned an errand to the Notice Board (the Errands tab).' : 'Hover over a lot to see what is happening. Residents with a <b>!</b> need your help.';
+  if (!id) return (villageBuilt() ? 'The village is built! Residents with a <b>?</b> have pinned an errand to the Notice Board.' : 'Residents with a <b>!</b> need your help.')
+    + ' Walk with <kbd>←↑↓→</kbd> or <kbd>WASD</kbd> (or click where to go), and press <kbd>E</kbd> when you are next to them.';
   if (id === 'mailbox' && unreadLetters().length) { const n = unreadLetters().length; return `📬 <b>You've got mail!</b> ${n} letter${n === 1 ? '' : 's'} waiting. Click the mailbox to read.`; }
   if (id.startsWith('exp:') || id.startsWith('fog:')) {
     const x = EXPANSIONS.find(e => e.id === id.slice(4)), n = solvedErrands();
@@ -434,10 +447,88 @@ export function initTown() {
   // browsers only play sound after a click, so music that was left on starts at the first click (unless that click is the music button)
   if (state.music) document.addEventListener('pointerdown', ev => { if (state.music && state.done.market && !ev.target.closest?.('#musicBtn')) { startMusic(); renderNightBtn(); } }, { once: true });
   renderNightBtn();
-  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = plotLabel(id); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) ? 'pointer' : 'default'; });
-  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = plotLabel(null); });
-  cv.addEventListener('click', ev => { const id = plotAt(ev); if (!id) return;
-    if (id === 'mailbox' && unreadLetters().length) { openLetters(); return; } const c = challengeForPlot(id); if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(id); });
+  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
+  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
+  // a click sends the character walking there; a click on a resident or a building also talks to them on arrival
+  cv.addEventListener('click', ev => {
+    const [x, y] = mapPoint(ev), rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
+    if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
+    if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
+    goTo(x, y);
+  });
+  initPlayerKeys(() => { const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
+}
+
+// ---------- The character: what blocks it, and what it can talk to (movement and drawing are in player.js) ----------
+const mapPoint = ev => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+/** Solid things, rebuilt (once a frame, and only when the town changed): built buildings, residents, tree trunks, the sea and misty land. */
+let solidCache = { sig: null, rects: [] };
+function refreshSolids() {
+  const waiting = waitingResidents(), sig = `${Object.keys(state.done).join()}|${cv.height}|${solvedErrands()}|${[...waiting].join()}`;
+  if (solidCache.sig === sig) return;
+  const rects = [[358, 128, 42, 116]];
+  // residents are solid too, so the character stops beside them instead of walking through
+  const shown = new Set();
+  for (const c of CHALLENGES) if (status(c) === 'open' && !shown.has(c.resident)) { shown.add(c.resident); const [sx, sy] = PLOTS[c.plot || c.id].stand; rects.push([sx + 1, sy + 10, 6, 4]); }
+  for (const rid of waiting) if (!shown.has(rid) && HOMES[rid]) rects.push([HOMES[rid][0] + 1, HOMES[rid][1] + 10, 6, 4]);
+  for (const [pid, p] of visiblePlots()) {
+    const m = mainOf(pid); if (!m || !state.done[m.id]) continue;
+    rects.push(p.small ? [p.x + 3, p.y + 10, 6, 12] : [p.x + 2, p.y, p.w - 4, p.h - 2]);
+  }
+  TREES.forEach(([x, y]) => rects.push([x + 5, y + 15, 6, 5]));
+  const n = stripsShown(EXPANSIONS, solvedErrands());
+  for (const x of EXPANSIONS) if (Math.floor(x.slot / 2) < n && !isOpenExp(x)) { const r = slotRect(x.slot); rects.push([r.x, r.y, r.w, r.h]); }
+  solidCache = { sig, rects };
+}
+function solidAt(x, y) {
+  if (x < 1 || x > W - 1 || y < 10 || y > cv.height - 1) return true;
+  return solidCache.rects.some(([rx, ry, rw, rh]) => x >= rx && x < rx + rw && y >= ry && y < ry + rh);
+}
+function goTo(x, y, then) {
+  // already there? then don't walk at all
+  if (then && Math.hypot(x - player.x, y - player.y) < 10) { player.path = null; then(); return; }
+  if (!walkTo(x, y, solidAt, Math.ceil(W / 4), Math.ceil(cv.height / 4), then)) $('#hoverLabel').innerHTML = "Hmm, there's no way to get there from here.";
+}
+/** Send the character to a challenge's building and open it there (the Requests list uses this). */
+export function goToChallenge(c) {
+  const pid = c.plot || c.id, [sx, sy] = PLOTS[pid].stand;
+  cv.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  goTo(sx + 4, sy + 15, () => openChallenge(c.id));
+}
+const errandItem = rid => openItems().find(i => errandById(i.errand)?.resident === rid);
+function errandResidentAt(ev) {
+  const [x, y] = mapPoint(ev), waiting = waitingResidents();
+  return Object.keys(HOMES).find(rid => { const [hx, hy] = HOMES[rid]; return waiting.has(rid) && x >= hx - 3 && x <= hx + 11 && y >= hy - 14 && y <= hy + 15 && !CHALLENGES.some(c => c.resident === rid && status(c) === 'open'); }) || null;
+}
+/** The closest thing within reach of the character: a building (or its resident) or a resident with an errand. */
+let nearKey = null;
+function nearby() {
+  const px = player.x, py = player.y; let best = null;
+  const consider = (d, n) => { if (d < 14 && (!best || d < best.d)) best = { ...n, d }; };
+  const shown = new Set(CHALLENGES.filter(c => status(c) === 'open').map(c => c.resident)), waiting = waitingResidents();
+  for (const rid of waiting) {
+    if (shown.has(rid) || !HOMES[rid]) continue;
+    const [hx, hy] = HOMES[rid]; consider(Math.hypot(px - hx - 4, py - hy - 13), { kind: 'errand', rid, key: 'errand:' + rid, act: true });
+  }
+  for (const [id, p] of visiblePlots()) {
+    const [sx, sy] = p.stand, toStand = Math.hypot(px - sx - 4, py - sy - 13);
+    const toWall = Math.hypot(Math.max(p.x - px, 0, px - p.x - p.w), Math.max(p.y - py, 0, py - p.y - p.h));
+    const act = !!challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length > 0);
+    consider(Math.min(toStand, toWall + 3), { kind: 'plot', id, key: id + (act ? '!' : ''), act });
+  }
+  return best;
+}
+function nearLabel(n) {
+  if (!n) return plotLabel(null);
+  if (n.kind === 'errand') return `<b>${RESIDENTS[n.rid].name}</b> has pinned an errand to the Notice Board. Press <kbd>E</kbd> to help.`;
+  return plotLabel(n.id).replace('Click to help!', 'Press <kbd>E</kbd> to help!').replace('click to revisit.', 'press <kbd>E</kbd> to revisit.').replace('Click the mailbox to read.', 'Press <kbd>E</kbd> to read.');
+}
+function interactWith(n) {
+  savePlayer();
+  if (n.kind === 'errand') { const i = errandItem(n.rid); if (i) openErrand(i); return; }
+  if (n.id === 'mailbox' && unreadLetters().length) { openLetters(); return; }
+  const c = challengeForPlot(n.id);
+  if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(n.id);
 }
 
 
