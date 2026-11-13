@@ -50,6 +50,7 @@ HS
 ghc --make -O0 -fno-omit-yields -fdefer-type-errors -XNoImplicitPrelude -w -hide-all-packages -package base -package containers -package htown-support -outputdir build -o htown Main.hs
 ./htown tests 2000000
 echo Wren | ./htown main
-./htown tests 2000000 | grep -q '"ok":true'
+# the first test falls back to `show` (Crate has no Eq), the second is a wrong answer
+test "$(./htown tests 2000000 | grep -c '"ok":true')" = 1
 cd / && rm -rf "$dir"
 echo "selftest ok"

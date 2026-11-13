@@ -6,7 +6,7 @@
 # file system, memory/CPU/process limits, and an unprivileged user for the player's code.
 FROM node:22-bookworm-slim AS node
 
-FROM haskell:9.10
+FROM haskell:9.10.3
 
 # Node runs the HTTP service. GHC compiles and runs the player's code.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
@@ -31,7 +31,7 @@ RUN cd server/haskell/support \
 
 # The inspector: type-checks a program with the GHC API and describes it as JSON.
 RUN mkdir -p bin \
- && ghc -O1 -package ghc -outputdir /tmp/inspect -o bin/htown-inspect server/haskell/Inspect.hs \
+ && ghc -O1 -package ghc -outputdir /tmp/inspect -rtsopts -o bin/htown-inspect server/haskell/Inspect.hs \
  && rm -rf /tmp/inspect
 
 # The sandbox user must be able to run all of it (so GHC can't live under /root).

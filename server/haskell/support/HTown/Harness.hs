@@ -75,11 +75,23 @@ noMain = hPutStrLn stderr "This program has no main."
 
 runTest :: Int -> (Test, Test) -> IO ()
 runTest limit (Test byEq, Test byShow) = do
-  r <- try (timeout limit (byEq >>= \o -> case o of NoEq -> byShow; _ -> pure o))
+  r <- try (timeout limit compared)
   emit $ case r of
-    Left (e :: SomeException) -> Failed Nothing (message e) -- stack or heap overflow
+    Left (e :: SomeException) -> Failed Nothing (message e) -- stack or heap overflow, a deferred type error
     Right Nothing -> Failed Nothing "@@timeout"
     Right (Just o) -> o
+  where
+    -- A missing Eq instance is a deferred type error. Depending on how GHC compiled the
+    -- test, it is thrown when `==` runs or as soon as the test starts: either way, fall
+    -- back to comparing with `show`.
+    compared = do
+      first <- try byEq
+      case first of
+        Left (e :: SomeException)
+          | isTypeError e -> byShow
+          | otherwise -> throwIO e
+        Right NoEq -> byShow
+        Right o -> pure o
 
 -- | Evaluate an expression for the Workshop and print what `show` gives.
 showValue :: Show a => a -> IO ()
