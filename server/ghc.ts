@@ -360,7 +360,8 @@ function parens(expr: string): string {
 }
 
 function harnessMain(mod: string, body: string): string {
-  return `{-# LANGUAGE ExtendedDefaultRules #-}\nmodule Main (main) where\nimport qualified HTown.Harness\nimport qualified ${mod}\nmain = ${body}\n`;
+  // `import Prelude` only so GHC's messages about this file name types plainly (Show, not ghc-internal:Show).
+  return `{-# LANGUAGE ExtendedDefaultRules #-}\nmodule Main (main) where\nimport Prelude\nimport qualified HTown.Harness\nimport qualified ${mod}\nmain = ${body}\n`;
 }
 
 /** Split output on the inspector's "@@htown-file N" lines. */

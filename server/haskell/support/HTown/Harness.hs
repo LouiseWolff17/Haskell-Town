@@ -109,7 +109,7 @@ runIO act = utf8Everywhere >> act >> pure ()
 
 showLimit, valueLimit :: Int
 showLimit = 2000
-valueLimit = 20000
+valueLimit = 5000
 
 -- | `show` a value, forcing at most showLimit characters of it.
 shown :: Show a => a -> IO String

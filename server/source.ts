@@ -261,7 +261,10 @@ export function buildModule(p: Program, spec: ModuleSpec): BuiltModule {
     out.push({ t: '', o: null });
     for (const decl of spec.append) for (const l of decl.split('\n')) out.push({ t: ' '.repeat(indent) + l, o: null });
   }
-  return { text: out.map(l => l.t).join('\n') + '\n', origLine: n => out[n - 1]?.o ?? null };
+  // GHC puts an error at the end of the file (an unclosed bracket, say) after the last line:
+  // that's the player's last line of code, unless we added declarations there.
+  const last = [...out].reverse().find(l => l.o !== null && l.t.trim())?.o ?? null;
+  return { text: out.map(l => l.t).join('\n') + '\n', origLine: n => (n <= out.length ? out[n - 1].o : spec.append?.length ? null : last) };
 }
 
 /** An expression from a test or the Workshop, made safe to put inside one declaration. */

@@ -41,8 +41,12 @@ export function parseMessages(output: string): GhcMessage[] {
       msgs[msgs.length - 1].lines.push(line);
     }
   }
-  // GHC quotes names as ‘x’, or as `x' when it can't print Unicode: use one style
-  return msgs.map(({ lines, ...m }) => ({ ...m, body: dedent(lines).replace(/`([^`'\n]*)'/g, '‘$1’') }));
+  // GHC quotes names as ‘x’, or as `x' when it can't print Unicode: use one style. Names
+  // that aren't in scope where the message comes from get their package: drop that.
+  return msgs.map(({ lines, ...m }) => ({
+    ...m,
+    body: dedent(lines).replace(/`([^`'\n]*)'/g, '‘$1’').replace(/\b[a-z][\w-]*-\d+(?:\.\d+)*:(?=[A-Z_a-z])/g, ''),
+  }));
 }
 
 function dedent(lines: string[]): string {
@@ -58,7 +62,7 @@ export const firstError = (msgs: GhcMessage[]) => msgs.find(m => m.severity === 
 /** ‘x’ and `x' → `x`, and drop the module names GHC sometimes puts on our own names. */
 export function tidy(s: string): string {
   return s
-    .replace(/[‘`]([^’'`\n]*)[’']/g, '`$1`')
+    .replace(/‘([^’]*)’/g, (_, x: string) => '`' + x.replace(/\s*\n\s*/g, ' ') + '`')
     .replace(/\b(?:Player(?:Sig|Expr|Run)?|HTown\.Prelude|HTown\.Harness)\./g, '')
     .replace(/\bGHC\.Internal\.[\w.]+\.(?=[\w(])/g, '')
     .replace(/htown(?:Sig|Expr|Eq\d+|Show\d+)'/g, 'the test');
@@ -66,9 +70,11 @@ export function tidy(s: string): string {
 
 /** The bullets of a GHC message: "• a\n  more\n• b" → ["a\nmore", "b"]. */
 function bullets(body: string): string[] {
-  if (!body.includes('•')) return [body];
-  return body.split(/^• |\n• /m).filter(b => b.trim()).map(b => b.replace(/\n  /g, '\n').trim());
+  if (!body.includes('•')) return [body.trim()];
+  return body.split(/^\s*• /m).filter(b => b.trim()).map(b => b.replace(/\n  /g, '\n').trim());
 }
+/** A type GHC wrapped over several lines, on one line. */
+const oneLine = (t: string) => t.replace(/\s+/g, ' ').trim();
 
 const article = (t: string) => (/^[AEIOU]/.test(t) ? 'an' : 'a');
 const isNumberType = (t: string) => /^(Int|Integer|Double|Float|Word|Rational)$/.test(t);
@@ -165,7 +171,7 @@ export function explainCompile(body: string): { message: string; kind: Diagnosti
       mismatchTip(expected, found, all) ? 'Tip: ' + mismatchTip(expected, found, all) : null);
   }
   if ((m = main.match(/^No instance for [‘(]+([^’)]+)[’)]+\s+arising from (?:a use of ‘([^’]+)’|the literal ‘([^’]+)’|(.*))/s))) {
-    const [cls, ...rest] = m[1].trim().split(/\s+/);
+    const [cls, ...rest] = oneLine(m[1]).split(' ');
     const type = rest.join(' ').replace(/^\((.*)\)$/, '$1');
     if (m[3] !== undefined || cls === 'Num' || cls === 'Fractional') {
       return out('type', `A number is used here where ${article(type)} \`${type}\` is needed.`,
@@ -178,7 +184,7 @@ export function explainCompile(body: string): { message: string; kind: Diagnosti
         : `Tip: Write \`instance ${cls} ${type.split(' ')[0]} where …\` with the methods it needs.`);
   }
   if ((m = main.match(/^Ambiguous type variable ‘([^’]+)’/))) {
-    return out('type', "Haskell can't work out which type to use here.", 'Tip: Add a type annotation, like `(read s :: Int)`.');
+    return out('type', "Haskell can't work out which type to use here.", 'Tip: Say which type you mean with an annotation, like `(read s :: Int)` or `(0 :: Int)`, or give the function a type signature.');
   }
   if ((m = main.match(/^Occurs check: cannot construct the infinite type: (.+)/))) {
     return out('type', `The types here would have to be infinite (\`${m[1].trim()}\`), so something doesn't fit.`,
@@ -192,6 +198,14 @@ export function explainCompile(body: string): { message: string; kind: Diagnosti
   }
   if ((m = main.match(/^Expecting (\w+) more arguments? to ‘([^’]+)’/))) {
     return out('type', `\`${m[2]}\` needs a type argument here, like \`${m[2]} Int\`.`);
+  }
+  if ((m = main.match(/^Expected kind ‘([^’]+)’, but ‘([^’]+)’ has kind ‘([^’]+)’/s))) {
+    const [want, name, has] = [oneLine(m[1]), oneLine(m[2]), oneLine(m[3])];
+    if (want === '* -> *' && has === '*') {
+      return out('type', `\`${name}\` doesn't take a type argument, but it needs one here (like \`Maybe\` in \`Maybe Int\`).`,
+        `Tip: For an instance like \`Functor ${name}\`, give the type a parameter: \`data ${name} a = …\`.`);
+    }
+    return out('type', `\`${name}\` is the wrong kind of type here: it has kind \`${has}\`, but this needs \`${want}\`.`);
   }
   if ((m = main.match(/^Couldn't match kind/))) return out('type', firstLine(main));
   return out('type', firstLine(main));
@@ -237,7 +251,7 @@ export function explainRuntime(text: string, program = true): { message: string;
   if (/Prelude\.!!: negative index/.test(t)) return runtime('`!!` needs an index of 0 or more.');
   if (/^Prelude\.undefined/.test(t)) return runtime("Reached `undefined` — this part of the function hasn't been written yet. Replace undefined with your own code!");
   if ((m = t.match(/Non-exhaustive patterns in function (\S+)/))) {
-    return runtime(tidy(`None of the equations for \`${m[1].replace(/\.$/, '')}\` match the input. Is there a case you haven't covered yet, like the empty list \`[]\`?`));
+    return runtime(tidy(`None of the equations for \`${m[1].replace(/\.$/, '')}\` match this input. Is there a case you haven't covered yet?\nTip: A last equation with \`_\` (like \`f _ = …\`) catches everything else.`));
   }
   if ((m = t.match(/Non-exhaustive guards in function (\S+)/))) {
     return runtime(tidy(`None of the guards in \`${m[1]}\` were True. Tip: end the guards with \`| otherwise = …\`.`));

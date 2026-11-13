@@ -1,4 +1,5 @@
 // TEMPORARY: print what the service answers for some typical mistakes.
+export {};
 const url = process.argv[2] ?? 'http://localhost:8080';
 const post = async (path: string, body: unknown) => {
   const t = Date.now();
@@ -29,4 +30,7 @@ await post('/evaluate', { source: 'data T = A | B deriving Show\n', expr: '[A ..
 await post('/check', { challengeId: 'mailbox', source: 'countLetters :: [String] -> Int\ncountLetters letters = length letters + 2 * "x"\n' });
 await post('/compile', { source: 'module Main (main) where\nimport Data.List (sortBy)\nmain = print (sortBy compare [3, 1, 2])\nsort = 1\n' });
 await post('/check', { challengeId: 'harbour', source: 'data Crate a = Empty | Crate a deriving (Show, Functor)\n' });
-await post('/run', { source: 'main = let loop n = loop (n + 1) in print (loop 0)\n', input: '' });
+await post('/run', { source: 'loop :: Int -> Int\nloop n = loop (n + 1)\nmain = print (loop 0)\n', input: '' });
+await post('/evaluate', { source: 'data Crate a = Crate a deriving Show\n', expr: 'Crate (+ 1)', input: '' });
+await post('/check', { challengeId: 'library', source: 'totalPages :: [Int] -> Int\ntotalPages xs = go xs\n  where\n    go [] = 0\n    go (p:ps) = p + go ps\n' });
+await post('/check', { challengeId: 'nameTag', source: 'data Pupil = Pupil { pupilName :: String, classNo :: Int } deriving Show\nnameTag :: Pupil -> String\nnameTag p = pupilName p ++ " · klasse " ++ show (classNo p)\n' });

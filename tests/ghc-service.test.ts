@@ -112,3 +112,25 @@ describe("GHC's messages", () => {
     assert.equal(prettyShow('["caf\\233\\&1", "a\\nb"]'), '["café1", "a\\nb"]');
   });
 });
+
+describe('more of GHC\'s messages', () => {
+  test("names GHC qualifies with their package lose the package, and the game's own apostrophes survive", () => {
+    const [m] = parseMessages("Main.hs:6:8: error: [GHC-39999]\n    • No instance for ‘ghc-internal-9.1003.0:Show\n                         (a0 -> a0)’\n        arising from a use of ‘HTown.Harness.showValue’\n");
+    assert.equal(compileDiagnostic(m, 'typecheck', () => null).message, "A function can't be shown.\nTip: Is the function missing an argument?");
+    const [s] = parseMessages("Player.hs:3:1: error: [GHC-44360]\n    • No instance for ‘Show Grade’ arising from a use of ‘print’\n");
+    assert.match(compileDiagnostic(s, 'typecheck', n => n).message, /^Line 3: `Grade` has no `Show` instance, so it can't be shown\./);
+  });
+
+  test('a type without a parameter used as a Functor', () => {
+    const [m] = parseMessages('Player.hs:4:18: error: [GHC-83865]\n    • Expected kind ‘* -> *’, but ‘Crate’ has kind ‘*’\n    • In the first argument of ‘Functor’, namely ‘Crate’\n');
+    assert.match(compileDiagnostic(m, 'typecheck', n => n - 2).message, /^Line 2: `Crate` doesn't take a type argument/);
+  });
+
+  test('an error at the very end of the file points at the last line of code', () => {
+    const m = buildModule(program('add :: Int -> Int -> Int\nadd x y = (x + y\n\n'), { name: 'Player', hide: NO_HIDING });
+    const lines = m.text.split('\n').length;
+    assert.equal(m.origLine(lines + 1), 2);
+    const withTests = buildModule(program('x = 1\n'), { name: 'PlayerRun', hide: NO_HIDING, append: ['t = 2'] });
+    assert.equal(withTests.origLine(99), null);
+  });
+});
