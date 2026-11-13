@@ -1,0 +1,7 @@
+# Only server/, src/content, src/runner/types.ts and package.json go into the GHC service image.
+node_modules
+dist
+.git
+.devenv*
+playwright-report
+test-results

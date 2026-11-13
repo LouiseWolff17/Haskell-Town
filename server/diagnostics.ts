@@ -261,7 +261,7 @@ export function explainRuntime(text: string, program = true): { message: string;
   if ((m = t.match(/Irrefutable pattern failed for pattern (.+)/))) return runtime(tidy(`The pattern \`${m[1].trim()}\` didn't match.`));
   if (/divide by zero/.test(t)) return runtime('Division by zero!');
   if (/^stack overflow/.test(t)) return loop('Your function kept calling itself and never reached an end. Check that there is a base case (like f [] = …) and that each recursive call works on a smaller input.');
-  if (/heap overflow/.test(t)) return loop('Your program used more memory than Haskell Town allows. Is it building an endless list, or keeping far more than it needs?');
+  if (/heap overflow|Heap exhausted/i.test(t)) return loop('Your program used more memory than Haskell Town allows. Is it building an endless list, or keeping far more than it needs?');
   if (/<<loop>>/.test(t)) return loop('A value here is defined in terms of itself, so it can never be worked out.');
   if (/Prelude\.read: no parse/.test(t)) return runtime("`read` couldn't turn the text into a value of the type you asked for.\nTip: Check the input, and say which type you want, like `read s :: Int`.");
   if (/hGetLine: end of file|getLine: end of file|hGetContents.*end of file/.test(t)) return runtime('getLine found no more input — the program asked for more lines than were typed in.');

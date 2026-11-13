@@ -105,6 +105,7 @@ describe("GHC's messages", () => {
     assert.equal(explainRuntime('htown: boom\nCallStack (from HasCallStack):\n  error, called at PlayerRun.hs:2:11 in main:PlayerRun').message, 'error: boom');
     assert.equal(explainRuntime('@@timeout', false).kind, 'loop');
     assert.equal(explainRuntime('stack overflow', false).kind, 'loop');
+    assert.equal(explainRuntime('htown-run: Heap exhausted;\nhtown-run: Current maximum heap size is 268435456 bytes (256 MB).').kind, 'loop');
   });
 
   test('shown strings keep their non-ASCII characters', () => {
