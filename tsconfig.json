@@ -17,5 +17,5 @@
     "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "tests", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "server", "tests", "e2e", "vite.config.ts", "playwright.config.ts"]
 }

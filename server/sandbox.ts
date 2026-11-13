@@ -104,7 +104,9 @@ export function run(sb: SandboxConfig, cmd: string, args: string[], o: RunOption
 
 /** A fresh directory for one request. The sandbox user can write in it; nobody else can see it. */
 export class JobDir {
-  private constructor(readonly path: string, private readonly sb: SandboxConfig) {}
+  readonly path: string;
+  private readonly sb: SandboxConfig;
+  private constructor(path: string, sb: SandboxConfig) { this.path = path; this.sb = sb; }
 
   static async create(sb: SandboxConfig): Promise<JobDir> {
     const parent = join(sb.tmpDir, 'haskell-town-jobs');
