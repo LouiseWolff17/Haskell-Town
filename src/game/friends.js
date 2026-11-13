@@ -1,7 +1,7 @@
 // The Friends panel, left of the town map: each resident's hearts, their letters from Wren's
 // mailbox, gifts, and the change their friendship made to the town (src/content/friendship.ts).
 import { FRIENDSHIP, HEARTS, RESIDENTS } from '../content/index.ts';
-import { $, save, state } from './state.js';
+import { $, save, state } from './state.ts';
 import { portrait } from './town.js';
 import { heartRow, hearts, unreadLetters } from './errands.js';
 

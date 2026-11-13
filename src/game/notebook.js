@@ -2,8 +2,8 @@
 // All Haskell goes through the runner; this file only turns its results into HTML.
 import { CHALLENGES, EXPANSIONS, FRIENDSHIP, HEARTS, LIFE, RESIDENTS, WORKSHOP_EXAMPLES } from '../content/index.ts';
 import { createRunner } from '../runner/index.ts';
-import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.js';
-import { codeBlock, highlight } from './highlight.js';
+import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.ts';
+import { codeBlock, highlight } from './highlight.ts';
 import { buildAnim, plotLabel, portrait } from './town.js';
 import { notSupportedHTML, renderSidebar } from './sidebar.js';
 import { ERRANDS_BY_TOPIC, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, villageBuilt, whenText } from './errands.js';

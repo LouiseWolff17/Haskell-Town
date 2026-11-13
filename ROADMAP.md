@@ -24,7 +24,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Commit `package-lock.json` and switch CI to `npm ci`.
 - [x] Run player code in a **Web Worker**, with a Stop button and a 10-second timeout, so slow code can't freeze the page.
 - [x] Split `src/haskell/interpreter.js` into lexer / parser / types / typecheck / evaluator modules, sharing their mutable state (let-level, fixities, the current data context) through one explicit context object (`src/haskell/context.js`).
-- [ ] Move `src/game/*.js` to TypeScript, one file at a time (`state` and `highlight` first).
+- [ ] Move `src/game/*.js` to TypeScript, one file at a time. Done: `state`, `highlight`. Next: `music`, `player`, `friends`, `sidebar`, `journal`, `errands`, `devtools`, `notebook`, `town`.
 - [ ] Browser tests (Playwright) for the main flows: solve a challenge, build, Workshop.
 
 ### Haskell features

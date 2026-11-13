@@ -1,6 +1,6 @@
 // Dev-only shortcuts for skipping through the game. Loaded from main.ts only under `npm run dev`.
 import { CHALLENGES, EXPANSIONS, HEARTS, LIFE } from '../content/index.ts';
-import { save, state, status } from './state.js';
+import { save, state, status } from './state.ts';
 import { build, queueFriend, queueLand, queueLife, revealLand } from './notebook.js';
 import { ERRANDS_BY_TOPIC, errandById, hearts, practised, reviews, today } from './errands.js';
 import { completeItem, isOpen, nextDueDay, showAnswer } from './schedule.ts';

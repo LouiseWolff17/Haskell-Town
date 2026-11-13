@@ -2,8 +2,8 @@
 // old topics, solved from memory and spaced out over days. The scheduling rules are in schedule.ts.
 import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS, LEGACY_TOPICS, MAX_HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
 import { heartsByResident, nextExpansion, topicsPractised } from './rewards.ts';
-import { $, byId, esc, save, state } from './state.js';
-import { codeBlock } from './highlight.js';
+import { $, byId, esc, save, state } from './state.ts';
+import { codeBlock } from './highlight.ts';
 import { portrait } from './town.js';
 import { openErrand } from './notebook.js';
 import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, revisitSuggestions, startReviews, syncTopics } from './schedule.ts';

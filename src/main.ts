@@ -1,6 +1,6 @@
 // Entry point: load the styles, wire up the game, show the welcome screen once.
 import './styles.css';
-import { $, save, state } from './game/state.js';
+import { $, save, state } from './game/state.ts';
 import { initTown, plotLabel } from './game/town.js';
 import { initSidebar, renderSidebar } from './game/sidebar.js';
 import { initNotebook } from './game/notebook.js';

@@ -3,8 +3,8 @@
 // their letters live in their own panel left of the map: friends.js.) No scores or
 // hint counts: the Journal shows what you made, not how much help you used.
 import { CHALLENGES, ERRANDS, EXPANSIONS, FRIENDSHIP, HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
-import { $, esc, state } from './state.js';
-import { codeBlock } from './highlight.js';
+import { $, esc, state } from './state.ts';
+import { codeBlock } from './highlight.ts';
 import { hearts, villageBuilt } from './errands.js';
 import { errandStamps, openedOn } from './rewards.ts';
 

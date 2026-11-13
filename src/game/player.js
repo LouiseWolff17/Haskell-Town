@@ -1,6 +1,6 @@
 // The player's character: walks around the town with the arrow keys / WASD, or to wherever the map is clicked.
 // town.js tells it what is solid (solidAt) and what is close enough to talk to; this file only moves and draws it.
-import { save, state } from './state.js';
+import { save, state } from './state.ts';
 
 const SPEED = 55;          // map pixels per second
 const CELL = 4;            // the pathfinding grid, in map pixels

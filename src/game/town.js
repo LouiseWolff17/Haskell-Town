@@ -1,6 +1,6 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
 import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
-import { $, byId, save, state, status } from './state.js';
+import { $, byId, save, state, status } from './state.ts';
 import { openChallenge, openErrand } from './notebook.js';
 import { errandById, hearts, openItems, practised, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.js';
 import { drawPlayer, drawPrompt, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.js';

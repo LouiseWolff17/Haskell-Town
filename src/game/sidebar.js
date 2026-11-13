@@ -1,7 +1,7 @@
 // The sidebar: request list, learning library and learning-assistance buttons.
 import { CHALLENGES, RESIDENTS, COMING_SOON, NOT_SUPPORTED } from '../content/index.ts';
-import { $, MODES, esc, state, status } from './state.js';
-import { codeBlock } from './highlight.js';
+import { $, MODES, esc, state, status } from './state.ts';
+import { codeBlock } from './highlight.ts';
 import { goToChallenge, portrait, renderNightBtn } from './town.js';
 import { setMode } from './notebook.js';
 import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from './errands.js';
