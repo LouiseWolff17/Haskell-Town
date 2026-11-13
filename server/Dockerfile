@@ -6,7 +6,7 @@
 # file system, memory/CPU/process limits, and an unprivileged user for the player's code.
 FROM node:22-bookworm-slim AS node
 
-FROM haskell:9.10-slim
+FROM haskell:9.10
 
 # Node runs the HTTP service. GHC compiles and runs the player's code.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
