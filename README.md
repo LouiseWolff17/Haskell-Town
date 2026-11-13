@@ -32,8 +32,11 @@ npm run dev        # http://localhost:5173
 |---|---|
 | `npm run dev` | Dev server with hot reload |
 | `npm test` | Content checks + runner contract tests (Node's built-in test runner) |
+| `npm run test:e2e` | Browser tests with Playwright: solving a challenge, building, the Workshop |
 | `npm run typecheck` | TypeScript type check |
 | `npm run build` | Production build into `dist/` |
+
+The browser tests build the game and serve it with `vite preview`, so they test the same bundle (Web Worker included) that goes to GitHub Pages. The devenv shell provides the browsers. Outside it, run `npx playwright install --with-deps chromium` once. `npx playwright test --ui` opens Playwright's test UI, and `npx playwright show-trace test-results/…/trace.zip` replays a failed test step by step.
 
 ## How the code is organised
 
@@ -78,6 +81,9 @@ tests/
   worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
   schedule.test.ts         Notice Board scheduling: boxes, gaps, retries, revisit suggestions
   rewards.test.ts          new land, Journal stamps and hearts
+e2e/                     browser tests (Playwright), run against the production build
+  challenge.spec.ts        welcome screen, running tests, hints, building, saved progress
+  workshop.spec.ts         type-checking, expressions, main with getLine, Stop
 docs/                   design notes and the runner API
 ```
 

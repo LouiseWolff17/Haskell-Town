@@ -25,7 +25,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Run player code in a **Web Worker**, with a Stop button and a 10-second timeout, so slow code can't freeze the page.
 - [x] Split `src/haskell/interpreter.js` into lexer / parser / types / typecheck / evaluator modules, sharing their mutable state (let-level, fixities, the current data context) through one explicit context object (`src/haskell/context.js`).
 - [x] Move `src/game/*.js` to TypeScript, one file at a time. (`src/haskell` is still JavaScript.)
-- [ ] Browser tests (Playwright) for the main flows: solve a challenge, build, Workshop.
+- [x] Browser tests (Playwright) for the main flows: solve a challenge, build, Workshop (`e2e/`).
 
 ### Haskell features
 - [ ] Fuller laziness: lazy function arguments and data fields (`const 1 undefined`, lazy trees).
