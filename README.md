@@ -60,18 +60,18 @@ src/
     context.js          the state the stages share (let-level, fixities, the program's data context)
     lexer.js  parser.js  types.js  typecheck.js  evaluator.js  errors.js   the stages
   game/                 the UI
-    state.js            saved progress (localStorage) + helpers
-    town.js             the pixel-art map
-    player.js           the player's character: keyboard and click-to-walk movement, pathfinding, sprite
-    sidebar.js          request list, learning library
-    errands.js          the Notice Board tab
+    state.ts            saved progress (localStorage) + helpers
+    town.ts             the pixel-art map
+    player.ts           the player's character: keyboard and click-to-walk movement, pathfinding, sprite
+    sidebar.ts          request list, learning library
+    errands.ts          the Notice Board tab
     schedule.ts         when errands come back (pure functions, tested)
     rewards.ts          map growth, Journal stamps, friendship hearts (pure functions, tested)
-    journal.js          the Journal tab and the printable booklet
-    friends.js          the Friends panel left of the map (hearts, letters, gifts)
-    music.js            market music (Web Audio, no sound files)
-    notebook.js         challenge window and Workshop
-    highlight.js        syntax highlighting
+    journal.ts          the Journal tab and the printable booklet
+    friends.ts          the Friends panel left of the map (hearts, letters, gifts)
+    music.ts            market music (Web Audio, no sound files)
+    notebook.ts         challenge window and Workshop
+    highlight.ts        syntax highlighting
 tests/
   content.test.ts          ids, unlock order, hints… all fit together
   runner-contract.test.ts  every reference solution passes; wrong answers don't
@@ -88,7 +88,7 @@ The UI never calls the interpreter directly. Player code runs in a background We
 1. Add an object to the right file in `src/content/challenges/`, or add a new file and list it in `challenges/index.ts`. `src/content/types.ts` documents every field.
 2. Give it a `solution`, and tests that the starters fail.
 3. Run `npm test`. It checks that your solution passes, that no starter passes, and that the unlock order still works.
-4. A new building also needs a plot and a drawing in `src/game/town.js` (`PLOTS` and the draw functions).
+4. A new building also needs a plot and a drawing in `src/game/town.ts` (`PLOTS` and the draw functions).
 
 ## Adding an errand
 
@@ -96,7 +96,7 @@ Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add 
 
 ## Adding new land
 
-Add an entry to `EXPANSIONS` in `src/content/expansions.ts` with the next `slot` and a larger `needs` (total errands solved), and a drawing in `EXPANSION_ART` in `src/game/town.js`. Slots fill a strip of land west then east of the path; the map grows by one strip whenever a new one is needed, and the unopened half shows as mist. In dev mode, the DEV panel's **Solve errands** and **+1 day** buttons get you there quickly.
+Add an entry to `EXPANSIONS` in `src/content/expansions.ts` with the next `slot` and a larger `needs` (total errands solved), and a drawing in `EXPANSION_ART` in `src/game/town.ts`. Slots fill a strip of land west then east of the path; the map grows by one strip whenever a new one is needed, and the unopened half shows as mist. In dev mode, the DEV panel's **Solve errands** and **+1 day** buttons get you there quickly.
 
 ## The DEV panel
 

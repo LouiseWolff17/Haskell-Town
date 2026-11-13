@@ -140,7 +140,7 @@ export interface Friendship {
   letter: string;
   /** ♥ 2: a keepsake for the Journal. */
   gift: { icon: string; name: string; note: string };
-  /** ♥ 4: a lasting change to their building on the map (drawn in town.js FRIEND_ART). */
+  /** ♥ 4: a lasting change to their building on the map (drawn in town.ts FRIEND_ART). */
   change: string;
 }
 

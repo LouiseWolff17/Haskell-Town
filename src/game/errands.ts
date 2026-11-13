@@ -4,29 +4,31 @@ import { CHALLENGES, ERRANDS, EXPANSIONS, HEARTS, LEGACY_TOPICS, MAX_HEARTS, REV
 import { heartsByResident, nextExpansion, topicsPractised } from './rewards.ts';
 import { $, byId, esc, save, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
-import { portrait } from './town.js';
-import { openErrand } from './notebook.js';
+import { portrait } from './town.ts';
+import { openErrand } from './notebook.ts';
+import type { Errand, ReviewTopic } from '../content/index.ts';
+import type { Confidence, DayItem, LogEntry, Outcome, ReviewState, Revisit } from './schedule.ts';
 import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, revisitSuggestions, startReviews, syncTopics } from './schedule.ts';
 
-export const errandById = id => ERRANDS.find(e => e.id === id);
-export const topicById = id => REVIEW_TOPICS.find(t => t.id === id);
-export const ERRANDS_BY_TOPIC = Object.fromEntries(REVIEW_TOPICS.map(t => [t.id, ERRANDS.filter(e => e.topic === t.id).map(e => e.id)]));
+export const errandById = (id: string): Errand | undefined => ERRANDS.find(e => e.id === id);
+export const topicById = (id: string): ReviewTopic | undefined => REVIEW_TOPICS.find(t => t.id === id);
+export const ERRANDS_BY_TOPIC: Record<string, string[]> = Object.fromEntries(REVIEW_TOPICS.map(t => [t.id, ERRANDS.filter(e => e.topic === t.id).map(e => e.id)]));
 
 /** Today's day number. The dev tools can move the clock forward with state.devDays. */
-export const today = () => dayNumber(new Date()) + (state.devDays || 0);
-export const villageBuilt = () => CHALLENGES.every(c => state.done[c.id]);
+export const today = (): number => dayNumber(new Date()) + (state.devDays || 0);
+export const villageBuilt = (): boolean => CHALLENGES.every(c => state.done[c.id]);
 /** Errands solved so far, in any way. New land opens as this grows (src/content/expansions.ts). */
-export const solvedErrands = () => state.reviews?.log.length || 0;
+export const solvedErrands = (): number => state.reviews?.log.length || 0;
 /** Friendship hearts per resident, from the errands of theirs you've solved. */
-export const hearts = (log = state.reviews?.log || []) => heartsByResident(log, id => errandById(id)?.resident, MAX_HEARTS);
+export const hearts = (log: LogEntry[] = state.reviews?.log || []): Record<string, number> => heartsByResident(log, id => errandById(id)?.resident, MAX_HEARTS);
 /** Residents whose letter has arrived but hasn't been opened yet. */
-export const unreadLetters = () => Object.entries(hearts()).filter(([rid, h]) => h >= HEARTS.letter && !state.lettersRead?.[rid]).map(([rid]) => rid);
+export const unreadLetters = (): string[] => Object.entries(hearts()).filter(([rid, h]) => h >= HEARTS.letter && !state.lettersRead?.[rid]).map(([rid]) => rid);
 /** Topics with at least one solved errand: each brings a bit of life to the map (src/content/life.ts). */
-export const practised = (log = state.reviews?.log || []) => topicsPractised(log, LEGACY_TOPICS);
-export const heartRow = n => '♥'.repeat(n) + '♡'.repeat(Math.max(0, MAX_HEARTS - n));
+export const practised = (log: LogEntry[] = state.reviews?.log || []): Set<string> => topicsPractised(log, LEGACY_TOPICS);
+export const heartRow = (n: number): string => '♥'.repeat(n) + '♡'.repeat(Math.max(0, MAX_HEARTS - n));
 
 /** The review state, started when the village is finished, with today's errands planned. Null before that. */
-export function reviews() {
+export function reviews(): ReviewState | null {
   if (!villageBuilt() && !state.reviews) return null;
   let changed = false;
   if (!state.reviews) { state.reviews = startReviews(REVIEW_TOPICS.map(t => t.id), today()); changed = true; }
@@ -35,16 +37,16 @@ export function reviews() {
   if (changed) save();
   return state.reviews;
 }
-export const openItems = () => (reviews()?.day.items || []).filter(isOpen);
+export const openItems = (): DayItem[] => (reviews()?.day?.items || []).filter(isOpen);
 /** Residents with an errand waiting today (drawn with a ? on the map). */
-export const waitingResidents = () => new Set(openItems().map(i => errandById(i.errand).resident));
+export const waitingResidents = (): Set<string> => new Set(openItems().map(i => errandById(i.errand)!.resident));
 
 /** Topics worth a second look in the Library, from recent lapses and over-confidence on the Notice Board. */
-export const revisits = () => { const rs = reviews(); return rs ? revisitSuggestions(rs.log, REVIEW_TOPICS.map(t => t.id)) : []; };
-const times = n => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
+export const revisits = (): Revisit[] => { const rs = reviews(); return rs ? revisitSuggestions(rs.log, REVIEW_TOPICS.map(t => t.id)) : []; };
+const times = (n: number): string => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
 /** Why a topic is suggested, in a few words. */
-export function revisitReason(r) {
-  const parts = [];
+export function revisitReason(r: Revisit): string {
+  const parts: string[] = [];
   if (r.relearned) parts.push(`you needed to see the answer ${times(r.relearned)}`);
   if (r.overconfident) parts.push(`you felt sure ${r.overconfident === 1 ? 'but it' : `${times(r.overconfident)}, but it`} didn't pass first time`);
   else if (r.effortful) parts.push(`it took more than one try${r.effortful > 1 ? ` ${times(r.effortful)}` : ''}`);
@@ -52,25 +54,25 @@ export function revisitReason(r) {
   return s[0].toUpperCase() + s.slice(1) + '.';
 }
 /** Switch to the Library tab and bring a topic's cards into view. */
-export function showInLibrary(topicId) {
-  document.querySelector('.tabs button[data-tab=library]').click();
-  const cards = topicById(topicId).from.map(id => document.getElementById('lib-' + id)).filter(Boolean);
+export function showInLibrary(topicId: string): void {
+  $('.tabs button[data-tab=library]').click();
+  const cards = (topicById(topicId)?.from ?? []).map(id => document.getElementById('lib-' + id)).filter(c => c !== null);
   if (!cards.length) return;
   cards[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
   for (const c of cards) { c.classList.remove('lib-flash'); void c.offsetWidth; c.classList.add('lib-flash'); }
 }
 
-export function whenText(day) {
+export function whenText(day: number): string {
   const d = day - today();
   return d <= 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`;
 }
-const OUTCOME = {
+const OUTCOME: Record<Outcome, { chip: string; note: string }> = {
   recalled: { chip: 'Done ✓', note: 'from memory, first try' },
   effortful: { chip: 'Done ✓', note: 'with some effort' },
   relearned: { chip: 'Done ✓', note: 'relearned' },
 };
 
-export function renderBoard() {
+export function renderBoard(): void {
   const el = $('#errands'); if (!el) return;
   const tab = document.querySelector('.tabs button[data-tab=errands]');
   const rs = reviews();
@@ -82,7 +84,7 @@ export function renderBoard() {
       <p class="board-prog">${n} of ${CHALLENGES.length} requests done</p></div>`;
     return;
   }
-  const items = rs.day.items, open = items.filter(isOpen);
+  const items = rs.day?.items ?? [], open = items.filter(isOpen);
   if (tab) tab.innerHTML = `Errands${open.length ? ` <span class="tab-badge">${open.length}</span>` : ''}`;
 
   let html = `<p class="lib-intro">${open.length
@@ -108,13 +110,13 @@ export function renderBoard() {
   }
   html += `</ul>`;
   const rv = revisits();
-  if (rv.length) html += `<p class="board-small board-revisit">Worth a second look in the Library: ${rv.map(r => `<button class="linkbtn" data-revisit="${r.topic}">${esc(topicById(r.topic).title)}</button>`).join(', ')}.</p>`;
+  if (rv.length) html += `<p class="board-small board-revisit">Worth a second look in the Library: ${rv.map(r => `<button class="linkbtn" data-revisit="${r.topic}">${esc(topicById(r.topic)?.title)}</button>`).join(', ')}.</p>`;
 
   // calibration: did confidence match results?
   const cal = calibration(rs.log), rated = Object.values(cal).reduce((a, b) => a + b.total, 0);
   if (rated >= 3) {
-    const label = { sure: 'Sure', fairly: 'Fairly sure', unsure: 'Not sure' };
-    html += `<h4 class="board-h">Were you as sure as you thought?</h4><ul class="cal-list">${['sure', 'fairly', 'unsure'].filter(k => cal[k].total).map(k =>
+    const label: Record<Confidence, string> = { sure: 'Sure', fairly: 'Fairly sure', unsure: 'Not sure' };
+    html += `<h4 class="board-h">Were you as sure as you thought?</h4><ul class="cal-list">${(['sure', 'fairly', 'unsure'] as const).filter(k => cal[k].total).map(k =>
       `<li><span>${label[k]}</span><span class="cal-bar"><i style="width:${Math.round(cal[k].firstTry / cal[k].total * 100)}%"></i></span><span>${cal[k].firstTry} of ${cal[k].total} right first time</span></li>`).join('')}</ul>
       <p class="board-small">Most people feel surer than their results show, especially right after reading something. If your “Sure” bar isn't full, that's worth knowing.</p>`;
   }
@@ -128,15 +130,15 @@ export function renderBoard() {
     <p class="board-small">Based on Carpenter, Pan &amp; Butler (2022), “The science of effective learning with spacing and retrieval practice”, <i>Nature Reviews Psychology</i> 1, 496–511.</p>
   </details>`;
   el.innerHTML = html;
-  el.querySelectorAll('[data-revisit]').forEach(b => b.onclick = () => showInLibrary(b.dataset.revisit));
+  el.querySelectorAll<HTMLElement>('[data-revisit]').forEach(b => b.onclick = () => showInLibrary(b.dataset.revisit!));
 
-  const list = el.querySelector('.errand-list');
+  const list = el.querySelector('.errand-list')!;
   items.forEach((item, i) => {
-    const e = errandById(item.errand), t = topicById(item.topic), r = RESIDENTS[e.resident];
+    const e = errandById(item.errand)!, t = topicById(item.topic)!, r = RESIDENTS[e.resident];
     const s = item.outcome ? 'done' : item.sawAnswer ? 'seen' : 'open';
-    const chip = s === 'done' ? OUTCOME[item.outcome].chip : s === 'seen' ? 'Answer seen' : item.retry ? 'Try again' : 'To do';
+    const chip = s === 'done' ? OUTCOME[item.outcome!].chip : s === 'seen' ? 'Answer seen' : item.retry ? 'Try again' : 'To do';
     const b = document.createElement('button'); b.className = `req req-${s === 'open' ? 'open' : 'done'}`;
-    b.innerHTML = `<div class="req-body"><div class="req-top"><span class="req-num">${esc(t.title)}</span><span class="chip chip-${s === 'open' ? 'open' : 'done'}">${chip}</span></div><div class="req-title">${e.title}</div><div class="req-meta">${r.name}${s === 'done' ? ` · ${OUTCOME[item.outcome].note}` : s === 'seen' ? ' · a new one is below' : ''}</div></div>`;
+    b.innerHTML = `<div class="req-body"><div class="req-top"><span class="req-num">${esc(t.title)}</span><span class="chip chip-${s === 'open' ? 'open' : 'done'}">${chip}</span></div><div class="req-title">${e.title}</div><div class="req-meta">${r.name}${s === 'done' ? ` · ${OUTCOME[item.outcome!].note}` : s === 'seen' ? ' · a new one is below' : ''}</div></div>`;
     b.prepend(portrait(e.resident, 38));
     b.onclick = () => openErrand(i);
     list.appendChild(b);
@@ -144,6 +146,6 @@ export function renderBoard() {
 }
 
 /** The Library cards that taught a topic: the cue a player can peek at. */
-export function cueHTML(topicId) {
-  return topicById(topicId).from.map(id => byId(id)).map(c => `<div class="lib-card"><h4>${c.learn.title}</h4><p>${c.learn.body}</p>${codeBlock(c.learn.code)}</div>`).join('');
+export function cueHTML(topicId: string): string {
+  return (topicById(topicId)?.from ?? []).map(id => byId(id)!).map(c => `<div class="lib-card"><h4>${c.learn.title}</h4><p>${c.learn.body}</p>${codeBlock(c.learn.code)}</div>`).join('');
 }

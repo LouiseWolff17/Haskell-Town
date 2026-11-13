@@ -2,10 +2,10 @@
 // mailbox, gifts, and the change their friendship made to the town (src/content/friendship.ts).
 import { FRIENDSHIP, HEARTS, RESIDENTS } from '../content/index.ts';
 import { $, save, state } from './state.ts';
-import { portrait } from './town.js';
-import { heartRow, hearts, unreadLetters } from './errands.js';
+import { portrait } from './town.ts';
+import { heartRow, hearts, unreadLetters } from './errands.ts';
 
-export function renderFriends() {
+export function renderFriends(): void {
   const el = $('#friends'); if (!el) return;
   if (!state.reviews) {
     el.innerHTML = `<p class="board-small">Once the village is built, every errand you solve for a resident earns a heart. Hearts bring letters to Wren's mailbox, gifts, and changes around town.</p>`;
@@ -26,22 +26,22 @@ export function renderFriends() {
       : `<div class="jpage jlocked" data-friend="${rid}"><span class="jstamp jportrait"></span><span class="jt"><b>${r.name}</b><small>${meta}</small></span></div>`;
   }
   el.innerHTML = html;
-  el.querySelectorAll('[data-friend]').forEach(d => {
-    d.querySelector('.jstamp')?.appendChild(portrait(d.dataset.friend, 30));
-    d.addEventListener('toggle', () => { if (d.open && d.dataset.unread) markRead(d); });
+  el.querySelectorAll<HTMLElement>('[data-friend]').forEach(d => {
+    d.querySelector('.jstamp')?.appendChild(portrait(d.dataset.friend!, 30));
+    d.addEventListener('toggle', () => { if (d instanceof HTMLDetailsElement && d.open && d.dataset.unread) markRead(d); });
   });
   updateBadge();
 }
-function markRead(d) {
-  (state.lettersRead ||= {})[d.dataset.friend] = true; save();
+function markRead(d: HTMLElement): void {
+  (state.lettersRead ||= {})[d.dataset.friend!] = true; save();
   delete d.dataset.unread; d.querySelector('.new')?.remove(); updateBadge();
 }
-function updateBadge() {
+function updateBadge(): void {
   const b = $('#friendsBadge'), n = unreadLetters().length;
-  if (b) { b.textContent = n; b.hidden = !n; }
+  if (b) { b.textContent = String(n); b.hidden = !n; }
 }
 /** Open the first unread letter (clicking the mailbox on the map). */
-export function openLetters() {
-  const rid = unreadLetters()[0], d = rid && document.querySelector(`#friends details[data-friend="${rid}"]`);
+export function openLetters(): void {
+  const rid = unreadLetters()[0], d = rid && document.querySelector<HTMLDetailsElement>(`#friends details[data-friend="${rid}"]`);
   if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 }

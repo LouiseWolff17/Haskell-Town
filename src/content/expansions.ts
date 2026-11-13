@@ -3,7 +3,7 @@ import type { Expansion } from './types.ts';
 // Land that opens south of the railway once the village is built, as errands are solved.
 // Every solved errand counts the same, however it went: from memory, with a peek, or relearned.
 // Errands are limited per day, so these open every few days rather than all at once.
-// To add one: give it the next slot and a larger `needs`, and a drawing in src/game/town.js (EXPANSION_ART).
+// To add one: give it the next slot and a larger `needs`, and a drawing in src/game/town.ts (EXPANSION_ART).
 export const EXPANSIONS: Expansion[] = [
   { id: 'meadow', title: 'Wildflower Meadow', needs: 3, slot: 0, resident: 'moss',
     note: 'The mist south of the railway has lifted. Moss has put out beehives, and a few sheep have wandered in.' },

@@ -1,7 +1,7 @@
 import type { LifeTouch } from './types.ts';
 
 // Life in town: the first errand you solve on each topic brings one moving detail to the map.
-// Drawn in src/game/town.js (LIFE_ART), keyed by topic.
+// Drawn in src/game/town.ts (LIFE_ART), keyed by topic.
 export const LIFE: LifeTouch[] = [
   { topic: 'functions', title: 'A sleepy cat', note: "A cat has taken up napping on the road outside Wren's cottage." },
   { topic: 'patterns', title: 'The bread bike', note: "Hazel's delivery bike now rides up and down the main road with a basket of loaves." },
