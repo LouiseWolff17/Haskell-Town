@@ -8,7 +8,7 @@
 // code runs everything as the current user.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export interface SandboxConfig {
@@ -128,9 +128,9 @@ export class JobDir {
 
   /** A copy of a file the sandbox user made, owned by the service, that the sandbox user can run but not change. */
   async seal(from: string, to: string) {
+    // (Not fs.copyFile: in the container it fails with EPERM on the sandbox user's file.)
     await rm(this.file(to), { force: true });
-    await copyFile(this.file(from), this.file(to));
-    await chmod(this.file(to), 0o555);
+    await writeFile(this.file(to), await readFile(this.file(from)), { flag: 'wx', mode: 0o555 });
   }
 
   async remove() {

@@ -58,6 +58,7 @@ src/
     browser.ts          BrowserRunner: checks challenges with the in-browser interpreter
     worker-runner.ts    WorkerRunner: the same, in a Web Worker, with Stop and a 10 s timeout
     worker.ts           the code that runs inside the worker
+    ghc-runner.ts       GhcRunner: real GHC, on the sandboxed service in server/
   haskell/
     interpreter.js      Mini-Haskell's public API (HS): compile, evalIn, runMain …
     context.js          the state the stages share (let-level, fixities, the program's data context)
@@ -77,17 +78,31 @@ src/
     highlight.ts        syntax highlighting
 tests/
   content.test.ts          ids, unlock order, hints… all fit together
-  runner-contract.test.ts  every reference solution passes; wrong answers don't
+  runner-contract.test.ts  every reference solution passes; wrong answers don't (also against GHC, in CI)
+  ghc-runner.test.ts       GhcRunner's requests, Stop, timeouts and fallback, with a fake server
+  ghc-service.test.ts      the GHC service's source preparation and message translation
   worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
   schedule.test.ts         Notice Board scheduling: boxes, gaps, retries, revisit suggestions
   rewards.test.ts          new land, Journal stamps and hearts
 e2e/                     browser tests (Playwright), run against the production build
   challenge.spec.ts        welcome screen, running tests, hints, building, saved progress
   workshop.spec.ts         type-checking, expressions, main with getLine, Stop
+server/                 the sandboxed GHC service behind GhcRunner (Docker; see server/README.md)
 docs/                   design notes and the runner API
 ```
 
-The UI never calls the interpreter directly. Player code runs in a background Web Worker, so slow or endless code can't freeze the page: the Run button turns into **Stop**, and anything still running after 10 seconds is stopped with a friendly explanation. It asks a **`CodeRunner`** to `check` a challenge, `compile`, `evaluate` or `runMain`, and gets plain data back (`CheckResult`, `EvalResult`, …) that it turns into HTML. So swapping the in-browser interpreter for a real GHC backend later only means writing a new runner. See [docs/runner-api.md](docs/runner-api.md).
+The UI never calls the interpreter directly. Player code runs in a background Web Worker, so slow or endless code can't freeze the page: the Run button turns into **Stop**, and anything still running after 10 seconds is stopped with a friendly explanation. It asks a **`CodeRunner`** to `check` a challenge, `compile`, `evaluate` or `runMain`, and gets plain data back (`CheckResult`, `EvalResult`, …) that it turns into HTML. That's how the same game can also run on **real GHC**: `GhcRunner` sends the code to a sandboxed GHC service (`server/`), and the contract test checks it gives the same results. See [docs/runner-api.md](docs/runner-api.md).
+
+## Real GHC (optional)
+
+The game works offline with its own interpreter. To check code with real GHC instead, start the sandboxed service (Docker) and point the game at it:
+
+```sh
+docker compose -f server/compose.yaml up --build
+VITE_GHC_URL=http://localhost:8080 npm run dev
+```
+
+When the service can't be reached, the game falls back to the interpreter. How the sandbox works, and how to deploy it, is in [server/README.md](server/README.md).
 
 ## Adding a challenge
 
