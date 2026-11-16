@@ -9,7 +9,7 @@ import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
 import { heldItem, holdLabel, openDoors, putBack, useHeld, visit } from './satchel.ts';
-import { drawRoom, inRoom, roomClick, roomHover, roomInteract } from './rooms.ts';
+import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract } from './rooms.ts';
 import { enterInterior, hasInterior, leaveInterior, roomLabel } from './interiors.ts';
 import type { Challenge, Expansion, GiftItem, ItemTarget } from '../content/index.ts';
 import type { Rect } from './player.ts';
@@ -43,6 +43,12 @@ type Pt = [x: number, y: number];
 const cv = $<HTMLCanvasElement>('#town'), ctx = cv.getContext('2d')!;
 // The village is 400×340. Once errands start opening new land, strips of STRIP px are added below the railway.
 const W = 400, H = 340, STRIP = 72;
+// The map is mapH tall (the village plus any land strips), but the canvas only shows a window onto it,
+// sized to fit the screen (syncSize). The camera follows the character down the map: camY is the map y
+// at the top of the canvas.
+let mapH = H, camY = 0, camFresh = true;
+/** A place the camera looks at for a moment instead of the character (new land opening). */
+let focus: { y: number; until: number } | null = null;
 const R: Rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
 const C = { grass: '#93c47d', grass2: '#86b870', grass3: '#a4d18c', road: '#e2c596', road2: '#cfae7b', dirt: '#c69c6d', dirt2: '#a97f55', wood: '#8a5a3b', wood2: '#6b4429', ink: '#3b2a2a', wall: '#f6e7cf', wall2: '#e3cfae', glass: '#a8dbe8', glass2: '#7cc0d4', door: '#7a4a2c', skin: '#f2c9a0', white: '#fffaf0' };
 
@@ -390,12 +396,14 @@ let lastT: number | null = null;
 function draw(t: number): void {
   // inside a building, the map is its room
   if (inRoom()) {
-    syncSize(); drawRoom(ctx, W, cv.height, t, lastT == null ? 0 : Math.min(50, t - lastT), heldKeys()); lastT = t;
+    syncSize(); drawRoom(ctx, W, cv.height, t, lastT == null ? 0 : Math.min(50, t - lastT), heldKeys()); lastT = t; camFresh = true;
     requestAnimationFrame(draw); return;
   }
-  const plots = visiblePlots();
+  const plots = visiblePlots(), dt = lastT == null ? 0 : Math.min(50, t - lastT);
   syncSize(); refreshSolids();
-  updatePlayer(lastT == null ? 0 : Math.min(50, t - lastT), solidAt); lastT = t;
+  updatePlayer(dt, solidAt); lastT = t;
+  moveCamera(t, dt);
+  ctx.save(); ctx.translate(0, -Math.round(camY));
   const near = nearby();
   if (near?.key !== nearKey) { nearKey = near?.key ?? null; if (!hover && !heldItem()) $('#hoverLabel').innerHTML = nearLabel(near); }
   ctx.drawImage(bg, 0, 0); roadLayer(plots);
@@ -436,11 +444,25 @@ function draw(t: number): void {
   if (outline && PLOTS[outline] && !heldItem()) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
   const held = heldItem(), glowAt = held?.target && targetBox(held.target);
   if (glowAt) glow(glowAt, t);
+  ctx.restore();
   requestAnimationFrame(draw);
+}
+/** Follow the character (or the land that just opened), gliding, and never past the edges of the map. */
+function moveCamera(t: number, dt: number): void {
+  if (focus && t > focus.until) focus = null;
+  const view = cv.height, goal = Math.max(0, Math.min(mapH - view, (focus ? focus.y : player.y - 8) - view / 2));
+  camY = camFresh ? goal : camY + (goal - camY) * Math.min(1, dt / (focus ? 400 : 180));
+  if (Math.abs(goal - camY) < 0.3) camY = goal;
+  camFresh = false;
+}
+/** Show the land that just opened for a few seconds, then go back to following the character. */
+export function showLand(id: string): void {
+  const x = EXPANSIONS.find(e => e.id === id); if (!x) return;
+  const r = slotRect(x.slot); focus = { y: r.y + r.h / 2, until: performance.now() + 3500 };
 }
 
 function plotAt(ev: MouseEvent): string | null {
-  const r = cv.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * cv.height / r.height;
+  const [x, y] = mapPoint(ev);
   if (y >= H) { const x0 = EXPANSIONS.find(e => { const r = slotRect(e.slot); return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }); return x0 && Math.floor(x0.slot / 2) < stripsShown(EXPANSIONS, solvedErrands()) ? (isOpenExp(x0) ? 'exp:' : 'fog:') + x0.id : null; }
   for (const [id, p] of visiblePlots()) { const [sx, sy] = p.stand; if ((x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 4) || (x >= sx - 4 && x <= sx + 12 && y >= sy - 14 && y <= sy + 14)) return id; }
   return null;
@@ -473,7 +495,9 @@ export function portrait(rid: string, size = 40): HTMLCanvasElement {
 }
 
 export function initTown(): void {
-  paintBackground(); requestAnimationFrame(draw);
+  paintBackground();
+  measure(); new ResizeObserver(measure).observe(cv.closest('.town-frame')!); window.addEventListener('resize', measure);
+  requestAnimationFrame(draw);
   $('#nightBtn').onclick = () => { state.clockOff = !state.clockOff; save(); renderNightBtn(); };
   // the button follows what's actually playing, so it always does what it says
   $('#musicBtn').onclick = () => { if (musicPlaying()) stopMusic(); else startMusic(); state.music = musicPlaying(); save(); renderNightBtn(); };
@@ -513,11 +537,12 @@ export function initTown(): void {
 }
 
 // ---------- The character: what blocks it, and what it can talk to (movement and drawing are in player.ts) ----------
-const mapPoint = (ev: MouseEvent): Pt => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+/** Where the mouse is on the map, in map pixels (or, inside a building, on the canvas: the room has no camera). */
+const mapPoint = (ev: MouseEvent): Pt => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * cv.height / r.height + (inRoom() ? 0 : camY)]; };
 /** Solid things, rebuilt (once a frame, and only when the town changed): built buildings, residents, tree trunks, the sea and misty land. */
 let solidCache: { sig: string | null; rects: [x: number, y: number, w: number, h: number][] } = { sig: null, rects: [] };
 function refreshSolids(): void {
-  const waiting = waitingResidents(), sig = `${Object.keys(state.done).join()}|${cv.height}|${solvedErrands()}|${[...waiting].join()}`;
+  const waiting = waitingResidents(), sig = `${Object.keys(state.done).join()}|${mapH}|${solvedErrands()}|${[...waiting].join()}`;
   if (solidCache.sig === sig) return;
   const rects: typeof solidCache.rects = [[358, 128, 42, 116]];
   // residents are solid too, so the character stops beside them instead of walking through
@@ -534,13 +559,13 @@ function refreshSolids(): void {
   solidCache = { sig, rects };
 }
 function solidAt(x: number, y: number): boolean {
-  if (x < 1 || x > W - 1 || y < 10 || y > cv.height - 1) return true;
+  if (x < 1 || x > W - 1 || y < 10 || y > mapH - 1) return true;
   return solidCache.rects.some(([rx, ry, rw, rh]) => x >= rx && x < rx + rw && y >= ry && y < ry + rh);
 }
 function goTo(x: number, y: number, then?: () => void): void {
   // already there? then don't walk at all
   if (then && Math.hypot(x - player.x, y - player.y) < 10) { player.path = null; then(); return; }
-  if (!walkTo(x, y, solidAt, Math.ceil(W / 4), Math.ceil(cv.height / 4), then)) $('#hoverLabel').innerHTML = "Hmm, there's no way to get there from here.";
+  if (!walkTo(x, y, solidAt, Math.ceil(W / 4), Math.ceil(mapH / 4), then)) $('#hoverLabel').innerHTML = "Hmm, there's no way to get there from here.";
 }
 /** Send the character to a challenge's building and open it there (the Requests list uses this). */
 export function goToChallenge(c: Challenge): void {
@@ -662,11 +687,27 @@ function slotRect(slot: number): Box {
   const y = H + Math.floor(slot / 2) * STRIP;
   return slot % 2 ? { x: 157, y, w: W - 157, h: STRIP } : { x: 0, y, w: 145, h: STRIP };
 }
-/** Grow the canvas when a new strip of land is shown. The CSS keeps the same width and scales the height. */
+/** The space the map has on the page, in CSS pixels, kept up to date by a ResizeObserver (initTown). */
+let box = { w: 0, h: 0 };
+/** Phones and narrow windows scroll the page, so the map is capped to most of the screen's height there. */
+const stacked = window.matchMedia('(max-width: 960px)');
+function measure(): void {
+  const f = cv.closest<HTMLElement>('.town-frame')!, cs = getComputedStyle(f);
+  const w = f.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const h = stacked.matches ? window.innerHeight * 0.75 : f.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  box = { w: Math.max(1, w), h: Math.max(1, h) };
+}
+/** Size the canvas to the space it has: the map's full width, and as much of its height as fits. */
 function syncSize(): void {
-  // inside a building the map is just the room, so it goes back to the village's size
-  const h = inRoom() ? H : H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
-  if (cv.height !== h) { cv.height = h; cv.style.aspectRatio = `${W} / ${h}`; }
+  mapH = H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
+  // inside a building the canvas fills the frame and the room sits in the middle, with dark around it
+  // (on a phone the frame wraps the canvas, so there it just takes the room's shape)
+  const fill = Math.max(160, Math.round(W * box.h / box.w));
+  const view = inRoom() ? (stacked.matches ? Math.round(W * RH / RW) : fill) : Math.min(mapH, fill);
+  if (cv.height !== view) cv.height = view;
+  // as wide as the space allows, unless that would make it too tall
+  const scale = Math.min(box.w / W, box.h / view), cw = `${Math.floor(W * scale)}px`, ch = `${Math.floor(view * scale)}px`;
+  if (cv.style.width !== cw || cv.style.height !== ch) { cv.style.width = cw; cv.style.height = ch; }
 }
 // a stable pseudo-random number for (i, k), so the art doesn't flicker frame to frame
 const hsh = (i: number, k = 0): number => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
@@ -882,7 +923,7 @@ export const nightOn = (): boolean => !!state.done.observatory && !state.clockOf
 function drawNight(t: number): void {
   if (!nightOn()) return;
   const n = nightness(hourNow()); if (n <= 0) return;
-  ctx.globalAlpha = 0.5 * n; ctx.fillStyle = n < 0.6 ? '#3a3a78' : '#1d2350'; ctx.fillRect(0, 0, W, cv.height);
+  ctx.globalAlpha = 0.5 * n; ctx.fillStyle = n < 0.6 ? '#3a3a78' : '#1d2350'; ctx.fillRect(0, 0, W, mapH);
   ctx.globalAlpha = 1;
   if (n < 0.35) return;
   const glow = Math.min(1, (n - 0.35) / 0.4);
@@ -894,7 +935,7 @@ function drawNight(t: number): void {
   // the lighthouse lamp and the windmill window
   ctx.globalAlpha = 0.9 * glow; if (state.done.harbour2) R(384, 133, 6, 5, '#fff2a8');
   // a few fireflies over the grass
-  for (let i = 0; i < 10; i++) { const fx = (hsh(i, 41) * W + Math.sin(t / 1300 + i) * 8) | 0, fy = (hsh(i, 43) * cv.height + Math.cos(t / 1100 + i) * 6) | 0; ctx.globalAlpha = glow * (0.4 + 0.6 * Math.max(0, Math.sin(t / 400 + i * 2))); R(fx, fy, 1, 1, '#f6ff9a'); }
+  for (let i = 0; i < 10; i++) { const fx = (hsh(i, 41) * W + Math.sin(t / 1300 + i) * 8) | 0, fy = (hsh(i, 43) * mapH + Math.cos(t / 1100 + i) * 6) | 0; ctx.globalAlpha = glow * (0.4 + 0.6 * Math.max(0, Math.sin(t / 400 + i * 2))); R(fx, fy, 1, 1, '#f6ff9a'); }
   ctx.globalAlpha = 1;
 }
 

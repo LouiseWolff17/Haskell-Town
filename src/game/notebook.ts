@@ -4,7 +4,7 @@ import { CHALLENGES, EXPANSIONS, FRIENDSHIP, HEARTS, LIFE, RESIDENTS, WORKSHOP_E
 import { createRunner } from '../runner/index.ts';
 import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.ts';
 import { codeBlock, highlight } from './highlight.ts';
-import { buildAnim, portrait } from './town.ts';
+import { buildAnim, portrait, showLand } from './town.ts';
 import { notSupportedHTML, renderSidebar } from './sidebar.ts';
 import { ERRANDS_BY_TOPIC, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, villageBuilt, whenText } from './errands.ts';
 import { completeItem, isOpen, showAnswer } from './schedule.ts';
@@ -86,7 +86,8 @@ export function revealLand(): void {
   }
   for (const l of life) msgs.push(`✨ ${l.note}`);
   toast(msgs.join(' '));
-  $('.town-frame').scrollIntoView({ behavior: 'smooth', block: opened.length ? 'end' : 'center' });
+  if (opened.length) showLand(opened[opened.length - 1].id);
+  $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 /** One line for the win box: the resident's hearts, and anything their friendship just brought. */
 function friendLine(rid: string, rewards: FriendReward[]): string {

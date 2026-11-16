@@ -30,9 +30,30 @@ kbd{font-family:var(--mono); font-size:.78em; background:var(--paper); border:1p
   .layout{grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:"town side" "friends side"}
   #friends{max-height:none; display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:0 8px; align-items:start}
 }
-.town-frame{background:#6b4429; padding:10px; border-radius:14px; box-shadow:0 5px 0 #4b2f1c, 0 14px 30px rgba(80,50,20,.18)}
-.town-frame canvas{display:block; width:100%; height:auto; aspect-ratio:400/340; image-rendering:pixelated; image-rendering:crisp-edges; border-radius:6px}
-.town-caption{margin-top:12px; padding:10px 14px; background:var(--paper); border:2px solid var(--line); border-radius:10px; min-height:46px; font-size:14px}
+.town-frame{background:#6b4429; padding:10px; border-radius:14px; box-shadow:0 5px 0 #4b2f1c, 0 14px 30px rgba(80,50,20,.18); display:flex; align-items:center; justify-content:center}
+/* town.ts sizes the canvas to the frame (syncSize) and moves a camera over the map */
+.town-frame canvas{display:block; width:100%; image-rendering:pixelated; image-rendering:crisp-edges; border-radius:6px}
+
+/* On a wide screen the game is one screen tall: the map fills its column, and the side columns scroll inside. */
+@media (min-width:961px){
+  body{height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden}
+  .top{flex:none; width:100%; padding-top:10px; padding-bottom:10px}
+  .layout{flex:1; min-height:0; width:100%; grid-template-rows:minmax(0,1fr); align-items:stretch; padding-bottom:16px}
+  .friends-panel{display:flex; flex-direction:column; min-height:0}
+  #friends{flex:1; max-height:none; min-height:0}
+  .side{min-height:0; overflow:auto; padding-bottom:4px}
+  .town-col{display:flex; flex-direction:column; min-height:0}
+  .town-frame{flex:1; min-height:220px; overflow:hidden}
+}
+@media (min-width:961px) and (max-width:1180px){
+  .layout{grid-template-rows:minmax(0,1fr) minmax(0,24%)}
+  #friends{max-height:none}
+}
+.map-stage{position:relative}
+/* the caption and the dialogue box sit over the bottom of the map, so a new caption never resizes it */
+.map-bottom{position:absolute; left:8px; right:8px; bottom:8px; z-index:2; display:flex; flex-direction:column; gap:6px; pointer-events:none}
+.town-caption{padding:6px 12px; background:rgba(255,250,240,.93); border:2px solid var(--ink); border-radius:10px; font-size:13px; line-height:1.4; box-shadow:0 2px 0 rgba(0,0,0,.2)}
+.town-caption:empty{display:none}
 
 .side{display:flex; flex-direction:column; gap:14px; min-width:0}
 .panel{background:var(--paper); border:2px solid var(--line); border-radius:14px; overflow:hidden}
@@ -252,6 +273,9 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 
 @media (max-width:960px){
   .layout{grid-template-columns:1fr; grid-template-areas:"town" "friends" "side"}
+  .town-frame{flex-direction:column}
+  .map-stage{display:flex; flex-direction:column; align-items:center; width:100%}
+  .map-bottom{position:static; width:100%; margin-top:8px}
   .nb-grid{grid-template-columns:1fr}
   .nb-head{flex-wrap:wrap} .nb-head .mode-seg{width:100%; order:3}
   .tabpanel{max-height:none}
@@ -314,17 +338,12 @@ body.holding .satchel-btn{background:#fff2a8}
 .visit-from{margin:0; font-size:13px; color:var(--ink2)}
 .visit .go{margin-top:16px; display:flex; justify-content:flex-end}
 /* the five town interiors (interiors.ts, rooms.ts): the map becomes the room */
-.room-say{position:absolute; left:20px; right:20px; bottom:20px; z-index:2; display:flex; gap:12px; align-items:center; padding:10px 14px; background:var(--paper); border:3px solid var(--ink); border-radius:12px; box-shadow:0 4px 0 rgba(0,0,0,.3); animation:pop .2s}
+.room-say{display:flex; gap:12px; align-items:center; padding:10px 14px; background:var(--paper); border:3px solid var(--ink); border-radius:12px; box-shadow:0 4px 0 rgba(0,0,0,.3); animation:pop .2s}
 .room-say[hidden]{display:none}
 .room-say p{margin:0; font-size:14.5px}
 .room-say .portrait{width:44px; height:44px}
-.room-panel{margin-top:12px; padding:10px 14px 12px; overflow:visible}
-.room-head{display:flex; align-items:center; justify-content:space-between; gap:8px; font-family:var(--pixel); font-size:19px}
-.room-head .btn-soft.ghost{margin-top:0; font-family:var(--body); font-size:13px; padding:5px 11px}
-.room-spots{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px}
-.room-spots .btn-soft.ghost{margin-top:0; padding:4px 10px; font-size:13px}
-.room-body:not(:empty){margin-top:10px; padding-top:4px; border-top:2px dashed var(--line)}
-.room-body .board-h:first-child{margin-top:10px}
+.room-pop{width:min(620px,100%); max-height:calc(100vh - 36px); overflow:auto; padding-top:16px}
+.room-pop-body .board-h:first-child{margin-top:0; padding-right:36px; font-size:13px}
 .in-line{margin:8px 0; font-size:14.5px}
 .in-row{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0}
 .in-pins{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0}

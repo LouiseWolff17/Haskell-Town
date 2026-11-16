@@ -1,8 +1,8 @@
 // The five town interiors (docs/gift-items-design.md, section 4). Once a gift has opened a place, its door
-// on the map leads inside: the map becomes the room (rooms.ts), the resident's lines appear in a dialogue
-// box over it, and what you look at opens in a panel under the map. The doormat leads back to town.
-// Every interior is optional: a cozy toy or a small Haskell bonus, never a required challenge.
-// Content is in src/content/interiors.ts.
+// on the map leads inside: the map becomes the room (rooms.ts). Looking at things there either gets a line
+// in the dialogue box over the map, or opens a pop-up (the recipe, the till, the letters, …).
+// The doormat leads back to town. Every interior is optional: a cozy toy or a small Haskell bonus,
+// never a required challenge. Content is in src/content/interiors.ts.
 import { CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
 import { $, esc, save, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
@@ -10,14 +10,14 @@ import { hearts, solvedErrands, today } from './errands.ts';
 import { openExpansions } from './rewards.ts';
 import { runner } from './notebook.ts';
 import { portrait } from './town.ts';
-import { ROOMS, approach, enterRoom, exitRoom, inRoom } from './rooms.ts';
+import { ROOMS, enterRoom, exitRoom, inRoom } from './rooms.ts';
 import type { Spot, View } from './rooms.ts';
 
-/** What a room shows: a line in the dialogue box, or a panel under the map. */
+/** What a room shows: a line in the dialogue box, or a pop-up. */
 interface Room {
   /** Show a line in the dialogue box (HTML). */
   say(html: string): void;
-  /** Replace the panel under the map, and return it. */
+  /** Open the pop-up with this content (or replace what's in it), and return its body. */
   panel(html: string): HTMLElement;
   /** Changes to how the room looks: it redraws every frame. */
   view: View;
@@ -31,38 +31,57 @@ const INTERIORS: Record<string, Interior> = {};
 export const hasInterior = (rid: string): boolean => rid in ROOMS;
 const placeOf = (rid: string): string => ITEMS.find(i => i.resident === rid)?.place ?? '';
 
+// ---------- The pop-up ----------
+const pop = (): HTMLElement => $('#roomPop');
+export const popOpen = (): boolean => !pop().hidden;
+function openPop(html: string): HTMLElement {
+  const body = pop().querySelector<HTMLElement>('.room-pop-body')!, fresh = pop().hidden;
+  body.innerHTML = html;
+  if (fresh) {
+    pop().hidden = false; document.body.classList.add('modal-open');
+    pop().querySelector<HTMLElement>('.room-pop')!.scrollTop = 0;
+    // straight to the first thing to type in, if there is one
+    setTimeout(() => (body.querySelector<HTMLElement>('textarea, input') ?? pop().querySelector<HTMLElement>('.x'))?.focus(), 50);
+  }
+  return body;
+}
+export function closePop(): void {
+  if (pop().hidden) return;
+  pop().hidden = true; pop().querySelector('.room-pop-body')!.innerHTML = '';
+  document.body.classList.remove('modal-open');
+  $('#town').focus?.();
+}
+export function initInteriors(): void {
+  pop().querySelector<HTMLElement>('.x')!.onclick = closePop;
+  pop().addEventListener('click', e => { if (e.target === e.currentTarget) closePop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && popOpen()) { e.stopImmediatePropagation(); closePop(); } }, true);
+}
+
 let leaving: (() => void) | null = null;
 /** Go inside `rid`'s place. `onLeave` puts you back outside its door. */
 export function enterInterior(rid: string, onLeave: () => void): void {
   const it = INTERIORS[rid]; if (!it) return;
   leaving = onLeave;
-  const sayBox = $('#roomSay'), panelEl = $('#roomPanel');
-  panelEl.innerHTML = `<div class="room-head"><b>🏠 ${esc(placeOf(rid))}</b><button class="btn-soft ghost" data-leave>🚪 Back to town</button></div>
-    <div class="room-spots"><span class="board-small">Look at:</span>${ROOMS[rid].spots.map(s => `<button class="btn-soft ghost" data-spot="${s.id}">${esc(s.label)}</button>`).join('')}</div>
-    <div class="room-body"></div>`;
-  const body = panelEl.querySelector<HTMLElement>('.room-body')!;
+  const sayBox = $('#roomSay');
   const room: Room = {
     say: html => {
       sayBox.innerHTML = `<div class="room-say-who"></div><p>${html}</p>`;
       sayBox.querySelector('.room-say-who')!.append(portrait(rid, 44));
       sayBox.hidden = false;
     },
-    panel: html => { body.innerHTML = html; body.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); return body; },
+    panel: openPop,
     view: it.view(),
   };
   enterRoom(rid, room.view, id => id === 'leave' ? leaveInterior() : it.act(id, room), () => { sayBox.hidden = true; });
-  panelEl.hidden = false; document.body.classList.add('in-room');
-  panelEl.querySelector<HTMLElement>('[data-leave]')!.onclick = () => approach('leave');
-  panelEl.querySelectorAll<HTMLElement>('[data-spot]').forEach(b => b.onclick = () => approach(b.dataset.spot!));
   $('#hoverLabel').innerHTML = roomLabel(null);
+  $('#town').setAttribute('aria-label', `Inside ${placeOf(rid)}. Walk with the arrow keys, press E to look at things, and go back out by the doormat.`);
   room.say(esc(ITEMS.find(i => i.resident === rid)?.visit ?? ''));
 }
 /** Step back out through the door. */
 export function leaveInterior(): void {
   if (!inRoom()) return;
-  exitRoom();
-  $('#roomSay').hidden = true; $('#roomPanel').hidden = true; $('#roomPanel').innerHTML = '';
-  document.body.classList.remove('in-room');
+  closePop(); exitRoom();
+  $('#roomSay').hidden = true; $('#town').setAttribute('aria-label', 'Pixel-art map of Haskell Town');
   const f = leaving; leaving = null; f?.();
 }
 /** The line under the map while you're inside: what the mouse is over, or how to get about. */

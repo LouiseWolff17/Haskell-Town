@@ -381,12 +381,10 @@ function walkToSpot(h: Here, s: Spot): void {
   if (Math.hypot(s.stand[0] - h.me.x, s.stand[1] - h.me.y) < 3) { h.me.path = null; arrived(); return; }
   if (!walkTo(s.stand[0], s.stand[1], solidAt, RW / 4, Math.ceil(RH / 4), arrived, h.me)) arrived();
 }
-/** Walk to something in the room, then look at it (the buttons under the map use this). */
-export function approach(id: string): void { const s = here?.spots.find(s => s.id === id); if (here && s) walkToSpot(here, s); }
 
-/** Where the room sits on the map canvas: as big as fits in whole pixels, in the middle. */
+/** Where the room sits on the map canvas: as big as fits (in whole pixels when it's at least 2×), in the middle. */
 function placement(W: number, H: number): { s: number; ox: number; oy: number } {
-  const s = Math.max(1, Math.floor(Math.min(W / RW, H / RH)));
+  const fit = Math.min(W / RW, H / RH), s = fit >= 2 ? Math.floor(fit) : fit;
   return { s, ox: Math.floor((W - RW * s) / 2), oy: Math.floor((H - RH * s) / 2) };
 }
 const toRoom = (mx: number, my: number, W: number, H: number): [number, number] => { const p = placement(W, H); return [(mx - p.ox) / p.s, (my - p.oy) / p.s]; };
@@ -414,7 +412,8 @@ let off: HTMLCanvasElement | null = null;
 export function drawRoom(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, dt: number, keys: ReadonlySet<Dir>): void {
   const h = here; if (!h) return;
   const was = h.me.moving;
-  steer(h.me, keys, dt, solidAt);
+  // no walking while a pop-up is open
+  steer(h.me, document.body.classList.contains('modal-open') ? new Set() : keys, dt, solidAt);
   if (h.me.moving && !was) h.onWalk();
   if (!off) { off = document.createElement('canvas'); off.width = RW; off.height = RH; }
   const g = off.getContext('2d')!;
