@@ -138,8 +138,9 @@ export interface Friendship {
   resident: string;
   /** ♥ 1: a letter that arrives in Wren's mailbox. */
   letter: string;
-  /** ♥ 2: a keepsake for the Journal. */
-  gift: { icon: string; name: string; note: string };
+  /** ♥ 2: a keepsake for the Journal. Its note hints where it goes in the Satchel (docs/gift-items-design.md, section 3).
+   *  `afterUse`, if set, is added to the note once the item has been used. */
+  gift: { icon: string; name: string; note: string; afterUse?: string };
   /** ♥ 4: a lasting change to their building on the map (drawn in town.ts FRIEND_ART). */
   change: string;
 }

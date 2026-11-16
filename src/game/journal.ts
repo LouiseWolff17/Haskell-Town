@@ -7,6 +7,7 @@ import { $, esc, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, villageBuilt } from './errands.ts';
 import { errandStamps, openedOn } from './rewards.ts';
+import { giftNote } from './satchel.ts';
 import type { Challenge } from '../content/index.ts';
 
 const STAMP: Record<string, string> = { house: '🏡', mailbox: '📬', bakery: '🥖', garden: '🌱', store: '🛒', library: '📚', school: '🎒', hall: '🏛️', clinic: '🩺', railway: '🚂', park: '🌳', harbour: '⚓', market: '🧺', observatory: '🔭' };
@@ -104,7 +105,7 @@ export function printJournal(): void {
     for (const f of friends) {
       const n = h[f.resident], r = RESIDENTS[f.resident];
       html += `<article class="pj-page pj-letter"><p>Dear neighbour,</p><p>${f.letter}</p><p class="pj-sig">— ${r.name}, the ${r.role}</p>
-        ${n >= HEARTS.gift ? `<p class="pj-gift">${f.gift.icon} <b>${f.gift.name}.</b> ${f.gift.note}</p>` : ''}${n >= HEARTS.change ? `<p class="pj-gift">🏡 ${f.change}</p>` : ''}</article>`;
+        ${n >= HEARTS.gift ? `<p class="pj-gift">${f.gift.icon} <b>${f.gift.name}.</b> ${giftNote(f.resident)}</p>` : ''}${n >= HEARTS.change ? `<p class="pj-gift">🏡 ${f.change}</p>` : ''}</article>`;
     }
   }
 

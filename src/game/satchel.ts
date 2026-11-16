@@ -13,6 +13,12 @@ const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
 /** "A spare key" → "the spare key", for sentences. */
 const the = (rid: string): string => giftOf(rid).name.replace(/^(A|An|The)\s+/, 'the ');
 
+/** A gift's Journal note, with its extra line once it has been used (Fern's key). */
+export function giftNote(rid: string): string {
+  const g = giftOf(rid);
+  return g.afterUse && state.used?.[rid] ? `${g.note} ${g.afterUse}` : g.note;
+}
+
 /** Gifts you've been given and haven't used yet, in the order of the Friends panel. */
 export function satchelItems(): GiftItem[] {
   const h = hearts();

@@ -4,6 +4,7 @@ import { FRIENDSHIP, HEARTS, RESIDENTS } from '../content/index.ts';
 import { $, save, state } from './state.ts';
 import { portrait } from './town.ts';
 import { heartRow, hearts, unreadLetters } from './errands.ts';
+import { giftNote } from './satchel.ts';
 
 export function renderFriends(): void {
   const el = $('#friends'); if (!el) return;
@@ -18,7 +19,7 @@ export function renderFriends(): void {
     const next = n < HEARTS.letter ? `${HEARTS.letter - n} errand${HEARTS.letter - n === 1 ? '' : 's'} until a letter` : n < HEARTS.gift ? 'a gift is coming' : n < HEARTS.change ? 'something in town will change' : 'best friends';
     let body = '';
     if (n >= HEARTS.letter) body += `<div class="letter"><p>Dear neighbour,</p><p>${f.letter}</p><p class="sig">— ${r.name}</p></div>`;
-    if (n >= HEARTS.gift) body += `<div class="gift"><span>${f.gift.icon}</span><div><b>${f.gift.name}</b><br>${f.gift.note}</div></div>`;
+    if (n >= HEARTS.gift) body += `<div class="gift"><span>${f.gift.icon}</span><div><b>${f.gift.name}</b><br>${giftNote(rid)}</div></div>`;
     if (n >= HEARTS.change) body += `<p class="jconcept">On the map: ${f.change}</p>`;
     const meta = `<span class="hearts">${heartRow(n)}</span><br>${next}${unread.has(rid) ? '<b class="new"><br>✉ new letter</b>' : ''}`;
     html += n
