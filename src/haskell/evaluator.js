@@ -102,6 +102,8 @@ const bool = (v, ctx) => { if (typeof v !== 'boolean') throw new HsError(`${ctx}
 // ---- lazy lists ----
 // x : rest makes an LCons whose tail is only worked out when something needs it, so lists can go on forever.
 // Finite lists are still plain arrays or strings; everything that walks a list understands all three.
+// The items can be thunks too (length [undefined] is 1): iter, takeN and spine hand them over as they are,
+// and toList works them all out, for the functions that look at every item anyway (sum, show, ==, …).
 const LAZY_LIMIT = 1000000;
 const tooLong = () => new HsError('This list goes on forever (or has over a million items), so Haskell Town stopped. Infinite lists are fine — just take the part you need, like take 10 [1..].', 'loop');
 class LCons {
@@ -137,7 +139,14 @@ function forceL(v) {
   v.arr = out; return out;
 }
 function takeN(v, n) { const out = []; if (n <= 0) return out; for (const x of iter(v)) { out.push(x); if (out.length >= n) break; } return out; }
-const toList = (v, name) => { v = force(v); if (Array.isArray(v)) return v; if (v instanceof LCons) return forceL(v); if (v === MEMPTY) return []; if (typeof v === 'string') return [...v]; throw new HsError(`${name} expects a list, but was given ${showShort(v)}.`); };
+// the list's items, some maybe still thunks
+const spine = (v, name) => { v = force(v); if (Array.isArray(v)) return v; if (v instanceof LCons) return forceL(v); if (v === MEMPTY) return []; if (typeof v === 'string') return [...v]; throw new HsError(`${name} expects a list, but was given ${showShort(v)}.`); };
+// the list's items, all worked out (a thunk's value replaces it in the array, so this is only done once)
+const toList = (v, name) => {
+  const l = spine(v, name);
+  for (let i = 0; i < l.length; i++) if (l[i] instanceof Thunk) l[i] = force(l[i]);
+  return l;
+};
 const fromLike = (orig, arr) => (typeof orig === 'string' && arr.every(c => typeof c === 'string' && c.length === 1)) ? arr.join('') : arr;
 const tup = v => v.tuple;
 
@@ -157,7 +166,7 @@ function deepEq(a, b) {
   }
   if (typeof a === 'string' && typeof b === 'string') return a === b;
   if (isListV(a) && isListV(b)) {
-    const x = toList(a), y = toList(b); return x.length === y.length && x.every((e, i) => deepEq(e, y[i]));
+    const x = spine(a), y = spine(b); return x.length === y.length && x.every((e, i) => deepEq(e, y[i]));
   }
   if (a && a.tuple && b && b.tuple) return a.tuple.length === b.tuple.length && a.tuple.every((e, i) => deepEq(e, b.tuple[i]));
   if (a && a.con && b && b.con) return a.con === b.con && a.args.every((e, i) => deepEq(e, b.args[i]));
@@ -174,7 +183,7 @@ function cmp(a, b) {
   if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
   if (typeof a === 'boolean' && typeof b === 'boolean') return (a ? 1 : 0) - (b ? 1 : 0);
   if (isListV(a) && isListV(b)) {
-    const x = toList(a), y = toList(b);
+    const x = spine(a), y = spine(b);
     for (let i = 0; i < Math.min(x.length, y.length); i++) { const c = cmp(x[i], y[i]); if (c) return c; }
     return Math.sign(x.length - y.length);
   }
@@ -190,7 +199,7 @@ const conIndex = n => cx.cons[n] ? cx.cons[n].index : ({ Nothing: 0, Just: 1, Le
 function append(a, b) {
   if (isL(a) || isL(b)) return lazyGen(function* () { yield* iter(a, '++'); yield* iter(b, '++'); });
   if (typeof a === 'string' && typeof b === 'string') return a + b;
-  const r = [...toList(a, '++'), ...toList(b, '++')];
+  const r = [...spine(a, '++'), ...spine(b, '++')];
   return (typeof a === 'string' || typeof b === 'string') ? fromLike('', r) : r;
 }
 // a function's result is always forced (a built-in like fst may hand back a field that is still a thunk)
@@ -228,7 +237,7 @@ function fmapG(f, m) {
   m = force(m);
   if (isPure(m)) return PURE(apply(f, m.pureOf));
   if (isL(m)) return lazyGen(function* () { for (const x of iter(m)) yield apply(f, x); });
-  if (isListy(m)) return fromLike(m, toList(m).map(x => apply(f, x)));
+  if (isListy(m)) return fromLike(m, spine(m).map(x => apply(f, x)));
   if (m && m.io) return io(rt => apply(f, runAction(m, rt)));
   if (m && m.con === 'Just') return Just(later(f, m.args[0])); if (m && m.con === 'Nothing') return m;
   if (m && m.con === 'Right') return Right(later(f, m.args[0])); if (m && m.con === 'Left') return m;
@@ -248,7 +257,7 @@ function bindG(m, k) {
   m = force(m);
   if (isPure(m)) return apply(k, m.pureOf);
   if (isL(m)) return lazyGen(function* () { for (const x of iter(m)) { const r = apply(k, x); if (isPure(r)) yield r.pureOf; else yield* iter(r); } });
-  if (isListy(m)) { const out = []; for (const x of toList(m)) { const r = apply(k, x); if (isPure(r)) out.push(r.pureOf); else out.push(...toList(r)); } return out; }
+  if (isListy(m)) { const out = []; for (const x of spine(m)) { const r = apply(k, x); if (isPure(r)) out.push(r.pureOf); else out.push(...toList(r)); } return out; }
   if (m && m.io) return io(rt => runAction(apply(k, runAction(m, rt)), rt));
   if (m && (m.con === 'Nothing' || m.con === 'Left')) return m;
   if (m && (m.con === 'Just' || m.con === 'Right')) return apply(k, m.args[0]);
@@ -287,7 +296,7 @@ function mconcatT(t, xs) { return toList(xs, 'mconcat').reduceRight((acc, x) => 
 function foldMapG(tKey, mT, f, c) {
   const ci = cx.classes.Foldable; const key = tKey || valueKey(c, ci) || (c === MEMPTY ? '[]' : null);
   let r;
-  if (key === '[]') r = toList(c).reduceRight((acc, x) => sappend(apply(f, x), acc), MEMPTY);
+  if (key === '[]') r = spine(c).reduceRight((acc, x) => sappend(apply(f, x), acc), MEMPTY);
   else if (key === 'Maybe') r = c.con === 'Just' ? apply(f, c.args[0]) : isPure(c) ? apply(f, c.pureOf) : MEMPTY;
   else if (key) r = apply(apply(implFor(ci, key, 'foldMap'), f), c);
   else throw new HsError(`\`foldMap\` doesn't know how to go through ${showShort(c)}${c && c.con && cx.cons[c.con] ? ` — there's no \`instance Foldable ${cx.cons[c.con].typeName}\`` : ''}.`);
@@ -425,8 +434,8 @@ const BINOPS = {
   '==': prim(2, (a, b) => deepEq(a, b)), '/=': prim(2, (a, b) => !deepEq(a, b)),
   '<': prim(2, (a, b) => cmp(a, b) < 0), '<=': prim(2, (a, b) => cmp(a, b) <= 0), '>': prim(2, (a, b) => cmp(a, b) > 0), '>=': prim(2, (a, b) => cmp(a, b) >= 0),
   '++': prim(2, append),
-  ':': prim(2, (x, xs) => isL(xs) ? cell(x, xs) : (typeof xs === 'string' && typeof x === 'string' && x.length === 1) ? x + xs : [x, ...toList(xs, '(:)')]),
-  '!!': prim(2, (xs, n) => { const l = toList(xs, '!!'); if (n < 0 || n >= l.length) throw new HsError(`Index ${n} is too large — the list only has ${l.length} items (counting from 0).`); return l[n]; }),
+  ':': prim(2, (x, xs) => { x = peek(x); return isL(xs) ? cell(x, xs) : (typeof xs === 'string' && typeof x === 'string' && x.length === 1) ? x + xs : [x, ...spine(xs, '(:)')]; }, ':', [0]),
+  '!!': prim(2, (xs, n) => { const l = spine(xs, '!!'); if (n < 0 || n >= l.length) throw new HsError(`Index ${n} is too large — the list only has ${l.length} items (counting from 0).`); return l[n]; }),
   '&&': prim(2, (a, b) => a && force(b), '&&', [1]), '||': prim(2, (a, b) => a || force(b), '||', [1]),
   '.': prim(3, (f, g, x) => apply(f, new Thunk(() => apply(g, x))), '.', [2]), '$': prim(2, (f, x) => apply(f, x), '$', [1]),
   '>>=': prim(2, (m, f) => bindG(m, f)), '>>': prim(2, (a, b) => bindG(a, mkFn(() => b))),
@@ -436,23 +445,35 @@ const PRELUDE = {};
 const PRELUDE_ARITY = {};
 const def = (name, arity, f, lazy) => { PRELUDE[name] = prim(arity, f, name, lazy); PRELUDE_ARITY[name] = arity; };
 const needNonEmpty = (l, name) => { if (!l.length) throw new HsError(`${name} was called on an empty list — there's nothing there to take!`); return l; };
-def('length', 1, xs => toList(xs).length);
+def('length', 1, xs => spine(xs).length);
 def('sum', 1, xs => toList(xs).reduce((a, b) => a + b, 0));
 def('product', 1, xs => toList(xs).reduce((a, b) => a * b, 1));
-def('map', 2, (f, xs) => fromLike(xs, toList(xs).map(x => apply(f, x))));
-def('filter', 2, (p, xs) => fromLike(xs, toList(xs).filter(x => apply(p, x))));
-def('foldr', 3, (f, z, xs) => { const l = toList(xs); let acc = z; for (let i = l.length - 1; i >= 0; i--) acc = apply(apply(f, l[i]), acc); return acc; });
-def('foldl', 3, (f, z, xs) => { let acc = z; for (const x of toList(xs)) acc = apply(apply(f, acc), x); return acc; });
-def('null', 1, xs => toList(xs).length === 0);
-def('head', 1, xs => needNonEmpty(toList(xs), 'head')[0]);
-def('tail', 1, xs => fromLike(xs, needNonEmpty(toList(xs), 'tail').slice(1)));
-def('last', 1, xs => { const l = needNonEmpty(toList(xs), 'last'); return l[l.length - 1]; });
-def('init', 1, xs => fromLike(xs, needNonEmpty(toList(xs), 'init').slice(0, -1)));
-def('reverse', 1, xs => fromLike(xs, [...toList(xs)].reverse()));
-def('elem', 2, (x, xs) => toList(xs).some(y => deepEq(x, y)));
-def('notElem', 2, (x, xs) => !toList(xs).some(y => deepEq(x, y)));
-def('take', 2, (n, xs) => fromLike(xs, toList(xs).slice(0, Math.max(0, n))));
-def('drop', 2, (n, xs) => fromLike(xs, toList(xs).slice(Math.max(0, n))));
+def('map', 2, (f, xs) => fromLike(xs, spine(xs).map(x => apply(f, x))));
+def('filter', 2, (p, xs) => fromLike(xs, spine(xs).filter(x => apply(p, x))));
+// foldr f z (x:xs) = f x (foldr f z xs), with the rest of the fold as a thunk: f only works it out if it needs it,
+// so foldr (\x _ -> x) 0 [1..] is 1 and foldr can build an endless list. A function that needs the whole rest
+// (foldr (+) 0 [1..100000]) nests one call per item; if that overflows the stack, the fold is done again from
+// the right end instead, which takes no stack (working everything out is fine then: it was all needed anyway).
+def('foldr', 3, (f, z, xs) => {
+  const at = (v, i) => {
+    if (v instanceof LCons) return apply(apply(f, v.h), new Thunk(() => at(force(v.tail()), 0)));
+    if (v === MEMPTY || i >= v.length) return z;
+    return apply(apply(f, v[i]), new Thunk(() => at(v, i + 1)));
+  };
+  try { return at(xs, 0); } catch (e) { if (!(e instanceof RangeError)) throw e; }
+  const l = spine(xs, 'foldr'); let acc = z; for (let i = l.length - 1; i >= 0; i--) acc = apply(apply(f, l[i]), acc); return acc;
+}, [1]);
+def('foldl', 3, (f, z, xs) => { let acc = z; for (const x of spine(xs)) acc = apply(apply(f, acc), x); return acc; });
+def('null', 1, xs => spine(xs).length === 0);
+def('head', 1, xs => needNonEmpty(spine(xs), 'head')[0]);
+def('tail', 1, xs => fromLike(xs, needNonEmpty(spine(xs), 'tail').slice(1)));
+def('last', 1, xs => { const l = needNonEmpty(spine(xs), 'last'); return l[l.length - 1]; });
+def('init', 1, xs => fromLike(xs, needNonEmpty(spine(xs), 'init').slice(0, -1)));
+def('reverse', 1, xs => fromLike(xs, [...spine(xs)].reverse()));
+def('elem', 2, (x, xs) => spine(xs).some(y => deepEq(x, y)));
+def('notElem', 2, (x, xs) => !spine(xs).some(y => deepEq(x, y)));
+def('take', 2, (n, xs) => fromLike(xs, spine(xs).slice(0, Math.max(0, n))));
+def('drop', 2, (n, xs) => fromLike(xs, spine(xs).slice(Math.max(0, n))));
 def('maximum', 1, xs => needNonEmpty(toList(xs), 'maximum').reduce((a, b) => cmp(a, b) >= 0 ? a : b));
 def('minimum', 1, xs => needNonEmpty(toList(xs), 'minimum').reduce((a, b) => cmp(a, b) <= 0 ? a : b));
 def('max', 2, (a, b) => cmp(a, b) >= 0 ? a : b); def('min', 2, (a, b) => cmp(a, b) <= 0 ? a : b);
@@ -460,10 +481,10 @@ def('even', 1, n => n % 2 === 0); def('odd', 1, n => Math.abs(n % 2) === 1);
 def('not', 1, b => !b);
 def('show', 1, v => show(v));
 def('concat', 1, xss => toList(xss).reduce((a, b) => append(a, b), []));
-def('concatMap', 2, (f, xs) => toList(xs).map(x => apply(f, x)).reduce((a, b) => append(a, b), []));
-def('zip', 2, (a, b) => { const x = toList(a), y = toList(b); return x.slice(0, Math.min(x.length, y.length)).map((e, i) => ({ tuple: [e, y[i]] })); });
-def('zipWith', 3, (f, a, b) => { const x = toList(a), y = toList(b); return x.slice(0, Math.min(x.length, y.length)).map((e, i) => apply(apply(f, e), y[i])); });
-def('replicate', 2, (n, x) => { if (n > 100000) throw new HsError('That is a lot of copies! Try a smaller number.'); return Array(Math.max(0, n)).fill(x); });
+def('concatMap', 2, (f, xs) => spine(xs).map(x => apply(f, x)).reduce((a, b) => append(a, b), []));
+def('zip', 2, (a, b) => { const x = spine(a), y = spine(b); return x.slice(0, Math.min(x.length, y.length)).map((e, i) => ({ tuple: [e, y[i]] })); });
+def('zipWith', 3, (f, a, b) => { const x = spine(a), y = spine(b); return x.slice(0, Math.min(x.length, y.length)).map((e, i) => apply(apply(f, e), y[i])); });
+def('replicate', 2, (n, x) => { if (n > 100000) throw new HsError('That is a lot of copies! Try a smaller number.'); return Array(Math.max(0, n)).fill(x); }, [1]);
 def('fst', 1, t => tup(t)[0]); def('snd', 1, t => tup(t)[1]);
 def('id', 1, x => x); def('const', 2, (a, _b) => a, [1]); def('flip', 3, (f, a, b) => apply(apply(f, b), a), [1, 2]);
 def('seq', 2, (_a, b) => b, [1]); // seq forces its first argument (as every built-in does) and hands back the second
@@ -478,7 +499,7 @@ def('fromIntegral', 1, n => n);
 def('error', 1, s => { throw new HsError(`error: ${isListV(s) ? strOf(s) : show(s)}`); });
 def('words', 1, s => strOf(s).split(/\s+/).filter(Boolean)); def('unwords', 1, ws => toList(ws).map(strOf).join(' '));
 def('lines', 1, s => { const r = strOf(s).split('\n'); if (r[r.length - 1] === '') r.pop(); return r; }); def('unlines', 1, ls => toList(ls).map(l => strOf(l) + '\n').join(''));
-def('all', 2, (p, xs) => toList(xs).every(x => apply(p, x))); def('any', 2, (p, xs) => toList(xs).some(x => apply(p, x)));
+def('all', 2, (p, xs) => spine(xs).every(x => apply(p, x))); def('any', 2, (p, xs) => spine(xs).some(x => apply(p, x)));
 def('and', 1, xs => toList(xs).every(x => x)); def('or', 1, xs => toList(xs).some(x => x));
 def('putStrLn', 1, s => io(rt => { emit(rt, strOf(s) + '\n'); return UNIT; }));
 def('putStr', 1, s => io(rt => { emit(rt, strOf(s)); return UNIT; }));
@@ -489,21 +510,21 @@ def('compare', 2, (a, b) => { const c = cmp(a, b); return { con: c < 0 ? 'LT' : 
 const asMaybe = m => (m = force(m), isPure(m)) ? { con: 'Just', args: [m.pureOf] } : m;
 def('fromMaybe', 2, (d, m) => { m = asMaybe(m); return m.con === 'Just' ? m.args[0] : d; }, [0]);
 def('catMaybes', 1, xs => toList(xs).map(asMaybe).filter(m => m.con === 'Just').map(m => force(m.args[0])));
-def('mapMaybe', 2, (f, xs) => toList(xs).map(x => asMaybe(apply(f, x))).filter(m => m.con === 'Just').map(m => force(m.args[0])));
+def('mapMaybe', 2, (f, xs) => spine(xs).map(x => asMaybe(apply(f, x))).filter(m => m.con === 'Just').map(m => force(m.args[0])));
 def('isJust', 1, m => asMaybe(m).con === 'Just'); def('isNothing', 1, m => asMaybe(m).con === 'Nothing');
 def('either', 3, (f, g, e) => isPure(e) ? apply(g, e.pureOf) : e.con === 'Left' ? apply(f, e.args[0]) : apply(g, e.args[0]));
-def('mapM_', 2, (f, xs) => io(rt => { for (const x of toList(xs)) runAction(apply(f, x), rt); return UNIT; }));
-def('forM_', 2, (xs, f) => io(rt => { for (const x of toList(xs)) runAction(apply(f, x), rt); return UNIT; }));
-def('mapM', 2, (f, xs) => io(rt => toList(xs).map(x => runAction(apply(f, x), rt))));
+def('mapM_', 2, (f, xs) => io(rt => { for (const x of spine(xs)) runAction(apply(f, x), rt); return UNIT; }));
+def('forM_', 2, (xs, f) => io(rt => { for (const x of spine(xs)) runAction(apply(f, x), rt); return UNIT; }));
+def('mapM', 2, (f, xs) => io(rt => spine(xs).map(x => runAction(apply(f, x), rt))));
 def('when', 2, (b, a) => b ? a : io(() => UNIT), [1]);
 def('read', 1, s => readT(strOf(s), null));
 def('lookup', 2, (k, xs) => { const hit = toList(xs).find(p => deepEq(p.tuple[0], k)); return hit ? { con: 'Just', args: [hit.tuple[1]] } : { con: 'Nothing', args: [] }; });
 def('maybe', 3, (d, f, m) => { m = asMaybe(m); return m.con === 'Just' ? apply(f, m.args[0]) : d; }, [0]);
 def('sort', 1, xs => fromLike(xs, [...toList(xs)].sort(cmp)));
-def('sortOn', 2, (f, xs) => fromLike(xs, toList(xs).map(x => [apply(f, x), x]).sort((a, b) => cmp(a[0], b[0])).map(p => p[1])));
-def('takeWhile', 2, (p, xs) => { const l = toList(xs); let i = 0; while (i < l.length && apply(p, l[i])) i++; return fromLike(xs, l.slice(0, i)); });
-def('dropWhile', 2, (p, xs) => { const l = toList(xs); let i = 0; while (i < l.length && apply(p, l[i])) i++; return fromLike(xs, l.slice(i)); });
-def('splitAt', 2, (n, xs) => { const l = toList(xs); return { tuple: [fromLike(xs, l.slice(0, Math.max(0, n))), fromLike(xs, l.slice(Math.max(0, n)))] }; });
+def('sortOn', 2, (f, xs) => fromLike(xs, spine(xs).map(x => [apply(f, x), x]).sort((a, b) => cmp(a[0], b[0])).map(p => p[1])));
+def('takeWhile', 2, (p, xs) => { const l = spine(xs); let i = 0; while (i < l.length && apply(p, l[i])) i++; return fromLike(xs, l.slice(0, i)); });
+def('dropWhile', 2, (p, xs) => { const l = spine(xs); let i = 0; while (i < l.length && apply(p, l[i])) i++; return fromLike(xs, l.slice(i)); });
+def('splitAt', 2, (n, xs) => { const l = spine(xs); return { tuple: [fromLike(xs, l.slice(0, Math.max(0, n))), fromLike(xs, l.slice(Math.max(0, n)))] }; });
 def('toUpper', 1, c => c.toUpperCase()); def('toLower', 1, c => c.toLowerCase());
 def('isDigit', 1, c => /^[0-9]$/.test(c)); def('isAlpha', 1, c => /^[A-Za-z]$/.test(c)); def('isUpper', 1, c => /^[A-Z]$/.test(c)); def('isLower', 1, c => /^[a-z]$/.test(c)); def('isSpace', 1, c => /^\s$/.test(c));
 def('ord', 1, c => c.charCodeAt(0)); def('chr', 1, n => String.fromCharCode(n));
@@ -530,9 +551,9 @@ for (const k in LIBFN) PRELUDE[k] = LIBFN[k](null);
   lz('notElem', 2, (x, xs) => { for (const y of iter(xs)) if (deepEq(x, y)) return false; return true; });
   lz('any', 2, (p, xs) => { for (const x of iter(xs)) if (apply(p, x)) return true; return false; });
   lz('all', 2, (p, xs) => { for (const x of iter(xs)) if (!apply(p, x)) return false; return true; });
-  lz('and', 1, xs => { for (const x of iter(xs)) if (!x) return false; return true; });
-  lz('or', 1, xs => { for (const x of iter(xs)) if (x) return true; return false; });
-  lz('lookup', 2, (k, xs) => { for (const p of iter(xs)) if (deepEq(p.tuple[0], k)) return Just(p.tuple[1]); return { con: 'Nothing', args: [] }; });
+  lz('and', 1, xs => { for (const x of iter(xs)) if (!force(x)) return false; return true; });
+  lz('or', 1, xs => { for (const x of iter(xs)) if (force(x)) return true; return false; });
+  lz('lookup', 2, (k, xs) => { for (let p of iter(xs)) if (deepEq((p = force(p)).tuple[0], k)) return Just(p.tuple[1]); return { con: 'Nothing', args: [] }; });
   // zip and zipWith stop at the shorter list, so either one may be endless
   const zipL = (f, a, b) => (isL(a) || isL(b)) ? lazyGen(function* () { const ib = iter(b); for (const x of iter(a)) { const r = ib.next(); if (r.done) return; yield f(x, r.value); } }) : null;
   const oldZip = PRELUDE.zip, oldZipWith = PRELUDE.zipWith;
@@ -543,7 +564,7 @@ for (const k in LIBFN) PRELUDE[k] = LIBFN[k](null);
   BINOPS['++'] = prim(2, append);
 }
 // endless lists
-def('repeat', 1, x => { const c = new LCons(x, null); c.done = true; c.t = c; return c; });
+def('repeat', 1, x => { const c = new LCons(x, null); c.done = true; c.t = c; return c; }, [0]);
 def('cycle', 1, xs => { if (!takeN(xs, 1).length) throw new HsError('cycle was given an empty list — there is nothing to repeat!'); return lazyGen(function* () { for (;;) yield* iter(xs); }); });
 def('iterate', 2, (f, x) => { const go = v => new LCons(v, () => go(apply(f, v))); return go(x); });
 def('scanl', 3, (f, z, xs) => lazyGen(function* () { let acc = z; yield acc; for (const x of iter(xs)) { acc = apply(apply(f, acc), x); yield acc; } }));
@@ -578,7 +599,7 @@ function match(p, v, b) {
   if (p.p === 'wild') return true;
   v = force(v);
   switch (p.p) {
-    case 'lit': return p.lt === 'str' && isListV(v) && typeof v !== 'string' ? (takeN(v, p.v.length + 1).join('') === p.v) : v === p.v;
+    case 'lit': return p.lt === 'str' && isListV(v) && typeof v !== 'string' ? (takeN(v, p.v.length + 1).map(force).join('') === p.v) : v === p.v;
     case 'con':
       if (p.name === 'True') return v === true; if (p.name === 'False') return v === false;
       if (v === MEMPTY) return p.name === 'Nothing' || p.name === 'EQ';
@@ -663,7 +684,7 @@ function cheap(e, env) {
         const a = cheap(e.l, env); if (typeof a !== 'number') return NOT_CHEAP;
         const b = cheap(e.r, env); return typeof b === 'number' ? SAFE_ARITH[e.op](a, b) : NOT_CHEAP;
       }
-      if (e.op === ':') { const h = cheap(e.l, env); return known(h) ? new LCons(h, () => evalE(e.r, env)) : NOT_CHEAP; }
+      if (e.op === ':') return new LCons(delay(e.l, env), () => evalE(e.r, env));
       if (e.op === '++' || SAFE_CMP.includes(e.op)) {
         const a = cheap(e.l, env); if (!known(a)) return NOT_CHEAP;
         const b = cheap(e.r, env); if (!known(b)) return NOT_CHEAP;
@@ -672,7 +693,7 @@ function cheap(e, env) {
       }
       return NOT_CHEAP;
     }
-    case 'list': { const out = []; for (const i of e.items) { const v = cheap(i, env); if (!known(v)) return NOT_CHEAP; out.push(v); } return out; }
+    case 'list': return e.items.map(i => delay(i, env)); // like a constructor: built straight away, each item delayed
     case 'app': {
       const args = []; let h = e; while (h.k === 'app') { args.unshift(h.a); h = h.f; } while (h.k === 'paren') h = h.e;
       // a safe built-in like max x m, on known plain values
@@ -711,7 +732,7 @@ function evalBin(n, env) {
     case '&&': return evalE(n.l, env) ? evalE(n.r, env) : false;
     case '||': return evalE(n.l, env) ? true : evalE(n.r, env);
     case '$': return apply(evalE(n.l, env), delay(n.r, env));
-    case ':': { const h = evalE(n.l, env); return new LCons(h, () => evalE(n.r, env)); } // the rest of the list waits until it's needed
+    case ':': return new LCons(delay(n.l, env), () => evalE(n.r, env)); // the item and the rest of the list wait until they're needed
     case '.': { const f = evalE(n.l, env), g = delay(n.r, env); return mkFn(x => apply(f, new Thunk(() => apply(g, x)))); }
   }
   // built-in operators look at both sides anyway; your own operators get them lazily
@@ -751,7 +772,7 @@ function evalRest(n, env) {
     }
     case 'do': return evalDo(n.stmts, 0, env);
     case 'hole': throw new HsError("There's still a ___ blank to fill in. Replace it with your own code.", 'hole');
-    case 'list': return n.items.map(i => evalE(i, env));
+    case 'list': return n.items.map(i => delay(i, env));
     case 'tuple': return n.items.length ? { tuple: n.items.map(i => delay(i, env)) } : UNIT;
     case 'range': {
       const a = evalE(n.from, env), step = n.then ? evalE(n.then, env) - a : 1;
