@@ -3,7 +3,7 @@
 // Click there to use it. Click anywhere else and you get a gentle line, and the item goes back in the
 // Satchel. Nothing is lost. The map side (the glow, where a target is, clicks) is in town.ts.
 import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS } from '../content/index.ts';
-import { $, save, state } from './state.ts';
+import { $, dateOf, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
 import { goInside, plotLabel, targetBox } from './town.ts';
@@ -16,10 +16,29 @@ const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
 const the = (rid: string): string => giftOf(rid).name.replace(/^(A|An|The)\s+/, 'the ');
 
 /** A gift's Journal note, with its extra line once it has been used (Fern's key), the hives you've been inside (Rowan's tulip),
- *  and the shells you've found on the beach (Brine's conch). */
+ *  the shells you've found on the beach (Brine's conch), and who it went to once given away (the Glaschu items). */
 export function giftNote(rid: string): string {
   const g = giftOf(rid), note = g.afterUse && state.used?.[rid] ? `${g.note} ${g.afterUse}` : g.note;
-  return [note, hivesNote(rid), beachNote(rid)].filter(Boolean).join(' ');
+  return [note, hivesNote(rid), beachNote(rid), givenNote(rid)].filter(Boolean).join(' ');
+}
+
+/** Gifts given away on your travels (the Glaschu items), with the day: they leave the Satchel but stay in the Journal as a memory. */
+export function givenAway(): { item: GiftItem; gift: ReturnType<typeof giftOf>; day: number }[] {
+  return ITEMS.filter(i => i.givenTo && state.used?.[i.resident] != null)
+    .map(i => ({ item: i, gift: giftOf(i.resident), day: state.used![i.resident] }));
+}
+function givenNote(rid: string): string {
+  const it = ITEMS.find(i => i.resident === rid), day = state.used?.[rid];
+  return it?.givenTo && day != null ? `<i>Given to ${it.givenTo}, ${dateOf(day)}.</i>` : '';
+}
+/** Give a travel gift to the person it was meant for (Glaschu will call this; the DEV panel can too).
+ *  It leaves the Satchel and becomes a memory in the Journal. */
+export function giveAway(rid: string): void {
+  const it = ITEMS.find(i => i.resident === rid);
+  if (!it?.givenTo || state.used?.[rid] != null) return;
+  (state.used ||= {})[rid] = today(); save();
+  toast(`${giftOf(rid).icon} You gave ${the(rid)} to ${it.givenTo}. <span class="toast-aside">It's in your Journal now, as a memory.</span>`);
+  renderSatchel();
 }
 
 /** Gifts you've been given and haven't used yet, in the order of the Friends panel. */

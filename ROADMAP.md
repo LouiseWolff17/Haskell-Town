@@ -61,7 +61,7 @@ Ordered by the design's suggested build order.
 - [x] Rewrite the gift notes so each hints where it goes (Fern's key keeps its twist; Iris's bookmark, Sorrel's plasters and Marigold's honey say "For your travels").
 - [x] Five town interiors you walk into through the front door (the map becomes the room, the doormat leads back out): Wren's cottage, the bakery kitchen (croissant recipe), the library reading room (Moss's sunflower as a bookmark), the general store (Bram's 10% card), City Hall (Fern's key).
 - [x] Brine's little boat (Juniper's star) as a pixel-art scene too: go aboard from the shore below the pier, the gangplank leads back ashore; the star, the wheel and a line over the side. Talking to Brine plays a cut-scene that sails out to sea, and talking to him again sails home.
-- [ ] Given-away items stay in the Journal as a memory.
+- [x] Given-away items stay in the Journal as a memory: Iris's bookmark, Sorrel's plasters and Marigold's honey know who they go to in Glaschu (`givenTo` in `src/content/items.ts`); once given (`giveAway` in `src/game/satchel.ts`, for now from the DEV panel) they leave the Satchel and get a "Given away" page in the Journal, a line on the gift in the Friends panel, and a section in the printed booklet.
 
 **2. Coins and the store**
 - [ ] 🪙 Coin counter next to the Satchel, one purse shared with Glaschu; a fixed amount per errand.

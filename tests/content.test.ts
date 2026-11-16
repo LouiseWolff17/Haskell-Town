@@ -89,6 +89,7 @@ test('every gift is a Satchel item that points somewhere real', async () => {
   for (const i of ITEMS) {
     assert.match(i.id, /^[a-z][A-Za-z]*$/, `${i.id} reads as a Haskell name`);
     assert.ok(i.notYet && i.wrong, `${i.id} has its gentle lines`);
+    if (i.givenTo) assert.ok(i.memory && !i.target, `${i.id} is given away, so it has a memory for the Journal and no place on the map`);
     const t = i.target; if (!t) continue;
     assert.ok(i.used, `${i.id} says what happens when it's used`);
     assert.ok(i.place && i.visit, `${i.id} opens a place you can visit again`);

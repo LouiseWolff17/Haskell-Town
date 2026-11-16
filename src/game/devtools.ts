@@ -6,6 +6,7 @@ import { ERRANDS_BY_TOPIC, errandById, hearts, practised, reviews, today } from 
 import { completeItem, isOpen, nextDueDay, showAnswer } from './schedule.ts';
 import { nextExpansion, newFriendRewards, newlyOpened } from './rewards.ts';
 import { renderSidebar } from './sidebar.ts';
+import { giveAway, satchelItems } from './satchel.ts';
 import type { Challenge } from '../content/index.ts';
 import type { Confidence, DayItem, Outcome, ReviewState } from './schedule.ts';
  
@@ -43,7 +44,8 @@ export function initDevTools(): void {
   panel.innerHTML = `
     <div style="display:flex;gap:6px;align-items:center"><b>DEV</b>
       <button data-a="next">Solve next</button><button data-a="stage">Solve stage</button>
-      <button data-a="village" title="Solve every request, so the Notice Board opens">Build village</button></div>
+      <button data-a="village" title="Solve every request, so the Notice Board opens">Build village</button>
+      <button data-a="give" title="Give away the travel gifts in the Satchel, as Glaschu will (they stay in the Journal as a memory)">Give away</button></div>
     <div style="display:flex;gap:6px;align-items:center"><b>Errands</b>
       <select data-a="outcome" title="How dev-solved errands count">
         <option value="recalled">first try</option><option value="effortful">with effort</option>
@@ -65,6 +67,7 @@ export function initDevTools(): void {
     for (let c: Challenge | undefined = first; c && c.stage === first.stage; c = nextOpen()) solve(c);
   });
   on('village', () => { for (let c = nextOpen(); c; c = nextOpen()) solve(c); });
+  on('give', () => { for (const i of satchelItems()) if (i.givenTo) giveAway(i.resident); renderSidebar(); });
  
   // move the clock forward, so spaced errands can be tried without waiting for real days
   const clock = panel.querySelector<HTMLElement>('[data-a="clock"]')!;

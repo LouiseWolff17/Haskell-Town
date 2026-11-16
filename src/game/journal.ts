@@ -3,11 +3,11 @@
 // their letters live in their own panel left of the map: friends.ts.) No scores or
 // hint counts: the Journal shows what you made, not how much help you used.
 import { CHALLENGES, ERRANDS, EXPANSIONS, FRIENDSHIP, HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
-import { $, esc, state } from './state.ts';
+import { $, dateOf, esc, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, villageBuilt } from './errands.ts';
 import { errandStamps, openedOn } from './rewards.ts';
-import { giftNote } from './satchel.ts';
+import { giftNote, givenAway } from './satchel.ts';
 import type { Challenge } from '../content/index.ts';
 
 const STAMP: Record<string, string> = { house: '🏡', mailbox: '📬', bakery: '🥖', garden: '🌱', store: '🛒', library: '📚', school: '🎒', hall: '🏛️', clinic: '🩺', railway: '🚂', park: '🌳', harbour: '⚓', market: '🧺', observatory: '🔭' };
@@ -17,8 +17,6 @@ const topicStamp = (topicId: string): string => {
   const first = REVIEW_TOPICS.find(t => t.id === topicId)?.from[0], c = CHALLENGES.find(c => c.id === first);
   return (c && STAMP[plotOf(c)]) || '📌';
 };
-/** A day number (see schedule.ts dayNumber) as a short date, e.g. "9 Nov". */
-const dateOf = (day: number): string => new Date(day * 86400000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 function page(stamp: string, title: string, meta: string, body: string, open: boolean): string {
   return open
@@ -64,6 +62,13 @@ export function renderJournal(): void {
         : page('', 'Still in the mist', `opens after ${x.needs} errands`, '', false);
     }
   }
+  // gifts given away on your travels (the Glaschu items) stay here as a memory
+  const given = givenAway();
+  if (given.length) {
+    html += `<h4 class="board-h">Given away</h4>`;
+    for (const { item, gift, day } of given)
+      html += page(gift.icon, gift.name, `from ${RESIDENTS[item.resident].name} · given to ${item.givenTo} · ${dateOf(day)}`, `<p>${item.memory ?? ''}</p>`, true);
+  }
   el.innerHTML = html;
   const pb = el.querySelector<HTMLElement>('#printJournal'); if (pb) pb.onclick = printJournal;
 }
@@ -108,6 +113,9 @@ export function printJournal(): void {
         ${n >= HEARTS.gift ? `<p class="pj-gift">${f.gift.icon} <b>${f.gift.name}.</b> ${giftNote(f.resident)}</p>` : ''}${n >= HEARTS.change ? `<p class="pj-gift">🏡 ${f.change}</p>` : ''}</article>`;
     }
   }
+
+  const given = givenAway();
+  if (given.length) html += `<h2>Given away</h2><ul class="pj-land">${given.map(({ item, gift, day }) => `<li>${gift.icon} <b>${gift.name}</b> from ${RESIDENTS[item.resident].name}, given to ${item.givenTo}, ${dateOf(day)}. ${item.memory ?? ''}</li>`).join('')}</ul>`;
 
   const land = EXPANSIONS.filter(x => on[x.id] != null);
   if (land.length) html += `<h2>New land</h2><ul class="pj-land">${land.map(x => `<li>${LAND[x.id] || '🌿'} <b>${x.title}</b>, ${dateOf(on[x.id])}. ${x.note}</li>`).join('')}</ul>`;

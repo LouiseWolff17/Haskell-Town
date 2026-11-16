@@ -174,6 +174,10 @@ export interface GiftItem {
   /** Once used, its place can be visited: a room for the five town buildings (interiors.ts), else a card with this title and line. */
   place?: string;
   visit?: string;
+  /** Given away rather than kept (the Glaschu items): who it went to, for the Journal, e.g. "Barley, the baker in Glaschu". */
+  givenTo?: string;
+  /** The Journal's memory of giving it away. */
+  memory?: string;
 }
 
 /** A bit of life on the map that appears the first time you solve an errand on a topic. */
