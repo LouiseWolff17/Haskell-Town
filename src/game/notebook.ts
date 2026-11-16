@@ -4,7 +4,7 @@ import { CHALLENGES, EXPANSIONS, FRIENDSHIP, HEARTS, LIFE, RESIDENTS, WORKSHOP_E
 import { createRunner } from '../runner/index.ts';
 import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.ts';
 import { codeBlock, highlight } from './highlight.ts';
-import { buildAnim, portrait } from './town.ts';
+import { buildAnim, portrait, showLand } from './town.ts';
 import { notSupportedHTML, renderSidebar } from './sidebar.ts';
 import { ERRANDS_BY_TOPIC, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, villageBuilt, whenText } from './errands.ts';
 import { completeItem, isOpen, showAnswer } from './schedule.ts';
@@ -29,7 +29,8 @@ interface ErrandSession extends Omit<Errand, 'id'> {
 interface WorkshopSession { id: 'workshop'; workshop: true; errand?: never }
 type Session = ChallengeSession | ErrandSession | WorkshopSession;
 
-const runner = createRunner();
+/** The one runner for the whole game (the interiors use it too). Calls are queued, one at a time. */
+export const runner = createRunner();
 
 let current: Session | null = null;
 const ed = $<HTMLTextAreaElement>('#code'), hl = $('#hl'), gutter = $('#gutter');
@@ -85,7 +86,8 @@ export function revealLand(): void {
   }
   for (const l of life) msgs.push(`✨ ${l.note}`);
   toast(msgs.join(' '));
-  $('.town-frame').scrollIntoView({ behavior: 'smooth', block: opened.length ? 'end' : 'center' });
+  if (opened.length) showLand(opened[opened.length - 1].id);
+  $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 /** One line for the win box: the resident's hearts, and anything their friendship just brought. */
 function friendLine(rid: string, rewards: FriendReward[]): string {
@@ -262,7 +264,7 @@ export function build(c: Challenge): void {
   $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 let toastT: ReturnType<typeof setTimeout> | undefined;
-function toast(html: string): void { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
+export function toast(html: string): void { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
 
 
 // ---------- Errands: retrieval practice from the Notice Board ----------

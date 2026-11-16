@@ -4,11 +4,14 @@ import { $, byId, save, state, status } from './state.ts';
 import { openChallenge, openErrand } from './notebook.ts';
 import { isOpen } from './schedule.ts';
 import { errandById, hearts, practised, reviews, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.ts';
-import { drawPlayer, drawPrompt, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.ts';
+import { drawPlayer, drawPrompt, drawResident, heldKeys, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.ts';
 import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
-import type { Challenge, Expansion } from '../content/index.ts';
+import { heldItem, holdLabel, openDoors, putBack, useHeld, visit } from './satchel.ts';
+import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract, roomsOf } from './rooms.ts';
+import { enterInterior, leaveInterior, placeOf, roomLabel } from './interiors.ts';
+import type { Challenge, Expansion, GiftItem, ItemTarget } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
 /** A rectangle on the map, in map pixels. */
@@ -32,7 +35,7 @@ interface Plot extends Box {
 /** Hair and shirt colours: a resident, or someone passing through. */
 interface Look { hair: string; shirt: string }
 /** Something on the map the character can talk to. */
-type Target = { kind: 'errand'; rid: string } | { kind: 'plot'; id: string };
+type Target = { kind: 'errand'; rid: string } | { kind: 'plot'; id: string } | { kind: 'door'; rid: string };
 /** The closest Target, how far away it is, and whether pressing E does anything. */
 type Near = Target & { key: string; act: boolean; d: number };
 type Pt = [x: number, y: number];
@@ -40,6 +43,12 @@ type Pt = [x: number, y: number];
 const cv = $<HTMLCanvasElement>('#town'), ctx = cv.getContext('2d')!;
 // The village is 400×340. Once errands start opening new land, strips of STRIP px are added below the railway.
 const W = 400, H = 340, STRIP = 72;
+// The map is mapH tall (the village plus any land strips), but the canvas only shows a window onto it,
+// sized to fit the screen (syncSize). The camera follows the character down the map: camY is the map y
+// at the top of the canvas.
+let mapH = H, camY = 0, camFresh = true;
+/** A place the camera looks at for a moment instead of the character (new land opening). */
+let focus: { y: number; until: number } | null = null;
 const R: Rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
 const C = { grass: '#93c47d', grass2: '#86b870', grass3: '#a4d18c', road: '#e2c596', road2: '#cfae7b', dirt: '#c69c6d', dirt2: '#a97f55', wood: '#8a5a3b', wood2: '#6b4429', ink: '#3b2a2a', wall: '#f6e7cf', wall2: '#e3cfae', glass: '#a8dbe8', glass2: '#7cc0d4', door: '#7a4a2c', skin: '#f2c9a0', white: '#fffaf0' };
 
@@ -348,14 +357,7 @@ function marketDeco(x: number, y: number, t: number): void {
   R(sx, sy + 4 - tip, 1, 5, '#8d8a84'); R(sx + 11, sy + 4 + tip, 1, 5, '#8d8a84');
   R(sx - 2, sy + 9 - tip, 5, 2, '#e0b040'); R(sx + 9, sy + 9 + tip, 5, 2, '#e0b040'); R(sx - 1, sy + 7 - tip, 3, 2, '#e07a5f');
 }
-function person(x: number, y: number, r: Look, t: number, bob: boolean): void {
-  const dy = bob ? Math.round(Math.sin(t / 380) * 0.6) : 0; y += dy;
-  R(x + 1, y + 13, 6, 1, 'rgba(0,0,0,.15)');
-  R(x + 1, y, 6, 3, r.hair); R(x + 1, y + 2, 6, 4, C.skin); R(x, y + 1, 1, 3, r.hair); R(x + 7, y + 1, 1, 3, r.hair);
-  R(x + 2, y + 3, 1, 1, C.ink); R(x + 5, y + 3, 1, 1, C.ink); R(x + 2, y + 5, 1, 1, '#f0a0a0'); R(x + 5, y + 5, 1, 1, '#f0a0a0');
-  R(x + 1, y + 6, 6, 5, r.shirt); R(x, y + 7, 1, 3, r.shirt); R(x + 7, y + 7, 1, 3, r.shirt);
-  R(x + 2, y + 11, 1, 2, '#5a4636'); R(x + 5, y + 11, 1, 2, '#5a4636');
-}
+const person = (x: number, y: number, r: Look, t: number, bob: boolean): void => drawResident(R, x, y, r, t, bob);
 // a blue ? for a resident who has pinned an errand to the Notice Board
 function errandBubble(x: number, y: number, t: number): void {
   const by = y + Math.round(Math.sin(t / 300) * 1.5);
@@ -392,11 +394,18 @@ function residentsOnMap(): { rid: string; x: number; y: number; task: 'request' 
 }
 let lastT: number | null = null;
 function draw(t: number): void {
-  const plots = visiblePlots();
+  // inside a building, the map is its room
+  if (inRoom()) {
+    syncSize(); drawRoom(ctx, W, cv.height, t, lastT == null ? 0 : Math.min(50, t - lastT), heldKeys()); lastT = t; camFresh = true;
+    requestAnimationFrame(draw); return;
+  }
+  const plots = visiblePlots(), dt = lastT == null ? 0 : Math.min(50, t - lastT);
   syncSize(); refreshSolids();
-  updatePlayer(lastT == null ? 0 : Math.min(50, t - lastT), solidAt); lastT = t;
+  updatePlayer(dt, solidAt); lastT = t;
+  moveCamera(t, dt);
+  ctx.save(); ctx.translate(0, -Math.round(camY));
   const near = nearby();
-  if (near?.key !== nearKey) { nearKey = near?.key ?? null; if (!hover) $('#hoverLabel').innerHTML = nearLabel(near); }
+  if (near?.key !== nearKey) { nearKey = near?.key ?? null; if (!hover && !heldItem()) $('#hoverLabel').innerHTML = nearLabel(near); }
   ctx.drawImage(bg, 0, 0); roadLayer(plots);
   drawStrips(t);
   for (const [pid, p] of plots) {
@@ -414,7 +423,7 @@ function draw(t: number): void {
   }
   drawFriends(t);
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
-  const folk = residentsOnMap(), talking = near?.act ? (near.kind === 'errand' ? near.rid : plotChallenges(near.id).find(c => status(c) === 'open')?.resident) : null;
+  const folk = residentsOnMap(), talking = near?.act ? (near.kind === 'errand' ? near.rid : near.kind === 'plot' ? plotChallenges(near.id).find(c => status(c) === 'open')?.resident : null) : null;
   // the resident the character can talk to swaps their ! or ? for the E prompt
   const drawFolk = (f: ReturnType<typeof residentsOnMap>[number]): void => { person(f.x, f.y, RESIDENTS[f.rid], f.task ? t : t + f.x * 50, !!f.task); if (f.task && f.rid !== talking) (f.task === 'request' ? bubble : errandBubble)(f.x - 1, f.y - 13, t); };
   folk.forEach(drawFolk);
@@ -430,14 +439,30 @@ function draw(t: number): void {
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
     if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
   drawNight(t);
-  if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
-  const outline = hover || (near?.kind === 'plot' ? near.id : null);
-  if (outline && PLOTS[outline]) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  if (hover && (hover.startsWith('exp:') || hover.startsWith('fog:'))) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
+  const outline = hover?.startsWith('door:') ? null : hover || (near?.kind === 'plot' ? near.id : null);
+  if (outline && PLOTS[outline] && !heldItem()) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  const held = heldItem(), glowAt = held?.target && targetBox(held.target);
+  if (glowAt) glow(glowAt, t);
+  ctx.restore();
   requestAnimationFrame(draw);
+}
+/** Follow the character (or the land that just opened), gliding, and never past the edges of the map. */
+function moveCamera(t: number, dt: number): void {
+  if (focus && t > focus.until) focus = null;
+  const view = cv.height, goal = Math.max(0, Math.min(mapH - view, (focus ? focus.y : player.y - 8) - view / 2));
+  camY = camFresh ? goal : camY + (goal - camY) * Math.min(1, dt / (focus ? 400 : 180));
+  if (Math.abs(goal - camY) < 0.3) camY = goal;
+  camFresh = false;
+}
+/** Show the land that just opened for a few seconds, then go back to following the character. */
+export function showLand(id: string): void {
+  const x = EXPANSIONS.find(e => e.id === id); if (!x) return;
+  const r = slotRect(x.slot); focus = { y: r.y + r.h / 2, until: performance.now() + 3500 };
 }
 
 function plotAt(ev: MouseEvent): string | null {
-  const r = cv.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * cv.height / r.height;
+  const [x, y] = mapPoint(ev);
   if (y >= H) { const x0 = EXPANSIONS.find(e => { const r = slotRect(e.slot); return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }); return x0 && Math.floor(x0.slot / 2) < stripsShown(EXPANSIONS, solvedErrands()) ? (isOpenExp(x0) ? 'exp:' : 'fog:') + x0.id : null; }
   for (const [id, p] of visiblePlots()) { const [sx, sy] = p.stand; if ((x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 4) || (x >= sx - 4 && x <= sx + 12 && y >= sy - 14 && y <= sy + 14)) return id; }
   return null;
@@ -470,31 +495,54 @@ export function portrait(rid: string, size = 40): HTMLCanvasElement {
 }
 
 export function initTown(): void {
-  paintBackground(); requestAnimationFrame(draw);
+  paintBackground();
+  measure(); new ResizeObserver(measure).observe(cv.closest('.town-frame')!); window.addEventListener('resize', measure);
+  requestAnimationFrame(draw);
   $('#nightBtn').onclick = () => { state.clockOff = !state.clockOff; save(); renderNightBtn(); };
   // the button follows what's actually playing, so it always does what it says
   $('#musicBtn').onclick = () => { if (musicPlaying()) stopMusic(); else startMusic(); state.music = musicPlaying(); save(); renderNightBtn(); };
   // browsers only play sound after a click, so music that was left on starts at the first click (unless that click is the music button)
   if (state.music) document.addEventListener('pointerdown', ev => { if (state.music && state.done.market && !(ev.target as Element | null)?.closest?.('#musicBtn')) { startMusic(); renderNightBtn(); } }, { once: true });
   renderNightBtn();
-  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
-  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
+  cv.addEventListener('mousemove', ev => {
+    if (inRoom()) { const s = roomHover(...mapPoint(ev), W, cv.height); cv.style.cursor = s ? 'pointer' : 'default'; $('#hoverLabel').innerHTML = roomLabel(s); return; }
+    const held = heldItem();
+    if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
+    const door = placeAt(...mapPoint(ev));
+    if (door) { const key = 'door:' + (door.room ?? door.it.resident); if (hover !== key) { hover = key; $('#hoverLabel').innerHTML = doorLabel(door, 'Click'); } cv.style.cursor = 'pointer'; return; }
+    const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
+  cv.addEventListener('mouseleave', () => {
+    if (inRoom()) { roomHover(-1, -1, W, cv.height); $('#hoverLabel').innerHTML = roomLabel(null); return; }
+    hover = null; $('#hoverLabel').innerHTML = heldItem() ? holdLabel() : nearLabel(nearby());
+  });
   // a click sends the character walking there; a click on a resident or a building also talks to them on arrival
   cv.addEventListener('click', ev => {
-    const [x, y] = mapPoint(ev), rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
+    const [x, y] = mapPoint(ev), held = heldItem();
+    if (inRoom()) { roomClick(x, y, W, cv.height); return; }
+    // holding something from the Satchel: this click uses it, or puts it back with a gentle line
+    if (held) { useHeld(onTarget(held.target, x, y)); return; }
+    // a place opened with a gift: a building's front door, or the spot outdoors (the hives, the boat, the pond)
+    const door = placeAt(x, y);
+    if (door) { if (door.room) goInside(door.room); else visit(door.it.resident); return; }
+    const rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
     if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
     goTo(x, y);
   });
-  initPlayerKeys(() => { const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
+  initPlayerKeys(() => {
+    if (inRoom()) return roomInteract();
+    const held = heldItem();
+    if (held) { const b = held.target && targetBox(held.target); useHeld(!!b && Math.hypot(Math.max(b.x - player.x, 0, player.x - b.x - b.w), Math.max(b.y - player.y, 0, player.y - b.y - b.h)) < 14); return true; }
+    const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
 }
 
 // ---------- The character: what blocks it, and what it can talk to (movement and drawing are in player.ts) ----------
-const mapPoint = (ev: MouseEvent): Pt => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+/** Where the mouse is on the map, in map pixels (or, inside a building, on the canvas: the room has no camera). */
+const mapPoint = (ev: MouseEvent): Pt => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * cv.height / r.height + (inRoom() ? 0 : camY)]; };
 /** Solid things, rebuilt (once a frame, and only when the town changed): built buildings, residents, tree trunks, the sea and misty land. */
 let solidCache: { sig: string | null; rects: [x: number, y: number, w: number, h: number][] } = { sig: null, rects: [] };
 function refreshSolids(): void {
-  const waiting = waitingResidents(), sig = `${Object.keys(state.done).join()}|${cv.height}|${solvedErrands()}|${[...waiting].join()}`;
+  const waiting = waitingResidents(), sig = `${Object.keys(state.done).join()}|${mapH}|${solvedErrands()}|${[...waiting].join()}`;
   if (solidCache.sig === sig) return;
   const rects: typeof solidCache.rects = [[358, 128, 42, 116]];
   // residents are solid too, so the character stops beside them instead of walking through
@@ -511,16 +559,17 @@ function refreshSolids(): void {
   solidCache = { sig, rects };
 }
 function solidAt(x: number, y: number): boolean {
-  if (x < 1 || x > W - 1 || y < 10 || y > cv.height - 1) return true;
+  if (x < 1 || x > W - 1 || y < 10 || y > mapH - 1) return true;
   return solidCache.rects.some(([rx, ry, rw, rh]) => x >= rx && x < rx + rw && y >= ry && y < ry + rh);
 }
 function goTo(x: number, y: number, then?: () => void): void {
   // already there? then don't walk at all
   if (then && Math.hypot(x - player.x, y - player.y) < 10) { player.path = null; then(); return; }
-  if (!walkTo(x, y, solidAt, Math.ceil(W / 4), Math.ceil(cv.height / 4), then)) $('#hoverLabel').innerHTML = "Hmm, there's no way to get there from here.";
+  if (!walkTo(x, y, solidAt, Math.ceil(W / 4), Math.ceil(mapH / 4), then)) $('#hoverLabel').innerHTML = "Hmm, there's no way to get there from here.";
 }
 /** Send the character to a challenge's building and open it there (the Requests list uses this). */
 export function goToChallenge(c: Challenge): void {
+  leaveInterior();
   const pid = c.plot || c.id, [sx, sy] = PLOTS[pid].stand;
   cv.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   goTo(sx + 4, sy + 15, () => openChallenge(c.id));
@@ -541,6 +590,10 @@ function nearby(): Near | null {
     if (shown.has(rid) || !HOMES[rid]) continue;
     const [hx, hy] = HOMES[rid]; consider(Math.hypot(px - hx - 4, py - hy - 13), { kind: 'errand', rid, key: 'errand:' + rid, act: true });
   }
+  // the front door of a building you can go into (or the boat, or a hive)
+  for (const w of ways()) {
+    const [dx, dy] = w.at; consider(Math.hypot(px - dx, py - dy) - 4, { kind: 'door', rid: w.room, key: 'door:' + w.room, act: true });
+  }
   for (const [id, p] of visiblePlots()) {
     const [sx, sy] = p.stand, toStand = Math.hypot(px - sx - 4, py - sy - 13);
     const toWall = Math.hypot(Math.max(p.x - px, 0, px - p.x - p.w), Math.max(p.y - py, 0, py - p.y - p.h));
@@ -552,16 +605,115 @@ function nearby(): Near | null {
 function nearLabel(n: Near | null): string {
   if (!n) return plotLabel(null);
   if (n.kind === 'errand') return `<b>${RESIDENTS[n.rid].name}</b> has pinned an errand to the Notice Board. Press <kbd>E</kbd> to help.`;
+  if (n.kind === 'door') { const w = ways().find(v => v.room === n.rid); return w ? doorLabel(w, 'Press <kbd>E</kbd>') : plotLabel(null); }
   return plotLabel(n.id).replace('Click to help!', 'Press <kbd>E</kbd> to help!').replace('click to revisit.', 'press <kbd>E</kbd> to revisit.').replace('Click the mailbox to read.', 'Press <kbd>E</kbd> to read.');
 }
 function interactWith(n: Target): void {
   savePlayer();
   if (n.kind === 'errand') { const i = errandIndex(n.rid); if (i >= 0) openErrand(i); return; }
+  if (n.kind === 'door') { goInside(n.rid, false); return; }
   if (n.id === 'mailbox' && unreadLetters().length) { openLetters(); return; }
   const c = challengeForPlot(n.id);
   if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(n.id);
 }
 
+
+// ---------- Going inside (the town interiors: interiors.ts, rooms.ts) ----------
+/** A place opened with a gift, on the map: the room it leads into (null for the places that are only a card for now). */
+interface Place { it: GiftItem; room: string | null }
+/** A way into a room: where you stand to go in, and where you come back out. */
+interface Way extends Place { room: string; at: Pt }
+/** The beehives in the meadow (top-left of each 12×16 hive, from the meadow's corner). EXPANSION_ART.meadow draws them here. */
+const HIVE_AT: Record<string, Pt> = { nursery: [12, 20], honey: [30, 22], queen: [48, 20] };
+/** Brine's conch at the Duck Pond, once it's set down at the water's edge (top-left, from the pond's corner). EXPANSION_ART.pond draws it here. */
+const CONCH_AT: Pt = [66, 55];
+/** Where you stand to go into a room outdoors: on the shore below Brine's boat, just in front of a hive, or by the conch at the pond. */
+function outdoorStand(room: string): Pt | null {
+  if (room === 'juniper') return [366, 250];
+  if (room === 'brine') { const p = EXPANSIONS.find(x => x.id === 'pond'); if (!p) return null; const r = slotRect(p.slot); return [r.x + CONCH_AT[0] + 4, r.y + CONCH_AT[1] + 8]; }
+  const h = HIVE_AT[room], m = EXPANSIONS.find(x => x.id === 'meadow'); if (!h || !m) return null;
+  const r = slotRect(m.slot); return [r.x + h[0] + 6, r.y + h[1] + 19];
+}
+/** Every way into a room that's open right now: the front doors of buildings, the boat, and each of the hives. */
+function ways(): Way[] {
+  const out: Way[] = [];
+  for (const it of openDoors()) for (const room of roomsOf(it.resident)) {
+    const p = it.target?.plot ? PLOTS[it.target.plot] : null;
+    const at = it.target?.spot ? outdoorStand(room) : p && p.door != null ? [p.door, p.y + p.h + 3] as Pt : null;
+    if (at) out.push({ it, room, at });
+  }
+  return out;
+}
+const capFirst = (s: string): string => s[0].toUpperCase() + s.slice(1);
+/** What the line under the map says about a way in: "Click to go inside", "Press E to go aboard", … */
+function doorLabel(pl: Place, how: string): string {
+  if (pl.room === 'juniper') return `⛵ <b>${pl.it.place}</b> is moored here. ${how} to go aboard.`;
+  if (pl.room === 'brine') return `🐚 <b>Brine's conch</b> sits at the water's edge. ${how} to hold it to your ear.`;
+  if (pl.room && HIVE_AT[pl.room]) return `🐝 <b>${capFirst(placeOf(pl.room))}</b>. ${how} to shrink down and step inside.`;
+  if (pl.room) return `🚪 The door to <b>${pl.it.place}</b>. ${how} to go inside.`;
+  return `<b>${pl.it.place}</b> is open to you. ${how} to pop in.`;
+}
+/** A click on a way in: a building's front door, the shore by the boat, or a hive. */
+function wayAt(x: number, y: number): Way | null {
+  return ways().find(w => { const [dx, dy] = w.at; return Math.abs(x - dx) <= 6 && y >= dy - 18 && y <= dy + 3; }) ?? null;
+}
+/** Walk to a room's way in (or be there already) and go in. Coming out, you stand where you went in.
+ *  A gift that opens several rooms (Rowan's tulip, three hives) walks you over to them, to pick one. */
+export function goInside(id: string, walk = true): void {
+  if (heldItem()) putBack();
+  const all = ways(), w = all.find(v => v.room === id);
+  if (!w) { const some = all.filter(v => v.it.resident === id); if (some.length) { const [x, y] = some[Math.floor(some.length / 2)].at; goTo(x, y); } return; }
+  const [dx, dy] = w.at;
+  const enter = (): void => {
+    player.path = null; player.moving = false;
+    enterInterior(w.room, () => { player.x = dx; player.y = dy; player.dir = 'down'; savePlayer(); hover = null; nearKey = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
+  };
+  if (walk) goTo(dx, dy, enter); else enter();
+}
+
+// ---------- The Satchel's targets (src/content/items.ts, the list itself is in satchel.ts) ----------
+/** Where an item's place is on the map right now, or null while it isn't there (not built, land still misty, no boat yet). */
+export function targetBox(tg: ItemTarget): Box | null {
+  if (tg.friend && (hearts()[tg.friend] || 0) < HEARTS.change) return null;
+  let base: Box;
+  if (tg.plot) {
+    const p = PLOTS[tg.plot], m = mainOf(tg.plot);
+    if (!p || !m || !state.done[m.id]) return null;
+    base = p;
+  } else if (tg.land) {
+    const x = EXPANSIONS.find(e => e.id === tg.land);
+    if (!x || !isOpenExp(x)) return null;
+    base = slotRect(x.slot);
+  } else return null;
+  if (!tg.spot) return { x: base.x, y: base.y, w: base.w, h: base.h };
+  const [dx, dy, w, h] = tg.spot;
+  return { x: base.x + dx, y: base.y + dy, w, h };
+}
+/** Is a map point on (or right next to) an item's place? */
+function onTarget(tg: ItemTarget | null, x: number, y: number): boolean {
+  const b = tg && targetBox(tg);
+  return !!b && x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 8 && y <= b.y + b.h + 4;
+}
+/** A soft, slowly pulsing golden glow around the place the held item belongs, with a few sparkles. */
+function glow(b: Box, t: number): void {
+  const k = 0.5 + Math.sin(t / 420) * 0.5;
+  ctx.fillStyle = '#fff2a8'; ctx.globalAlpha = 0.12 + 0.12 * k; ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
+  ctx.globalAlpha = 0.55 + 0.4 * k; ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 1; ctx.strokeRect(b.x - 2.5, b.y - 2.5, b.w + 5, b.h + 5);
+  for (let i = 0; i < 4; i++) {
+    const a = t / 1400 + i * 1.57, sx = b.x + b.w / 2 + Math.cos(a) * (b.w / 2 + 2), sy = b.y + b.h / 2 + Math.sin(a) * (b.h / 2 + 2);
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t / 300 + i); R(sx, sy - 1, 1, 3, '#fffaf0'); R(sx - 1, sy, 3, 1, '#fffaf0');
+  }
+  ctx.globalAlpha = 1;
+}
+/** A place opened with a gift under the mouse: a way into a room (a front door, the boat, a hive), or a place
+ *  outdoors that is part of a plot (Brine's boat, the pond). Whole buildings without a room inside (the
+ *  telescope, the station) aren't clickable here, since a click there opens their challenge. The hives are
+ *  clicked one by one, since each is its own room. */
+function placeAt(x: number, y: number): Place | null {
+  const w = wayAt(x, y); if (w) return w;
+  const it = openDoors().find(i => i.target?.spot && roomsOf(i.resident).length < 2 && onTarget(i.target, x, y));
+  return it ? { it, room: roomsOf(it.resident)[0] ?? null } : null;
+}
 
 // ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------
 const isOpenExp = (x: Expansion): boolean => solvedErrands() >= x.needs;
@@ -570,10 +722,27 @@ function slotRect(slot: number): Box {
   const y = H + Math.floor(slot / 2) * STRIP;
   return slot % 2 ? { x: 157, y, w: W - 157, h: STRIP } : { x: 0, y, w: 145, h: STRIP };
 }
-/** Grow the canvas when a new strip of land is shown. The CSS keeps the same width and scales the height. */
+/** The space the map has on the page, in CSS pixels, kept up to date by a ResizeObserver (initTown). */
+let box = { w: 0, h: 0 };
+/** Phones and narrow windows scroll the page, so the map is capped to most of the screen's height there. */
+const stacked = window.matchMedia('(max-width: 960px)');
+function measure(): void {
+  const f = cv.closest<HTMLElement>('.town-frame')!, cs = getComputedStyle(f);
+  const w = f.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const h = stacked.matches ? window.innerHeight * 0.75 : f.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  box = { w: Math.max(1, w), h: Math.max(1, h) };
+}
+/** Size the canvas to the space it has: the map's full width, and as much of its height as fits. */
 function syncSize(): void {
-  const h = H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
-  if (cv.height !== h) { cv.height = h; cv.style.aspectRatio = `${W} / ${h}`; }
+  mapH = H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
+  // inside a building the canvas fills the frame and the room sits in the middle, with dark around it
+  // (on a phone the frame wraps the canvas, so there it just takes the room's shape)
+  const fill = Math.max(160, Math.round(W * box.h / box.w));
+  const view = inRoom() ? (stacked.matches ? Math.round(W * RH / RW) : fill) : Math.min(mapH, fill);
+  if (cv.height !== view) cv.height = view;
+  // as wide as the space allows, unless that would make it too tall
+  const scale = Math.min(box.w / W, box.h / view), cw = `${Math.floor(W * scale)}px`, ch = `${Math.floor(view * scale)}px`;
+  if (cv.style.width !== cw || cv.style.height !== ch) { cv.style.width = cw; cv.style.height = ch; }
 }
 // a stable pseudo-random number for (i, k), so the art doesn't flicker frame to frame
 const hsh = (i: number, k = 0): number => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
@@ -628,7 +797,9 @@ const EXPANSION_ART: Record<string, (x: number, y: number, w: number, h: number,
     const fl = ['#f7c6d0', '#fff2a8', '#ffffff', '#e8a0bf', '#b48ad1', '#e07a5f'];
     for (let i = 0; i < 70; i++) { const fx = x + 4 + hsh(i, 11) * (w - 8), fy = y + 4 + hsh(i, 13) * (h - 8), sw = Math.round(Math.sin(t / 800 + i) * 0.6); R(fx, fy + 1, 1, 2, '#4f8a4a'); R(fx + sw, fy, 1, 1, fl[i % fl.length]); }
     fence(x + 4, y + 4, 60);
-    beehive(x + 12, y + 20, t, 0); beehive(x + 30, y + 22, t, 1);
+    Object.values(HIVE_AT).forEach(([hx, hy], i) => beehive(x + hx, y + hy, t, i));
+    // Rowan's tulip, once it's planted: the way into the hives
+    if (state.used?.rowan) { const sw = Math.round(Math.sin(t / 900) * 0.6); R(x + 5, y + 31, 1, 6, '#4f8a4a'); R(x + 3, y + 34, 2, 1, '#6aa85e'); R(x + 4 + sw, y + 28, 3, 3, '#e87a9a'); R(x + 4 + sw, y + 27, 1, 1, '#e87a9a'); R(x + 6 + sw, y + 27, 1, 1, '#e87a9a'); R(x + 5 + sw, y + 28, 1, 1, '#f7a8c0'); }
     sheep(x + 80, y + 18, t, 0); sheep(x + 110, y + 34, t, 1); sheep(x + 70, y + 46, t, 2);
   },
   orchard(x, y, w, h, t) {
@@ -651,6 +822,13 @@ const EXPANSION_ART: Record<string, (x: number, y: number, w: number, h: number,
     // reeds on the west bank, a jetty on the east
     for (let i = 0; i < 7; i++) { const sw = Math.round(Math.sin(t / 700 + i) * 0.7); R(x + 14 + i * 3 + sw, y + 22 + (i % 3) * 3, 1, 9, '#4f8a4a'); R(x + 14 + i * 3 + sw, y + 21 + (i % 3) * 3, 1, 3, '#8a5a3b'); }
     R(cx + 30, cy - 2, 28, 5, '#a0764e'); R(cx + 30, cy - 2, 28, 1, '#c49a6c'); for (let i = 0; i < 28; i += 9) R(cx + 32 + i, cy + 3, 2, 4, '#6b4429');
+    // Brine's conch, once it's set down at the water's edge: the way to the magical beach (it glints now and then)
+    if (state.used?.brine) {
+      const [ax, ay] = [x + CONCH_AT[0], y + CONCH_AT[1]];
+      R(ax, ay + 4, 8, 1, 'rgba(0,0,0,.15)'); R(ax + 1, ay, 5, 4, '#f4c6c0'); R(ax, ay + 1, 7, 2, '#f4c6c0'); R(ax + 6, ay, 1, 1, '#e8a8a8'); R(ax + 7, ay - 1, 1, 1, '#e8a8a8');
+      R(ax + 1, ay + 2, 2, 1, '#e87a8a'); R(ax + 3, ay + 1, 1, 2, '#d88a8a'); R(ax + 2, ay, 2, 1, '#fff0ec');
+      if (Math.sin(t / 650) > 0.93) { R(ax + 8, ay - 3, 1, 3, C.white); R(ax + 7, ay - 2, 3, 1, C.white); }
+    }
     // a duck family paddling round
     for (let d = 0; d < 3; d++) {
       const a = t / 5200 - d * 0.22, dx = cx + Math.cos(a) * 30, dy = cy + Math.sin(a) * 11, s = d ? 0 : 1;
@@ -789,7 +967,7 @@ export const nightOn = (): boolean => !!state.done.observatory && !state.clockOf
 function drawNight(t: number): void {
   if (!nightOn()) return;
   const n = nightness(hourNow()); if (n <= 0) return;
-  ctx.globalAlpha = 0.5 * n; ctx.fillStyle = n < 0.6 ? '#3a3a78' : '#1d2350'; ctx.fillRect(0, 0, W, cv.height);
+  ctx.globalAlpha = 0.5 * n; ctx.fillStyle = n < 0.6 ? '#3a3a78' : '#1d2350'; ctx.fillRect(0, 0, W, mapH);
   ctx.globalAlpha = 1;
   if (n < 0.35) return;
   const glow = Math.min(1, (n - 0.35) / 0.4);
@@ -801,7 +979,7 @@ function drawNight(t: number): void {
   // the lighthouse lamp and the windmill window
   ctx.globalAlpha = 0.9 * glow; if (state.done.harbour2) R(384, 133, 6, 5, '#fff2a8');
   // a few fireflies over the grass
-  for (let i = 0; i < 10; i++) { const fx = (hsh(i, 41) * W + Math.sin(t / 1300 + i) * 8) | 0, fy = (hsh(i, 43) * cv.height + Math.cos(t / 1100 + i) * 6) | 0; ctx.globalAlpha = glow * (0.4 + 0.6 * Math.max(0, Math.sin(t / 400 + i * 2))); R(fx, fy, 1, 1, '#f6ff9a'); }
+  for (let i = 0; i < 10; i++) { const fx = (hsh(i, 41) * W + Math.sin(t / 1300 + i) * 8) | 0, fy = (hsh(i, 43) * mapH + Math.cos(t / 1100 + i) * 6) | 0; ctx.globalAlpha = glow * (0.4 + 0.6 * Math.max(0, Math.sin(t / 400 + i * 2))); R(fx, fy, 1, 1, '#f6ff9a'); }
   ctx.globalAlpha = 1;
 }
 

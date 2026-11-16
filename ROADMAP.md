@@ -56,11 +56,12 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 Ordered by the design's suggested build order.
 
 **1. Satchel and town interiors**
-- [ ] 🎒 Satchel button on the map (appears with the first gift), listing unused items; pick one and valid targets glow, wrong targets give a gentle line and nothing is lost.
-- [ ] Used places get a door marker on the map so they can be revisited; optional `use spareKey wrensCottage` toast.
-- [ ] Rewrite the gift notes so each hints where it goes (Fern's key keeps its twist; Iris's bookmark, Sorrel's plasters and Marigold's honey say "For your travels").
-- [ ] Five town interiors as scene cards: Wren's cottage, the bakery kitchen (croissant recipe), the library reading room (Moss's sunflower as a bookmark), the general store (Bram's 10% card), City Hall (Fern's key).
-- [ ] Given-away items stay in the Journal as a memory.
+- [x] 🎒 Satchel button on the map (appears with the first gift), listing unused items; pick one and valid targets glow, wrong targets give a gentle line and nothing is lost.
+- [x] Used places can be revisited (buildings through their front door, other places by clicking them or from the Satchel's list); optional `use spareKey wrensCottage` toast.
+- [x] Rewrite the gift notes so each hints where it goes (Fern's key keeps its twist; Iris's bookmark, Sorrel's plasters and Marigold's honey say "For your travels").
+- [x] Five town interiors you walk into through the front door (the map becomes the room, the doormat leads back out): Wren's cottage, the bakery kitchen (croissant recipe), the library reading room (Moss's sunflower as a bookmark), the general store (Bram's 10% card), City Hall (Fern's key).
+- [x] Brine's little boat (Juniper's star) as a pixel-art scene too: go aboard from the shore below the pier, the gangplank leads back ashore; the star, the wheel and a line over the side. Talking to Brine plays a cut-scene that sails out to sea, and talking to him again sails home.
+- [x] Given-away items stay in the Journal as a memory: Iris's bookmark, Sorrel's plasters and Marigold's honey know who they go to in Glaschu (`givenTo` in `src/content/items.ts`); once given (`giveAway` in `src/game/satchel.ts`, for now from the DEV panel) they leave the Satchel and get a "Given away" page in the Journal, a line on the gift in the Friends panel, and a section in the printed booklet.
 
 **2. Coins and the store**
 - [ ] 🪙 Coin counter next to the Satchel, one purse shared with Glaschu; a fixed amount per errand.
@@ -70,9 +71,11 @@ Ordered by the design's suggested build order.
 - [ ] Your garden plot by Wren's cottage: seeds grow over real days, nothing wilts.
 
 **3. Magical and world places** (an item placed in the world becomes a doorway)
-- [ ] Inside the beehives (Rowan's tulip): pick a hive — nursery, honey store, queen's hive — with a tulip petal as the way back; collect honey.
+- [x] Inside the beehives (Rowan's tulip) as pixel-art rooms: three hives in the meadow, each its own room at bee size (the nursery, the honey store with its `<>` nectar cell, the queen's hive with the waggle dance), a shrinking-down cut-scene on the way in, and a tulip petal as the way back. The Journal remembers which hives you've been in.
+- [ ] Collect honey in the honey store to sell (needs coins and finds in the Satchel).
 - [ ] The open sea and fishing from Brine's boat (Juniper's sticker), catches as `Maybe Fish`.
-- [ ] The magical beach through Brine's conch at the Duck Pond, with endless shells.
+- [x] The magical beach through Brine's conch at the Duck Pond as a pixel-art scene: a warm wave washes you there (a cut-scene) and the conch on the sand takes you back. The waves (`repeat wave`), a hermit crab, a rock pool, and shells washing up forever on the tideline, one per look, as `take n (cycle shells)`. The Journal counts the shells you've found.
+- [ ] Collect shells on the beach to sell (needs coins and finds in the Satchel).
 - [ ] A few finds per day per place; residents pay more for their own thing (fish → Brine, honey → Marigold, shells → Juniper, garden produce → Moss/Hazel).
 
 **4. Bigger things and a growing map**

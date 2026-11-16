@@ -22,7 +22,7 @@ Core rules (same spirit as the rewards design):
 ## 1. The mechanic: the Satchel
 - A **🎒 Satchel** button on the map appears with the first gift. It lists the items you have that haven't been used yet.
 - Pick an item and valid targets on the map glow softly. Click one to use it. Click anything else and you get a gentle line ("The key doesn't fit here."), then the item goes back in the satchel.
-- After use, the place opens. Its icon on the map gets a small door marker so it can be visited again.
+- After use, the place opens and can be visited again: a building through its front door (the map becomes the room inside, Stardew-style), a place outdoors by clicking it.
 - Optional Haskell touch: the use shows a line like `use spareKey wrensCottage` in the toast, making items feel like values and using one feel like function application. It's purely decorative.
 - The satchel also holds **things you find** (fish, shells, honey) until you sell them (section 7), and **things you've bought** (seeds, decorations not yet placed). Gifts can't be sold.
 - The satchel has a limited number of slots for finds and bought things; a bigger satchel can be bought (section 8). Gifts never take up slots, so a full satchel never blocks progress.

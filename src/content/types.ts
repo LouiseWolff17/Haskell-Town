@@ -138,10 +138,46 @@ export interface Friendship {
   resident: string;
   /** ♥ 1: a letter that arrives in Wren's mailbox. */
   letter: string;
-  /** ♥ 2: a keepsake for the Journal. */
-  gift: { icon: string; name: string; note: string };
+  /** ♥ 2: a keepsake for the Journal. Its note hints where it goes in the Satchel (docs/gift-items-design.md, section 3).
+   *  `afterUse`, if set, is added to the note once the item has been used. */
+  gift: { icon: string; name: string; note: string; afterUse?: string };
   /** ♥ 4: a lasting change to their building on the map (drawn in town.ts FRIEND_ART). */
   change: string;
+}
+
+/** Where a gift is used on the map: a building, or a piece of land opened by errands. */
+export interface ItemTarget {
+  plot?: string;
+  /** An Expansion id. */
+  land?: string;
+  /** Only part of the plot or land, as [dx, dy, w, h] from its corner (the beehives, Brine's boat). */
+  spot?: [dx: number, dy: number, w: number, h: number];
+  /** Only there once this resident is a best friend (♥ 4): Brine's boat is his lasting change. */
+  friend?: string;
+  /** The place as a Haskell name, for the toast: `use spareKey wrensCottage`. */
+  name: string;
+}
+
+/** A ♥ 2 gift as something in the Satchel, used by clicking the place it belongs. */
+export interface GiftItem {
+  resident: string;
+  /** The item as a Haskell name, for the toast. */
+  id: string;
+  /** Null while its place isn't in the game yet (the Glaschu items). */
+  target: ItemTarget | null;
+  /** Picked while its place isn't on the map yet: why it waits. Nothing is used up. */
+  notYet: string;
+  /** Clicked somewhere else: a gentle line, and the item goes back in the Satchel. */
+  wrong: string;
+  /** Used in the right place. */
+  used: string;
+  /** Once used, its place can be visited: a room for the five town buildings (interiors.ts), else a card with this title and line. */
+  place?: string;
+  visit?: string;
+  /** Given away rather than kept (the Glaschu items): who it went to, for the Journal, e.g. "Barley, the baker in Glaschu". */
+  givenTo?: string;
+  /** The Journal's memory of giving it away. */
+  memory?: string;
 }
 
 /** A bit of life on the map that appears the first time you solve an errand on a topic. */

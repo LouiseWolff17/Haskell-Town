@@ -7,6 +7,7 @@ import { setMode } from './notebook.ts';
 import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from './errands.ts';
 import { renderJournal } from './journal.ts';
 import { renderFriends } from './friends.ts';
+import { renderSatchel } from './satchel.ts';
 import type { AssistMode } from '../content/index.ts';
 
 export function notSupportedHTML(): string {
@@ -54,6 +55,7 @@ export function renderSidebar(): void {
   renderJournal();
   renderFriends();
   renderNightBtn();
+  renderSatchel();
   document.querySelectorAll<HTMLElement>('.mode-seg').forEach(seg => renderSeg(seg));
 }
 export function renderSeg(seg: HTMLElement): void {

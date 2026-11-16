@@ -15,6 +15,8 @@ export const byId = (id: string): Challenge | undefined => CHALLENGES.find(c => 
 export const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.querySelector<T>(s)!;
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 export const esc = (s: unknown): string => String(s).replace(/[&<>"]/g, c => ESCAPES[c]);
+/** A day number (see schedule.ts dayNumber) as a short date, e.g. "9 Nov". */
+export const dateOf = (day: number): string => new Date(day * 86400000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /** Everything saved in localStorage. Fields after `welcomed` are added as the game goes on. */
 export interface GameState {
@@ -45,6 +47,10 @@ export interface GameState {
   /** Workshop expression and stdin boxes. */
   wsExpr?: string;
   wsInput?: string;
+  /** Satchel items used on their place (or given away, the Glaschu items), by the resident who gave them: the day it was used. */
+  used?: Record<string, number>;
+  /** The town interiors: the day the croissants were first baked, the book the sunflower marks, the name the hall greets. */
+  inside?: { baked?: number; bookmark?: string; name?: string; /** The hives you've been inside, and the day you first went in. */ hives?: Record<string, number>; /** The magical beach: the day you first went, and how many shells you've found there. */ beach?: number; shells?: number };
   /** DEV panel: days the clock has been moved forward, and an hour override. */
   devDays?: number;
   devHour?: number;

@@ -1,7 +1,8 @@
 // Checks that the game's content fits together: ids, unlock order, residents, hints.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHALLENGES, RESIDENTS, WORKSHOP_EXAMPLES, NOT_SUPPORTED, ERRANDS, REVIEW_TOPICS } from '../src/content/index.ts';
+import { CHALLENGES, RESIDENTS, WORKSHOP_EXAMPLES, NOT_SUPPORTED, ERRANDS, REVIEW_TOPICS, KITCHEN, STORE, HALL } from '../src/content/index.ts';
+import { BrowserRunner } from '../src/runner/browser.ts';
 
 test('there are 23 challenges, numbered 1..23 in list order', () => {
   assert.equal(CHALLENGES.length, 23);
@@ -78,4 +79,45 @@ test('every errand belongs to a topic, has a resident, examples, tests and a sol
     assert.ok(e.tests.length > 0 && e.solution.trim() && e.explanation.trim(), `${e.id}: tests, solution, explanation`);
     if (e.fn) assert.ok(e.sig?.startsWith(e.fn + ' ::'), `${e.id}: sig should start with "${e.fn} ::"`);
   }
+});
+
+test('every gift is a Satchel item that points somewhere real', async () => {
+  const { FRIENDSHIP, ITEMS, EXPANSIONS } = await import('../src/content/index.ts');
+  assert.deepEqual(ITEMS.map(i => i.resident).sort(), FRIENDSHIP.map(f => f.resident).sort());
+  assert.equal(new Set(ITEMS.map(i => i.id)).size, ITEMS.length, 'item names are unique');
+  const plots = new Set(CHALLENGES.map(c => c.plot || c.id));
+  for (const i of ITEMS) {
+    assert.match(i.id, /^[a-z][A-Za-z]*$/, `${i.id} reads as a Haskell name`);
+    assert.ok(i.notYet && i.wrong, `${i.id} has its gentle lines`);
+    if (i.givenTo) assert.ok(i.memory && !i.target, `${i.id} is given away, so it has a memory for the Journal and no place on the map`);
+    const t = i.target; if (!t) continue;
+    assert.ok(i.used, `${i.id} says what happens when it's used`);
+    assert.ok(i.place && i.visit, `${i.id} opens a place you can visit again`);
+    assert.match(t.name, /^[a-z][A-Za-z]*$/, `${t.name} reads as a Haskell name`);
+    assert.ok(!!t.plot !== !!t.land, `${i.id} targets a plot or a piece of land`);
+    if (t.plot) assert.ok(plots.has(t.plot), `${i.id}: no plot ${t.plot}`);
+    if (t.land) assert.ok(EXPANSIONS.some(x => x.id === t.land), `${i.id}: no land ${t.land}`);
+    if (t.friend) assert.ok(RESIDENTS[t.friend], `${i.id}: no resident ${t.friend}`);
+  }
+});
+
+test('the town interiors\' Haskell runs: the kitchen puzzle, the till and the hall\'s greeting', async () => {
+  const r = new BrowserRunner();
+  // Hazel's recipe passes, the starter still has its blank, and 3 ^ n is sent back for recursion
+  const baked = await r.check(KITCHEN.puzzle, 'layers :: Int -> Int\nlayers 0 = 1\nlayers n = 3 * layers (n - 1)\n');
+  assert.ok(baked.status === 'tested' && baked.passed);
+  const starter = await r.check(KITCHEN.puzzle, KITCHEN.starter);
+  assert.ok(starter.status === 'tested' && !starter.passed);
+  const power = await r.check(KITCHEN.puzzle, 'layers :: Int -> Int\nlayers n = 3 ^ n\n');
+  assert.ok(power.status === 'tested' && power.ruleBreak?.rule === 'recursion');
+  // the toy counts folds the same way the puzzle does
+  for (const [expr, want] of KITCHEN.puzzle.tests) assert.equal(String(3 ** Number(expr.split(' ')[1])), want);
+  // every suggested question for the till works, and the shelf matches the source
+  for (const expr of STORE.tries) assert.equal((await r.evaluate(STORE.source, expr, '')).status, 'evaluated', expr);
+  const prices = await r.evaluate(STORE.source, 'prices', '');
+  assert.ok(prices.status === 'evaluated' && prices.value === `[${STORE.shelf.map(s => s.price).join(',')}]`);
+  const names = await r.evaluate(STORE.source, 'shelf', '');
+  assert.ok(names.status === 'evaluated' && names.value === JSON.stringify(STORE.shelf.map(s => s.name)));
+  const hall = await r.runMain(HALL.program, 'Wren');
+  assert.ok(hall.status === 'ran' && hall.output.out === 'Who goes there?\nWelcome to City Hall, Wren!\n');
 });
