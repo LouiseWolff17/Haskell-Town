@@ -293,6 +293,20 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .night-btn{border:0; border-radius:8px; padding:4px 9px; font:700 12px var(--body); background:rgba(255,250,240,.88); color:var(--ink); cursor:pointer; box-shadow:0 2px 0 rgba(0,0,0,.15)}
 .night-btn:hover{background:#fffaf0}
 
+/* ---------- The Satchel (satchel.ts): gifts to use around town ---------- */
+.satchel-n{display:inline-grid; place-items:center; min-width:17px; height:17px; margin-left:3px; padding:0 4px; border-radius:9px; background:var(--terra); color:var(--paper); font-size:11px}
+.satchel{position:absolute; top:46px; right:16px; z-index:3; width:min(270px, calc(100% - 32px)); max-height:calc(100% - 62px); overflow:auto; padding:8px; background:var(--paper); border:2px solid var(--line); border-radius:12px; box-shadow:0 8px 20px rgba(60,40,20,.25); animation:pop .2s}
+.satchel-h{font-family:var(--pixel); font-size:15px; padding:2px 6px 6px}
+.satchel-item{display:flex; gap:10px; align-items:center; width:100%; text-align:left; padding:7px 8px; margin:0; background:none; border:0; border-radius:8px; font:inherit; font-size:13.5px; color:var(--ink); cursor:pointer}
+.satchel-item:hover, .satchel-item:focus-visible{background:var(--paper2); outline:2px solid #e0b040; outline-offset:-2px}
+.satchel-item small{display:block; color:var(--ink2); font-size:12px}
+.satchel-item.waiting{opacity:.7}
+.satchel-icon{font-size:22px; line-height:1}
+.satchel .board-small{margin:4px 6px 6px}
+body.holding .satchel-btn{background:#fff2a8}
+.toast-aside{opacity:.75; font-size:13px}
+.use-code{display:inline-block; margin-top:6px; font-family:var(--mono); font-size:12.5px; background:rgba(255,250,240,.12); padding:1px 7px; border-radius:5px}
+
 /* ---------- The printable Journal (journal.ts printJournal) ---------- */
 #printArea{display:none}
 #printJournal{width:100%; margin:0 0 10px}

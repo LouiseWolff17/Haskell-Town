@@ -8,3 +8,4 @@ export { REVIEW_TOPICS, ERRANDS, LEGACY_TOPICS } from './errands.ts';
 export { EXPANSIONS } from './expansions.ts';
 export { FRIENDSHIP, HEARTS, MAX_HEARTS } from './friendship.ts';
 export { LIFE } from './life.ts';
+export { ITEMS } from './items.ts';

@@ -4,10 +4,12 @@ import { $, save, state } from './game/state.ts';
 import { initTown, plotLabel } from './game/town.ts';
 import { initSidebar, renderSidebar } from './game/sidebar.ts';
 import { initNotebook } from './game/notebook.ts';
+import { initSatchel } from './game/satchel.ts';
 
 initTown();
 initSidebar();
 initNotebook();
+initSatchel();
 
 $('#welcomeGo').onclick = () => { state.welcomed = true; save(); $('#welcome').hidden = true; document.body.classList.remove('modal-open'); };
 if (!state.welcomed) { $('#welcome').hidden = false; document.body.classList.add('modal-open'); }

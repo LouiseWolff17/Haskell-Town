@@ -79,3 +79,21 @@ test('every errand belongs to a topic, has a resident, examples, tests and a sol
     if (e.fn) assert.ok(e.sig?.startsWith(e.fn + ' ::'), `${e.id}: sig should start with "${e.fn} ::"`);
   }
 });
+
+test('every gift is a Satchel item that points somewhere real', async () => {
+  const { FRIENDSHIP, ITEMS, EXPANSIONS } = await import('../src/content/index.ts');
+  assert.deepEqual(ITEMS.map(i => i.resident).sort(), FRIENDSHIP.map(f => f.resident).sort());
+  assert.equal(new Set(ITEMS.map(i => i.id)).size, ITEMS.length, 'item names are unique');
+  const plots = new Set(CHALLENGES.map(c => c.plot || c.id));
+  for (const i of ITEMS) {
+    assert.match(i.id, /^[a-z][A-Za-z]*$/, `${i.id} reads as a Haskell name`);
+    assert.ok(i.notYet && i.wrong, `${i.id} has its gentle lines`);
+    const t = i.target; if (!t) continue;
+    assert.ok(i.used, `${i.id} says what happens when it's used`);
+    assert.match(t.name, /^[a-z][A-Za-z]*$/, `${t.name} reads as a Haskell name`);
+    assert.ok(!!t.plot !== !!t.land, `${i.id} targets a plot or a piece of land`);
+    if (t.plot) assert.ok(plots.has(t.plot), `${i.id}: no plot ${t.plot}`);
+    if (t.land) assert.ok(EXPANSIONS.some(x => x.id === t.land), `${i.id}: no land ${t.land}`);
+    if (t.friend) assert.ok(RESIDENTS[t.friend], `${i.id}: no resident ${t.friend}`);
+  }
+});

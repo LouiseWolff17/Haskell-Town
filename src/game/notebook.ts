@@ -262,7 +262,7 @@ export function build(c: Challenge): void {
   $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 let toastT: ReturnType<typeof setTimeout> | undefined;
-function toast(html: string): void { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
+export function toast(html: string): void { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5200); }
 
 
 // ---------- Errands: retrieval practice from the Notice Board ----------

@@ -45,6 +45,8 @@ export interface GameState {
   /** Workshop expression and stdin boxes. */
   wsExpr?: string;
   wsInput?: string;
+  /** Satchel items used on their place, by the resident who gave them: the day it was used. */
+  used?: Record<string, number>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */
   devDays?: number;
   devHour?: number;

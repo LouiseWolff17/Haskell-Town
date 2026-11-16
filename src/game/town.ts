@@ -8,7 +8,8 @@ import { drawPlayer, drawPrompt, initPlayerKeys, player, savePlayer, updatePlaye
 import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
-import type { Challenge, Expansion } from '../content/index.ts';
+import { heldItem, holdLabel, useHeld } from './satchel.ts';
+import type { Challenge, Expansion, ItemTarget } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
 /** A rectangle on the map, in map pixels. */
@@ -396,7 +397,7 @@ function draw(t: number): void {
   syncSize(); refreshSolids();
   updatePlayer(lastT == null ? 0 : Math.min(50, t - lastT), solidAt); lastT = t;
   const near = nearby();
-  if (near?.key !== nearKey) { nearKey = near?.key ?? null; if (!hover) $('#hoverLabel').innerHTML = nearLabel(near); }
+  if (near?.key !== nearKey) { nearKey = near?.key ?? null; if (!hover && !heldItem()) $('#hoverLabel').innerHTML = nearLabel(near); }
   ctx.drawImage(bg, 0, 0); roadLayer(plots);
   drawStrips(t);
   for (const [pid, p] of plots) {
@@ -432,7 +433,9 @@ function draw(t: number): void {
   drawNight(t);
   if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
   const outline = hover || (near?.kind === 'plot' ? near.id : null);
-  if (outline && PLOTS[outline]) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  if (outline && PLOTS[outline] && !heldItem()) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  const held = heldItem(), glowAt = held?.target && targetBox(held.target);
+  if (glowAt) glow(glowAt, t);
   requestAnimationFrame(draw);
 }
 
@@ -477,16 +480,25 @@ export function initTown(): void {
   // browsers only play sound after a click, so music that was left on starts at the first click (unless that click is the music button)
   if (state.music) document.addEventListener('pointerdown', ev => { if (state.music && state.done.market && !(ev.target as Element | null)?.closest?.('#musicBtn')) { startMusic(); renderNightBtn(); } }, { once: true });
   renderNightBtn();
-  cv.addEventListener('mousemove', ev => { const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
-  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
+  cv.addEventListener('mousemove', ev => {
+    const held = heldItem();
+    if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
+    const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
+  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = heldItem() ? holdLabel() : nearLabel(nearby()); });
   // a click sends the character walking there; a click on a resident or a building also talks to them on arrival
   cv.addEventListener('click', ev => {
-    const [x, y] = mapPoint(ev), rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
+    const [x, y] = mapPoint(ev), held = heldItem();
+    // holding something from the Satchel: this click uses it, or puts it back with a gentle line
+    if (held) { useHeld(onTarget(held.target, x, y)); return; }
+    const rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
     if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
     goTo(x, y);
   });
-  initPlayerKeys(() => { const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
+  initPlayerKeys(() => {
+    const held = heldItem();
+    if (held) { const b = held.target && targetBox(held.target); useHeld(!!b && Math.hypot(Math.max(b.x - player.x, 0, player.x - b.x - b.w), Math.max(b.y - player.y, 0, player.y - b.y - b.h)) < 14); return true; }
+    const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
 }
 
 // ---------- The character: what blocks it, and what it can talk to (movement and drawing are in player.ts) ----------
@@ -562,6 +574,41 @@ function interactWith(n: Target): void {
   if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(n.id);
 }
 
+
+// ---------- The Satchel's targets (src/content/items.ts, the list itself is in satchel.ts) ----------
+/** Where an item's place is on the map right now, or null while it isn't there (not built, land still misty, no boat yet). */
+export function targetBox(tg: ItemTarget): Box | null {
+  if (tg.friend && (hearts()[tg.friend] || 0) < HEARTS.change) return null;
+  let base: Box;
+  if (tg.plot) {
+    const p = PLOTS[tg.plot], m = mainOf(tg.plot);
+    if (!p || !m || !state.done[m.id]) return null;
+    base = p;
+  } else if (tg.land) {
+    const x = EXPANSIONS.find(e => e.id === tg.land);
+    if (!x || !isOpenExp(x)) return null;
+    base = slotRect(x.slot);
+  } else return null;
+  if (!tg.spot) return { x: base.x, y: base.y, w: base.w, h: base.h };
+  const [dx, dy, w, h] = tg.spot;
+  return { x: base.x + dx, y: base.y + dy, w, h };
+}
+/** Is a map point on (or right next to) an item's place? */
+function onTarget(tg: ItemTarget | null, x: number, y: number): boolean {
+  const b = tg && targetBox(tg);
+  return !!b && x >= b.x - 4 && x <= b.x + b.w + 4 && y >= b.y - 8 && y <= b.y + b.h + 4;
+}
+/** A soft, slowly pulsing golden glow around the place the held item belongs, with a few sparkles. */
+function glow(b: Box, t: number): void {
+  const k = 0.5 + Math.sin(t / 420) * 0.5;
+  ctx.fillStyle = '#fff2a8'; ctx.globalAlpha = 0.12 + 0.12 * k; ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
+  ctx.globalAlpha = 0.55 + 0.4 * k; ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 1; ctx.strokeRect(b.x - 2.5, b.y - 2.5, b.w + 5, b.h + 5);
+  for (let i = 0; i < 4; i++) {
+    const a = t / 1400 + i * 1.57, sx = b.x + b.w / 2 + Math.cos(a) * (b.w / 2 + 2), sy = b.y + b.h / 2 + Math.sin(a) * (b.h / 2 + 2);
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t / 300 + i); R(sx, sy - 1, 1, 3, '#fffaf0'); R(sx - 1, sy, 3, 1, '#fffaf0');
+  }
+  ctx.globalAlpha = 1;
+}
 
 // ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------
 const isOpenExp = (x: Expansion): boolean => solvedErrands() >= x.needs;
