@@ -21,7 +21,7 @@ kbd{font-family:var(--mono); font-size:.78em; background:var(--paper); border:1p
 .bar{width:150px; height:12px; background:var(--paper); border:2px solid var(--ink); border-radius:7px; overflow:hidden}
 .bar i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--sage),#9cc58a); transition:width .8s}
 
-.layout{display:grid; grid-template-columns:250px minmax(0,1fr) 330px; grid-template-areas:"friends town side"; gap:20px; max-width:1500px; margin:0 auto; padding:0 22px 28px; align-items:start}
+.layout{display:grid; grid-template-columns:250px minmax(0,1fr) 330px; grid-template-areas:"friends town side"; gap:12px; margin:0 auto; padding:0 12px 28px; align-items:start}
 .town-col{grid-area:town; min-width:0} .side{grid-area:side} .friends-panel{grid-area:friends}
 .friends-panel h3{margin:0; padding:10px 14px; border-bottom:2px solid var(--line); background:var(--paper2); font-family:var(--pixel); font-size:16px; font-weight:500}
 #friends{padding:10px; max-height:calc(100vh - 140px); overflow:auto}
@@ -39,11 +39,12 @@ kbd{font-family:var(--mono); font-size:.78em; background:var(--paper); border:1p
   body{height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden}
   .top{flex:none; width:100%; padding-top:10px; padding-bottom:10px}
   .layout{flex:1; min-height:0; width:100%; grid-template-rows:minmax(0,1fr); align-items:stretch; padding-bottom:16px}
-  .friends-panel{display:flex; flex-direction:column; min-height:0}
-  #friends{flex:1; max-height:none; min-height:0}
+  /* the friends panel is only as tall as its letters, scrolling once it fills its column */
+  .friends-panel{display:flex; flex-direction:column; min-height:0; align-self:start; max-height:100%}
+  #friends{flex:0 1 auto; max-height:none; min-height:0}
   .side{min-height:0; overflow:auto; padding-bottom:4px}
   .town-col{display:flex; flex-direction:column; min-height:0}
-  .town-frame{flex:1; min-height:220px; overflow:hidden}
+  .town-frame{flex:none; align-self:center; max-width:100%; max-height:100%; min-height:220px; overflow:hidden}
 }
 @media (min-width:961px) and (max-width:1180px){
   .layout{grid-template-rows:minmax(0,1fr) minmax(0,24%)}

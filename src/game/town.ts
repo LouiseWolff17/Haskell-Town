@@ -496,7 +496,7 @@ export function portrait(rid: string, size = 40): HTMLCanvasElement {
 
 export function initTown(): void {
   paintBackground();
-  measure(); new ResizeObserver(measure).observe(cv.closest('.town-frame')!); window.addEventListener('resize', measure);
+  measure(); new ResizeObserver(measure).observe(cv.closest('.town-col')!); window.addEventListener('resize', measure);
   requestAnimationFrame(draw);
   $('#nightBtn').onclick = () => { state.clockOff = !state.clockOff; save(); renderNightBtn(); };
   // the button follows what's actually playing, so it always does what it says
@@ -727,9 +727,11 @@ let box = { w: 0, h: 0 };
 /** Phones and narrow windows scroll the page, so the map is capped to most of the screen's height there. */
 const stacked = window.matchMedia('(max-width: 960px)');
 function measure(): void {
-  const f = cv.closest<HTMLElement>('.town-frame')!, cs = getComputedStyle(f);
-  const w = f.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  const h = stacked.matches ? window.innerHeight * 0.75 : f.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  // measured from the column, not the frame: the frame hugs the canvas, so a short map (the start of the
+  // game) doesn't leave a wide band of frame around it
+  const col = cv.closest<HTMLElement>('.town-col')!, cs = getComputedStyle(cv.closest<HTMLElement>('.town-frame')!);
+  const w = col.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const h = stacked.matches ? window.innerHeight * 0.75 : col.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
   box = { w: Math.max(1, w), h: Math.max(1, h) };
 }
 /** Size the canvas to the space it has: the map's full width, and as much of its height as fits. */
