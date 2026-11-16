@@ -1,16 +1,16 @@
-// The town interiors (docs/gift-items-design.md, section 4): five buildings, and Brine's little boat. Once a gift has opened a place, its door
+// The town interiors (docs/gift-items-design.md, sections 2a and 4): five buildings, Brine's little boat, and the three beehives. Once a gift has opened a place, its door
 // on the map leads inside: the map becomes the room (rooms.ts). Looking at things there either gets a line
 // in the dialogue box over the map, or opens a pop-up (the recipe, the till, the letters, …).
 // The doormat leads back to town. Every interior is optional: a cozy toy or a small Haskell bonus,
 // never a required challenge. Content is in src/content/interiors.ts.
-import { BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
+import { BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, HIVES, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
 import { $, esc, save, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, solvedErrands, today } from './errands.ts';
 import { openExpansions } from './rewards.ts';
 import { runner } from './notebook.ts';
 import { portrait } from './town.ts';
-import { ROOMS, SAIL_MS, enterRoom, exitRoom, inRoom } from './rooms.ts';
+import { ROOMS, SAIL_MS, enterRoom, exitRoom, giftFor, inRoom, roomsOf } from './rooms.ts';
 import type { Spot, View } from './rooms.ts';
 
 /** What a room shows: a line in the dialogue box, or a pop-up. */
@@ -24,12 +24,16 @@ interface Room {
 }
 interface Interior {
   view(): View;
+  /** Stepping in: the first line in the dialogue box (otherwise it's the gift's `visit` line). */
+  enter?(): string;
   /** Something in the room was looked at (a Spot id from rooms.ts). */
   act(id: string, room: Room): void;
 }
 const INTERIORS: Record<string, Interior> = {};
-export const hasInterior = (rid: string): boolean => rid in ROOMS;
-const placeOf = (rid: string): string => ITEMS.find(i => i.resident === rid)?.place ?? '';
+/** Is there a room to walk into: `rid` is a room, or a resident whose gift opens one (or several, like the hives)? */
+export const hasInterior = (rid: string): boolean => rid in ROOMS || roomsOf(rid).length > 0;
+/** What a room is called: its own name (a hive), or its gift's place. */
+export const placeOf = (rid: string): string => ROOMS[rid]?.name ?? ITEMS.find(i => i.resident === giftFor(rid))?.place ?? '';
 
 // ---------- The pop-up ----------
 const pop = (): HTMLElement => $('#roomPop');
@@ -64,11 +68,11 @@ let current: Room | null = null;
 export function enterInterior(rid: string, onLeave: () => void): void {
   const it = INTERIORS[rid]; if (!it) return;
   leaving = onLeave;
-  const sayBox = $('#roomSay'), who = ROOMS[rid].who ?? rid;
+  const sayBox = $('#roomSay'), r = ROOMS[rid], who = r.who ?? rid;
   const room: Room = {
     say: html => {
       sayBox.innerHTML = `<div class="room-say-who"></div><p>${html}</p>`;
-      sayBox.querySelector('.room-say-who')!.append(portrait(who, 44));
+      sayBox.querySelector('.room-say-who')!.append(r.voice?.(44) ?? portrait(who, 44));
       sayBox.hidden = false;
     },
     panel: openPop,
@@ -78,7 +82,7 @@ export function enterInterior(rid: string, onLeave: () => void): void {
   enterRoom(rid, room.view, id => id === 'leave' ? leaveInterior() : it.act(id, room), () => { sayBox.hidden = true; });
   $('#hoverLabel').innerHTML = roomLabel(null);
   describe(rid);
-  room.say(esc(ITEMS.find(i => i.resident === rid)?.visit ?? ''));
+  room.say(it.enter ? codeHTML(esc(it.enter())) : esc(ITEMS.find(i => i.resident === giftFor(rid))?.visit ?? ''));
 }
 /** Step back out through the door. */
 export function leaveInterior(): void {
@@ -89,16 +93,16 @@ export function leaveInterior(): void {
 }
 /** The map's label for screen readers: where you are and how to get about. */
 function describe(rid: string): void {
-  const out = ROOMS[rid].aboard ? (current?.view.out ? 'talk to Brine to sail home' : 'go back ashore by the gangplank') : 'go back out by the doormat';
+  const out = ROOMS[rid].away?.out(current?.view ?? {}) ?? 'go back out by the doormat';
   $('#town').setAttribute('aria-label', `${where(rid)} ${placeOf(rid)}. Walk with the arrow keys, press E to look at things, and ${out}.`);
 }
-/** "Inside" a building, "Aboard" the boat. */
-const where = (rid: string): string => ROOMS[rid]?.aboard ? 'Aboard' : 'Inside';
+/** "Inside" a building or a hive, "Aboard" the boat. */
+const where = (rid: string): string => ROOMS[rid]?.away?.where ?? 'Inside';
 /** The line under the map while you're inside: what the mouse is over, or how to get about. */
 export function roomLabel(s: Spot | null): string {
   if (s) return `<b>${esc(s.label)}</b>: click to ${s.id === 'leave' ? 'go back out' : 'look'}, or stand next to it and press <kbd>E</kbd>.`;
   const rid = inRoom() ?? '';
-  return `${where(rid)} <b>${esc(placeOf(rid))}</b>. Walk with <kbd>←↑↓→</kbd> or <kbd>WASD</kbd> (or click), and press <kbd>E</kbd> to look at things. ${ROOMS[rid]?.aboard?.hint(current?.view ?? {}) ?? 'The doormat takes you back to town.'}`;
+  return `${where(rid)} <b>${esc(placeOf(rid))}</b>. Walk with <kbd>←↑↓→</kbd> or <kbd>WASD</kbd> (or click), and press <kbd>E</kbd> to look at things. ${ROOMS[rid]?.away?.hint(current?.view ?? {}) ?? 'The doormat takes you back to town.'}`;
 }
 const inside = (): NonNullable<typeof state.inside> => (state.inside ||= {});
 /** The next line of a list each time, so repeat visits don't feel the same. */
@@ -313,4 +317,43 @@ function sail(room: Room, lines: Record<'sailOut' | 'atSea' | 'sailHome' | 'home
     room.say(esc(v.out ? lines.atSea() : lines.home()));
     $('#hoverLabel').innerHTML = roomLabel(null); describe('juniper');
   }, SAIL_MS);
+}
+
+// ---------- Inside the beehives (Rowan's tulip): three hives, each its own room at bee size ----------
+/** Stepping into a hive: you shrink down (rooms.ts plays it as a cut-scene from `since`), and the hive is remembered for the Journal. */
+function hiveInterior(id: keyof typeof HIVES, act: (id: string, room: Room) => void): Interior {
+  const enter = cycler(HIVES[id].enter);
+  return {
+    view: () => ({ since: performance.now(), drops: 0 }),
+    enter: () => { const h = (inside().hives ||= {}); h[id] ??= today(); save(); return enter(); },
+    act,
+  };
+}
+INTERIORS.nursery = hiveInterior('nursery', (() => {
+  const lines = { cells: cycler(HIVES.nursery.cells), nurse: cycler(HIVES.nursery.nurse), bread: cycler(HIVES.nursery.bread) };
+  return (id: string, room: Room) => { if (id in lines) room.say(codeHTML(esc(lines[id as keyof typeof lines]()))); };
+})());
+INTERIORS.honey = hiveInterior('honey', (() => {
+  const H = HIVES.honey, lines = { comb: cycler(H.comb), fanners: cycler(H.fanners) };
+  return (id: string, room: Room) => {
+    if (id in lines) { room.say(codeHTML(esc(lines[id as keyof typeof lines]()))); return; }
+    if (id !== 'nectar') return;
+    // one more flower's nectar each time, combined with <>; once it's capped, the next look starts a new cell
+    const v = room.view, full = Number(v.drops) >= H.flowers.length, n = full ? 1 : Number(v.drops) + 1;
+    v.drops = n; v.poured = performance.now();
+    const fl = H.flowers.slice(0, n).map(f => `"${f}"`), expr = n === H.flowers.length ? `mconcat [${fl.join(', ')}]` : fl.join(' <> ');
+    room.say(`${full ? esc(H.again) + ' ' : ''}${codeHTML(esc(H.nectar[n - 1]))} <code class="in-layers">${esc(expr)}</code>`);
+  };
+})());
+INTERIORS.queen = hiveInterior('queen', (() => {
+  const lines = { queen: cycler(HIVES.queen.queen), dance: cycler(HIVES.queen.dance), royal: cycler(HIVES.queen.royal) };
+  return (id: string, room: Room) => {
+    if (id in lines) room.say(codeHTML(esc(lines[id as keyof typeof lines]().replace('{errands}', String(solvedErrands())))));
+  };
+})());
+/** For the Journal: the hives you've been inside so far ("" before the first). */
+export function hivesNote(rid: string): string {
+  const seen = roomsOf(rid).filter(r => state.inside?.hives?.[r]).map(placeOf);
+  if (roomsOf(rid).length < 2 || !seen.length) return '';
+  return `You've been inside ${seen.length > 1 ? `${seen.slice(0, -1).join(', ')} and ${seen[seen.length - 1]}` : seen[0]}.`;
 }

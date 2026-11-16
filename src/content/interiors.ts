@@ -1,6 +1,6 @@
 import type { Checkable } from './types.ts';
 
-// The five town interiors (docs/gift-items-design.md, section 4): what's inside a place once its gift
+// The town interiors, Brine's boat and the beehives (docs/gift-items-design.md, sections 2a and 4): what's inside a place once its gift
 // has opened it. Each is a small scene card with a cozy toy or an optional Haskell bonus, never a
 // required challenge. The game side is src/game/interiors.ts.
 
@@ -125,4 +125,79 @@ export const BOAT = {
     'Out here the float dances on every wave. Nothing yet. "They\'re thinking about it," says Brine.',
     'Still `Nothing`. Brine says the sea is lazy: it only hands over a fish when you really need one.',
   ],
+};
+
+/** Inside the beehives (Rowan's tulip): you shrink to bee size and pick a hive. Collecting honey to sell comes with coins (ROADMAP). */
+export const HIVES = {
+  nursery: {
+    enter: [
+      'The tulip folds its petals round you, and down you go. When they open again the world is warm and gold and very, very big. A nurse bee puts a feeler to her mouth: the babies are sleeping.',
+      'Down through the tulip again, as small as a bee. The nursery smells of wax and warm milk. "Shh," buzz three bees at once.',
+    ],
+    cells: [
+      'Row after row of cells, a curled-up larva in each. To the bees the comb is a list, `[Larva, Larva, Egg, Capped, Larva]`, and they feed it in order without ever skipping one.',
+      'A nurse bee goes down the row: `map feed cells`. Every larva gets its drop of jelly and wriggles.',
+      'Some cells are capped with wax: there\'s a bee in there, nearly ready. The nurses count them with `length (filter isCapped cells)`, which is how bees count down to a birthday.',
+    ],
+    nurse: [
+      'The nurse bee is humming a lullaby, very low. It has one note and goes on forever, like `repeat "mmm"`. The larvae don\'t mind. They only ever `take` a little of it before they\'re asleep.',
+      '"Every one of them is the best one," says the nurse bee, in bee. At this size you understand her perfectly.',
+      'She tucks a larva in with a pat of wax and hums a little louder. Rowan, she says, plants the best clover in the world.',
+    ],
+    bread: [
+      'Bee bread: pollen packed into cells, every colour in the meadow. Orange from the poppies, purple from the heather, yellow from the dandelions.',
+      'A forager comes in with her pollen baskets full and kicks them off into a cell, very pleased with herself.',
+      'The bees mix the pollen with a little honey so it keeps. Hazel would call that a recipe. The bees call it Tuesday.',
+    ],
+  },
+  honey: {
+    enter: [
+      'The tulip folds round you, and down you go. When the petals open, everything glows: shelf after shelf of honey, lit up like lamps.',
+      'Back through the tulip, as small as a bee. The honey store is warm, and sticky underfoot, and smells wonderful.',
+    ],
+    comb: [
+      'Shelves of capped honeycomb, glowing gold. Every cell is full and sealed with wax. Marigold would know exactly what to do with it.',
+      'You reach for a cell. "When you\'ve got a jar," buzzes a guard bee, kindly. You haven\'t got a jar yet.',
+      'The bees know every cell on these shelves by heart. If honey were a list, this would be a very long one, and every element sweet.',
+    ],
+    fanners: [
+      'A row of bees fanning their wings as fast as they can, drying the nectar into honey. It takes days. They don\'t mind.',
+      'The breeze from the fanners ruffles your hair. One of them winks at you without slowing down.',
+      '"Faster," says the bee at the end of the row. "Faster," says the next one. Nobody is in charge. It works anyway.',
+    ],
+    /** The nectar cell: each look pours one more flower's nectar in (one line per flower), combined with `<>`, until it's full and capped. */
+    flowers: ['clover', 'heather', 'lime', 'bramble', 'dandelion', 'tulip'],
+    nectar: [
+      'A forager pours in nectar from the clover. The cell was `mempty`, and `mempty <> x` is just `x`, so now it\'s clover.',
+      'Heather goes in next. Nectars combine with `<>`, in the order the bees come home.',
+      'Lime blossom. The bees say it doesn\'t matter how you group it: `(a <> b) <> c` is the same as `a <> (b <> c)`.',
+      'Bramble. The cell is getting heavy, and the fanners speed up.',
+      'Dandelion. Nearly full.',
+      'And a drop from your tulip, to finish. The cell is full, and a bee seals it with wax. That\'s `mconcat` of every flower in it.',
+    ],
+    /** Looking again once it's capped: a new cell, empty. */
+    again: 'The bees carry the capped cell off to the shelves, and start on a new one.',
+  },
+  queen: {
+    enter: [
+      'The tulip folds round you, and down you go. When the petals open, every bee in the room turns to look at you. Then they all bow, which is a lot of bowing.',
+      'Back through the tulip, as small as a bee. "The visitor," murmurs the queen\'s court, and makes room.',
+    ],
+    /** {errands} is how many errands you've solved. */
+    queen: [
+      '"So you\'re the one," says the queen. "Rowan talks about you. So do my foragers. {errands} errands, they tell me, and every one of them done properly."',
+      '"A town that runs on functions," says the queen. "We\'ve been doing that for a very long time. Ours are mostly `fly`, `sip` and `dance`."',
+      '"Tell Rowan the tulip is lovely," says the queen. "And tell Marigold she\'s very welcome to the honey. She knows which jars are hers."',
+      'The queen looks you up and down. "You\'d make a decent forager," she says. From a queen, that\'s the highest praise there is.',
+    ],
+    dance: [
+      'A bee is doing the waggle dance: a wiggly run, a loop round, and again. It means lots of flowers, that way, not far. In Haskell it would be `Just (towards "the pond", 300)`.',
+      'When nobody has found anything, nobody dances: that\'s `Nothing`. Today everybody wants a turn.',
+      'The watching bees copy the steps, then fly off where she pointed. One dance, and every bee who watches it knows the way. Like a function everybody can call.',
+    ],
+    royal: [
+      'Three big cells hang from the comb, lumpy like peanuts. Royal cells, a bee whispers, for queens to come. "Not for a long time," says the queen, firmly.',
+      'A royal cell is made of the same wax as every other cell, just more of it. The bees say that\'s true of queens too.',
+    ],
+  },
 };

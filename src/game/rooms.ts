@@ -1,7 +1,9 @@
 // The town interiors as pixel-art rooms, drawn like the town map: a top-down room with a back wall, a floor
 // and furniture, the resident who lives there, and you. Going through a building's door turns the map
 // into its room (town.ts draws it with drawRoom), and the doormat inside takes you back out. Brine's little
-// boat works the same way, with a deck instead of a floor and a gangplank down to the pier instead of a door.
+// boat works the same way, with a deck instead of a floor and a gangplank down to the pier instead of a door,
+// and so do the three beehives in the meadow (Rowan's tulip): you shrink to bee size and step inside, and a
+// tulip petal by the entrance takes you back out.
 // Walk with the arrow keys / WASD or by clicking. Things you can look at glow when you're close or the
 // mouse is over them; click them or press E. What they do is up to interiors.ts (the `onSpot` callback).
 import { RESIDENTS } from '../content/index.ts';
@@ -19,18 +21,27 @@ export interface Spot { id: string; label: string; box: Box; stand: [x: number, 
 /** What changes how a room looks (letters pinned up, folds of the dough, …), set by interiors.ts. */
 export type View = Record<string, number | boolean | undefined>;
 interface Room {
+  /** The resident whose gift opens it, when that isn't its key in ROOMS (the three hives are all Rowan's tulip). */
+  gift?: string;
+  /** What it's called, when it isn't the gift's place ("the nursery hive" rather than "By the beehives"). */
+  name?: string;
   /** Who's there, when it isn't the resident whose gift opened it (Juniper's star opens Brine's boat). */
   who?: string;
+  /** Who talks in the dialogue box when nobody lives there (the bees): their portrait. */
+  voice?(size: number): HTMLCanvasElement;
   /** Where you can stand, when it isn't the whole floor (the boat: its deck, the gangplank and the pier). */
   walk?(x: number, y: number, v: View): boolean;
-  /** Not a building: "Aboard" instead of "Inside", the way back out isn't a doormat, and the hint says how to get off. */
-  aboard?: { exit: string; hint(v: View): string };
+  /** The way back out isn't a doormat: "Aboard" or "Inside", what the way out is called, the hint under the map,
+   *  and how to get out (for screen readers). */
+  away?: { where: string; exit: string; hint(v: View): string; out(v: View): string };
   /** A cut-scene playing (the boat sailing out or home): how far along it is, 0 to 1, or null. Nobody walks during one. */
   scene?(v: View, t: number): number | null;
+  /** Drawn over everything during a cut-scene, instead of the cinema bars (shrinking down into a hive). */
+  cover?(R: Rect, k: number, t: number): void;
   /** Spots that aren't there right now (the way ashore, out at sea). */
   gone?(id: string, v: View): boolean;
-  /** Where the resident stands (top-left of their 8×14 sprite). */
-  resident: [x: number, y: number];
+  /** Where the resident stands (top-left of their 8×14 sprite), if somebody lives there. */
+  resident?: [x: number, y: number];
   /** Furniture you can't walk through, as floor footprints. */
   solids: Box[];
   spots: Spot[];
@@ -104,7 +115,104 @@ function voyage(v: View, t: number): { k: number; p: number } {
 /** How far the sea has scrolled past: it drifts gently at the pier and streams by under sail. */
 let seaX = 0, seaT = 0;
 
-// ---------- The rooms, by the resident whose gift opens them ----------
+// ---------- Inside the beehives (Rowan's tulip): honeycomb walls, warm light, bees as big as you ----------
+const WAX = '#c88a2c', WAX2 = '#e0a840', DEEP = '#8a5418', HONEY = '#f0a21c', GLINT = '#ffd35a', CAP = '#f4d27e', BROOD = '#f6e8c4';
+/** How long shrinking down through the tulip takes (a little cut-scene as you step into a hive), in ms. */
+export const SHRINK_MS = 1300;
+/** A stable random number for cell `n`, so the comb looks the same every frame and every visit. */
+const cellRand = (n: number, k = 0): number => { const v = Math.sin(n * 91.7 + k * 47.3) * 43758.5453; return v - Math.floor(v); };
+/** One cell of honeycomb: a little hexagon, 8 wide and 6 tall (they tile in rows 6 apart, every other row shifted by 4). */
+function cell(R: Rect, x: number, y: number, c: string): void { R(x + 2, y, 4, 1, c); R(x + 1, y + 1, 6, 4, c); R(x + 2, y + 5, 4, 1, c); }
+/** A curled-up larva in a cell. */
+function larva(R: Rect, x: number, y: number): void { R(x + 2, y + 2, 4, 1, WHITE); R(x + 2, y + 3, 1, 1, WHITE); R(x + 2, y + 4, 3, 1, WHITE); R(x + 5, y + 2, 1, 1, '#e8d8b0'); }
+/** A cell capped with wax, with a little sheen. */
+function capped(R: Rect, x: number, y: number, c = CAP): void { cell(R, x, y, c); R(x + 2, y + 1, 3, 1, 'rgba(255,255,255,.45)'); }
+/** A cell full of honey, with a glint that comes and goes. */
+function honeyCell(R: Rect, x: number, y: number, t: number, n: number): void {
+  cell(R, x, y, HONEY); R(x + 2, y + 1, 2, 1, GLINT);
+  if ((Math.floor(t / 450) + n * 7) % 23 === 0) R(x + 4, y + 2, 1, 1, WHITE);
+}
+/** The inside of a hive: the back wall of open comb (`fill` puts something in cell `n` at x, y), a floor of capped
+ *  comb, warm light coming in at the entrance, and the tulip petal there: the way back out. */
+function hiveShell(R: Rect, t: number, fill: (x: number, y: number, n: number) => void): void {
+  R(0, 0, RW, RH, '#3a2412');
+  R(4, 4, RW - 8, 30, '#a86a20');
+  for (let row = 0, y = 4; y < 33; row++, y += 6) for (let x = row % 2 ? 0 : -4, n = row * 32; x < RW; x += 8, n++) { cell(R, x, y, DEEP); fill(x, y, n); }
+  R(4, 37, RW - 8, RH - 41, '#e2aa4a');
+  for (let row = 0, y = 37; y < RH - 4; row++, y += 6) for (let x = row % 2 ? 0 : -4; x < RW; x += 8) cell(R, x, y, '#e9b858');
+  R(4, 33, RW - 8, 3, WAX); R(4, 33, RW - 8, 1, WAX2); R(4, 36, RW - 8, 1, 'rgba(0,0,0,.18)');
+  // daylight through the entrance, spilling up the floor
+  for (let i = 0; i < 6; i++) R(RW / 2 - 12 - i * 5, RH - 10 - i * 7, 24 + i * 10, 7, `rgba(255,244,200,${(0.16 - i * 0.025).toFixed(3)})`);
+  // the walls of the hive, all round (over any cell that ran past the edge)
+  R(0, 0, RW, 4, '#3a2412'); R(0, 0, 4, RH, '#3a2412'); R(RW - 4, 0, 4, RH, '#3a2412');
+  R(0, RH - 4, RW / 2 - 10, 4, '#3a2412'); R(RW / 2 + 10, RH - 4, RW / 2 - 10, 4, '#3a2412');
+  R(RW / 2 - 10, RH - 4, 20, 4, '#fff4c8'); R(RW / 2 - 8, RH - 2, 16, 2, '#9ccf7a');
+  // the tulip petal, which takes you back out to the meadow
+  const sway = Math.round(Math.sin(t / 900) * 0.6);
+  R(RW / 2 - 7 + sway, RH - 10, 14, 6, '#e87a9a'); R(RW / 2 - 8 + sway, RH - 9, 16, 4, '#e87a9a');
+  R(RW / 2 - 5 + sway, RH - 9, 9, 2, '#f7a8c0'); R(RW / 2 - 3 + sway, RH - 9, 4, 1, '#ffd6e2'); R(RW / 2 + sway, RH - 7, 6, 1, '#c85a7a');
+}
+/** A bee, 10×7 from (x, y), facing right (dir 1) or left (-1), wings beating (a blur when `fast`). */
+function bee(R: Rect, x: number, y: number, t: number, dir = 1, fast = false): void {
+  x = Math.round(x); y = Math.round(y);
+  const X = (dx: number, w = 1): number => dir > 0 ? x + dx : x + 10 - dx - w, up = Math.floor(t / (fast ? 35 : 80) + x) % 2;
+  R(X(1, 7), y + 2, 7, 4, '#f2c230'); R(X(2, 5), y + 6, 5, 1, '#d9a420');
+  R(X(3), y + 2, 1, 4, INK); R(X(5), y + 2, 1, 4, INK); R(X(0), y + 4, 1, 1, INK);
+  R(X(8, 2), y + 2, 2, 3, INK); R(X(9), y + 3, 1, 1, WHITE); R(X(9), y + 1, 1, 1, INK);
+  if (fast) R(X(2, 6), y - 1, 6, 3, 'rgba(255,255,255,.55)');
+  else { R(X(3, 2), y + up, 2, 2, 'rgba(255,255,255,.9)'); R(X(5, 2), y + up, 2, 2, 'rgba(225,238,255,.85)'); }
+}
+/** A bee flying about inside `b`, never quite the same path twice, with its shadow on the floor. */
+function flyer(R: Rect, b: Box, t: number, i: number): void {
+  const a = t / (2300 + i * 310) + i * 2.1, x = b.x + (Math.sin(a) * 0.5 + 0.5) * b.w, y = b.y + (Math.sin(t / (1300 + i * 170) + i) * 0.5 + 0.5) * b.h;
+  R(Math.round(x) + 2, Math.round(y) + 12, 6, 1, 'rgba(0,0,0,.12)');
+  bee(R, x, y, t, Math.cos(a) > 0 ? 1 : -1);
+}
+/** The bees' portrait in the dialogue box (a crown for the queen's hive). */
+export function beePortrait(size: number, crown = false): HTMLCanvasElement {
+  const c = document.createElement('canvas'); c.width = 10; c.height = 10; c.className = 'portrait'; c.style.width = c.style.height = size + 'px';
+  const g = c.getContext('2d')!, P: Rect = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  P(0, 0, 10, 10, '#f2e3c4');
+  P(3, 2, 2, 3, WHITE); P(5, 1, 2, 3, '#e1eeff');
+  P(1, 4, 6, 4, '#f2c230'); P(3, 4, 1, 4, INK); P(5, 4, 1, 4, INK); P(0, 6, 1, 1, INK);
+  P(7, 4, 3, 4, INK); P(8, 5, 1, 1, WHITE); P(8, 3, 1, 1, INK); P(9, 2, 1, 1, INK);
+  if (crown) { P(7, 1, 3, 1, '#ffd84a'); P(7, 0, 1, 1, '#ffd84a'); P(9, 0, 1, 1, '#ffd84a'); P(8, 2, 1, 1, '#ffd84a'); }
+  return c;
+}
+/** Shrinking down as you step in: the hive opens out from where you stand, ringed with golden sparkles. */
+function shrinkCover(R: Rect, k: number): void {
+  const e = ease(k), r = e * 178, cx = RW / 2, cy = RH - 8, D = '#1e1614';
+  for (let y = 0; y < RH; y++) {
+    const dy = y + 0.5 - cy;
+    if (Math.abs(dy) >= r) { R(0, y, RW, 1, D); continue; }
+    const hw = Math.sqrt(r * r - dy * dy); R(0, y, Math.max(0, cx - hw), 1, D); R(cx + hw, y, RW, 1, D);
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + k * 7, sx = cx + Math.cos(a) * (r + 2), sy = cy + Math.sin(a) * (r + 2);
+    if (sx > 0 && sx < RW && sy > 0 && sy < RH) { R(sx, sy - 1, 1, 3, '#ffe08a'); R(sx - 1, sy, 3, 1, '#ffe08a'); }
+  }
+}
+/** What every hive shares: Rowan's tulip opens it, there's nobody living there but bees, and the tulip petal leads out. */
+function hive(name: string, crown = false): Pick<Room, 'gift' | 'name' | 'voice' | 'away' | 'scene' | 'cover'> {
+  return {
+    gift: 'rowan', name, voice: size => beePortrait(size, crown),
+    away: { where: 'Inside', exit: '🌷 The tulip petal', hint: () => 'The tulip petal by the entrance takes you back to the meadow.', out: () => 'go back out by the tulip petal' },
+    // interiors.ts sets `since` when you step in
+    scene: (v, t) => { const k = (t - (Number(v.since) || -Infinity)) / SHRINK_MS; return k >= 0 && k < 1 ? k : null; },
+    cover: shrinkCover,
+  };
+}
+/** The big cell in the honey store, filling with nectar: `drops` of 6, capped with wax when it's full. */
+function nectarCell(R: Rect, x: number, y: number, drops: number): void {
+  const H = 22, W = 26, inset = (dy: number): number => Math.max(0, Math.round((Math.abs(dy - (H - 1) / 2) - 4.5) * 1.15));
+  for (let dy = -2; dy < H + 2; dy++) { const i = inset(Math.max(0, Math.min(H - 1, dy))); R(x + i - 2, y + dy, W - 2 * i + 4, 1, '#a86a20'); }
+  const level = H - Math.round((H * drops) / 6);
+  for (let dy = 0; dy < H; dy++) { const i = inset(dy); R(x + i, y + dy, W - 2 * i, 1, dy >= level ? HONEY : '#6a3a10'); }
+  if (drops > 0 && drops < 6) { const i = inset(level); R(x + i + 2, y + level, W - 2 * i - 4, 1, GLINT); }
+  if (drops >= 6) { for (let dy = 0; dy < H; dy++) { const i = inset(dy); R(x + i, y + dy, W - 2 * i, 1, CAP); } R(x + 7, y + 4, 8, 2, 'rgba(255,255,255,.5)'); R(x + 5, y + 7, 3, 1, 'rgba(255,255,255,.4)'); }
+}
+
+// ---------- The rooms, by the resident whose gift opens them (or by hive) ----------
 export const ROOMS: Record<string, Room> = {
   // Wren's cottage: the stove and kettle, a tea table on a rug, the cat on a chair, her letters pinned up, a patchwork bed.
   wren: {
@@ -377,7 +485,11 @@ export const ROOMS: Record<string, Room> = {
   // furled, a lobster pot, Brine coiling rope at the bow, a line out over the side, and Juniper's gold star on the rail.
   juniper: {
     who: 'brine',
-    aboard: { exit: '⚓ Back ashore', hint: v => v.out ? 'Out at sea. Talk to Brine to sail home.' : 'Talk to Brine to sail out to sea. The gangplank takes you back ashore.' },
+    away: {
+      where: 'Aboard', exit: '⚓ Back ashore',
+      hint: v => v.out ? 'Out at sea. Talk to Brine to sail home.' : 'Talk to Brine to sail out to sea. The gangplank takes you back ashore.',
+      out: v => v.out ? 'talk to Brine to sail home' : 'go back ashore by the gangplank',
+    },
     // the deck always; the gangplank and the pier only while moored
     walk: (x, y, v) => (x >= 16 && x <= 160 && Math.abs(y - CY) < hull(x) - 5)
       || (voyage(v, performance.now()).k === 0 && ((x >= 81 && x < 95 && y >= 104 && y < 136) || (x >= 7 && x <= RW - 7 && y >= 132 && y <= RH - 4))),
@@ -507,12 +619,142 @@ export const ROOMS: Record<string, Room> = {
       R(0, 0, RW, 4, INK); R(0, RH - 4, RW, 4, INK); R(0, 0, 4, RH, INK); R(RW - 4, 0, 4, RH, INK);
     },
   },
+  // ---------- The three beehives in the meadow (Rowan's tulip). You're as small as a bee in here. ----------
+  // The nursery hive: brood cells on the back wall, a cradle comb where a nurse bee hums to the larvae, the bee bread.
+  nursery: {
+    ...hive('the nursery hive'),
+    solids: [{ x: 112, y: 44, w: 44, h: 30 }, { x: 12, y: 94, w: 32, h: 12 }],
+    spots: [
+      { id: 'cells', label: '🐛 The brood cells', box: { x: 8, y: 4, w: 84, h: 29 }, stand: [48, 46] },
+      { id: 'nurse', label: '🐝 The nurse bee', box: { x: 110, y: 26, w: 48, h: 48 }, stand: [134, 84] },
+      { id: 'bread', label: '🌼 The bee bread', box: { x: 10, y: 86, w: 36, h: 21 }, stand: [54, 100] },
+    ],
+    draw(R, t) {
+      const pollen = ['#f2b23a', '#e07a2a', '#b48ad1', '#f6d24a'];
+      hiveShell(R, t, (x, y, n) => {
+        const p = cellRand(n);
+        // brood to the left: larvae, capped cells (bees on the way), an egg here and there; pollen and honey to the right
+        if (x < 96) { if (p < 0.45) { cell(R, x, y, BROOD); larva(R, x, y); } else if (p < 0.8) capped(R, x, y, '#d9a456'); else { cell(R, x, y, BROOD); R(x + 4, y + 2, 1, 2, WHITE); } }
+        else if (p < 0.5) cell(R, x, y, pollen[Math.floor(cellRand(n, 1) * 4)]);
+        else if (p < 0.75) honeyCell(R, x, y, t, n);
+      });
+      // the cradle comb, a larva in every cell
+      shadow(R, 112, 74, 44);
+      R(112, 44, 44, 30, '#a86a20'); R(112, 44, 44, 1, WAX2);
+      for (let row = 0, y = 46; y < 70; row++, y += 6) for (let x = 112 + (row % 2 ? 4 : 0); x + 8 <= 156; x += 8) { cell(R, x, y, BROOD); larva(R, x, y); }
+      R(112, 72, 44, 2, '#7a4a16');
+      // the nurse bee hovering over it, humming a lullaby (the notes drift up and fade)
+      const nx = 126 + Math.sin(t / 1500) * 12, ny = 32 + Math.sin(t / 400) * 1.5;
+      bee(R, nx, ny, t, Math.cos(t / 1500) > 0 ? 1 : -1);
+      for (let k = 0; k < 2; k++) {
+        const ph = (t / 2200 + k / 2) % 1, mx = 140 + k * 8 + Math.sin(t / 500 + k) * 2, my = 30 - ph * 22;
+        const c = `rgba(90,52,18,${(0.8 * (1 - ph)).toFixed(2)})`;
+        R(mx, my, 1, 4, c); R(mx - 2, my + 3, 2, 2, c); R(mx + 1, my, 2, 1, c);
+      }
+      // the bee bread: pollen packed into a low comb, and a forager kicking off her pollen baskets
+      shadow(R, 12, 106, 32);
+      R(12, 92, 32, 14, '#a86a20'); R(12, 92, 32, 1, WAX2);
+      for (let row = 0, y = 93; y < 104; row++, y += 6) for (let x = 12 + (row % 2 ? 4 : 0), n = 0; x + 8 <= 44; x += 8, n++) cell(R, x, y, pollen[(n + row * 2) % 4]);
+      const fx = 22 + Math.round(Math.sin(t / 700) * 2);
+      bee(R, fx, 83, t); R(fx + 3, 90, 2, 2, '#e07a2a'); R(fx + 6, 90, 2, 2, '#f2b23a');
+      // nurse bees flying about
+      flyer(R, { x: 16, y: 40, w: 70, h: 14 }, t, 0);
+      flyer(R, { x: 60, y: 60, w: 40, h: 40 }, t, 1);
+    },
+  },
+  // The honey store: shelves of capped comb glowing gold, the big cell the foragers are filling with nectar
+  // (a Monoid: every flower combined with <>), and the fanners drying it into honey by the far wall.
+  honey: {
+    ...hive('the honey-store hive'),
+    solids: [{ x: 10, y: 44, w: 20, h: 40 }, { x: 36, y: 44, w: 20, h: 40 }, { x: 74, y: 56, w: 30, h: 18 }, { x: 126, y: 52, w: 40, h: 18 }],
+    spots: [
+      { id: 'comb', label: '🍯 The honey shelves', box: { x: 8, y: 42, w: 50, h: 44 }, stand: [44, 94] },
+      { id: 'nectar', label: '🌸 The nectar cell', box: { x: 70, y: 42, w: 36, h: 32 }, stand: [88, 86] },
+      { id: 'fanners', label: '💨 The fanners', box: { x: 124, y: 42, w: 44, h: 30 }, stand: [144, 82] },
+    ],
+    draw(R, t, v) {
+      hiveShell(R, t, (x, y, n) => { if (cellRand(n) < 0.55) capped(R, x, y); else honeyCell(R, x, y, t, n); });
+      // two shelves of capped comb, glowing
+      const glow = (0.1 + Math.sin(t / 900) * 0.05).toFixed(3);
+      for (const fx of [10, 36]) {
+        shadow(R, fx, 84, 20);
+        R(fx, 44, 20, 40, '#7a4a16'); R(fx + 1, 45, 18, 38, '#a86a20'); R(fx, 44, 20, 1, WAX2);
+        for (let row = 0, y = 46; y + 6 <= 83; row++, y += 6) for (let x = fx + 1 + (row % 2 ? 4 : 0); x + 8 <= fx + 20; x += 8) {
+          const n = fx * 10 + row * 3 + x; if (cellRand(n) < 0.7) capped(R, x, y); else honeyCell(R, x, y, t, n);
+        }
+        R(fx - 2, 42, 24, 44, `rgba(255,214,90,${glow})`);
+      }
+      // the nectar cell, and a drop falling in just after a forager pours
+      shadow(R, 74, 74, 30);
+      nectarCell(R, 76, 50, Number(v.drops) || 0);
+      const since = t - (Number(v.poured) || -Infinity);
+      if (since < 500) R(88, 40 + (since / 500) * 14, 2, 2, GLINT);
+      bee(R, 84 + Math.sin(t / 600) * 6, 34 + Math.sin(t / 300), t, Math.cos(t / 600) > 0 ? 1 : -1);
+      // the fanners in a row, wings a blur, the breeze streaming past
+      for (let i = 0; i < 3; i++) bee(R, 128 + i * 13, 56 + (i % 2) * 4, t + i * 40, -1, true);
+      for (let i = 0; i < 4; i++) { const ph = (t / 700 + i / 4) % 1; R(122 - ph * 30, 52 + i * 5, 6, 1, `rgba(255,250,240,${(0.5 * (1 - ph)).toFixed(2)})`); }
+      // foragers coming and going
+      flyer(R, { x: 60, y: 90, w: 60, h: 30 }, t, 2);
+      flyer(R, { x: 100, y: 80, w: 56, h: 30 }, t, 3);
+    },
+  },
+  // The queen's hive: the queen on her comb with her attendants round her, the waggle dance on the floor,
+  // and the royal cells hanging from the back wall.
+  queen: {
+    ...hive("the queen's hive", true),
+    solids: [{ x: 70, y: 48, w: 36, h: 20 }, { x: 18, y: 62, w: 36, h: 22 }],
+    spots: [
+      { id: 'queen', label: '👑 The queen', box: { x: 68, y: 36, w: 40, h: 32 }, stand: [88, 82] },
+      { id: 'dance', label: '💃 The waggle dance', box: { x: 14, y: 52, w: 44, h: 36 }, stand: [36, 98] },
+      { id: 'royal', label: '🥜 The royal cells', box: { x: 126, y: 4, w: 42, h: 30 }, stand: [146, 48] },
+    ],
+    draw(R, t) {
+      hiveShell(R, t, (x, y, n) => {
+        if (x >= 124) return; // the royal cells hang there
+        const p = cellRand(n); if (p < 0.4) honeyCell(R, x, y, t, n); else if (p < 0.7) capped(R, x, y, '#d9a456'); else if (p < 0.85) { cell(R, x, y, BROOD); larva(R, x, y); }
+      });
+      // the royal cells: big, lumpy, like peanuts hanging down
+      for (const [x, y, h] of [[130, 6, 17], [143, 5, 21], [156, 7, 16]]) {
+        for (let k = 0; k < h; k++) { const hw = Math.round(2.5 + Math.sin((k / h) * Math.PI) * 1.6 + (k % 6 < 3 ? 0.4 : 0)); R(x + 4 - hw, y + k, hw * 2, 1, '#d9a456'); }
+        R(x + 3, y + h, 2, 1, '#b97a2a');
+        for (let k = 2; k < h - 1; k += 3) R(x + 2 + (k % 2) * 3, y + k, 1, 1, '#b97a2a');
+        R(x + 3, y + 2, 1, h - 5, 'rgba(255,255,255,.3)');
+      }
+      // the queen's comb, a raised platform, and the queen on it
+      shadow(R, 70, 68, 36);
+      R(70, 52, 36, 16, '#a86a20'); R(72, 48, 32, 5, WAX2); R(70, 52, 36, 1, '#f0c060');
+      for (let x = 72; x + 8 <= 104; x += 8) cell(R, x, 55, WAX2);
+      R(70, 66, 36, 2, '#7a4a16');
+      const qx = 80, qy = 41 + Math.round(Math.sin(t / 1200)), up = Math.floor(t / 120) % 2;
+      R(qx + 6, qy + up, 3, 3, 'rgba(255,255,255,.9)'); R(qx + 9, qy + up, 3, 3, 'rgba(225,238,255,.85)');
+      R(qx + 1, qy + 3, 12, 5, '#e8a828'); R(qx, qy + 4, 1, 3, '#e8a828'); R(qx + 2, qy + 8, 10, 1, '#c88a20');
+      for (const s of [3, 6, 9]) R(qx + s, qy + 3, 1, 5, '#5a3412');
+      R(qx + 13, qy + 3, 3, 5, INK); R(qx + 14, qy + 4, 1, 1, WHITE); R(qx + 15, qy + 2, 1, 1, INK);
+      R(qx + 13, qy + 1, 3, 1, '#ffd84a'); R(qx + 13, qy, 1, 1, '#ffd84a'); R(qx + 15, qy, 1, 1, '#ffd84a');
+      if (Math.sin(t / 650) > 0.9) { R(qx + 17, qy - 2, 1, 3, WHITE); R(qx + 16, qy - 1, 3, 1, WHITE); }
+      // her attendants, all facing her
+      for (const [ax, ay] of [[58, 44], [62, 56], [108, 42], [110, 56]]) bee(R, ax, ay + Math.round(Math.sin(t / 700 + ax)), t + ax * 13, ax < 88 ? 1 : -1);
+      // the waggle dance: a run with a wiggle, then a loop round, over and over, with bees watching
+      shadow(R, 18, 84, 36);
+      R(18, 64, 36, 20, 'rgba(168,106,32,.35)');
+      const s = t / 1100, dx = 31 + Math.sin(s) * 12 + (Math.cos(s) > 0.7 ? Math.sin(t / 40) : 0), dy = 70 + Math.sin(2 * s) * 5;
+      bee(R, dx, dy, t, Math.cos(s) > 0 ? 1 : -1);
+      for (const [wx, wy, d] of [[12, 66, 1], [14, 78, 1], [52, 64, -1], [50, 78, -1]] as const) bee(R, wx, wy, t + wx * 31, d);
+      flyer(R, { x: 110, y: 74, w: 50, h: 40 }, t, 4);
+      flyer(R, { x: 56, y: 92, w: 60, h: 30 }, t, 5);
+    },
+  },
 };
+
+/** The rooms a gift opens: one, or the three hives for Rowan's tulip. */
+export const roomsOf = (rid: string): string[] => Object.keys(ROOMS).filter(k => (ROOMS[k].gift ?? k) === rid);
+/** The resident whose gift opens a room. */
+export const giftFor = (room: string): string => ROOMS[room]?.gift ?? room;
 
 // ---------- Being inside ----------
 /** The doormat: every room's way back to town. */
 export const DOOR: Spot = { id: 'leave', label: '🚪 Back to town', box: { x: RW / 2 - 9, y: RH - 10, w: 18, h: 10 }, stand: [RW / 2, RH - 8] };
-const roomSpots = (rid: string): Spot[] => { const r = ROOMS[rid]; return [...r.spots, r.aboard ? { ...DOOR, label: r.aboard.exit } : DOOR]; };
+const roomSpots = (rid: string): Spot[] => { const r = ROOMS[rid]; return [...r.spots, r.away ? { ...DOOR, label: r.away.exit } : DOOR]; };
 
 interface Here {
   rid: string; room: Room; spots: Spot[]; solids: Box[]; me: Walker; view: View; hover: Spot | null;
@@ -526,10 +768,10 @@ export const inRoom = (): string | null => here?.rid ?? null;
 
 /** Step inside `rid`'s room, onto the doormat, facing in. */
 export function enterRoom(rid: string, view: View, onSpot: (id: string) => void, onWalk: () => void): void {
-  const room = ROOMS[rid], [rx, ry] = room.resident;
+  const room = ROOMS[rid], r = room.resident;
   here = {
     rid, room, view, onSpot, onWalk, hover: null, spots: roomSpots(rid),
-    solids: [...room.solids, { x: rx, y: ry + 8, w: 8, h: 6 }],
+    solids: r ? [...room.solids, { x: r[0], y: r[1] + 8, w: 8, h: 6 }] : room.solids,
     me: { x: DOOR.stand[0], y: DOOR.stand[1], dir: 'up', moving: false, path: null, onArrive: null },
   };
 }
@@ -595,12 +837,15 @@ export function drawRoom(ctx: CanvasRenderingContext2D, W: number, H: number, t:
   const near = scene == null ? nearSpot(h) : null, lit = scene == null ? h.hover ?? near : null;
   if (lit) { const b = lit.box, c = '#fff2a8'; R(b.x - 1, b.y - 1, b.w + 2, 1, c); R(b.x - 1, b.y + b.h, b.w + 2, 1, c); R(b.x - 1, b.y, 1, b.h, c); R(b.x + b.w, b.y, 1, b.h, c); }
   // people, back to front
-  const [rx, ry] = h.room.resident;
-  const people: [number, () => void][] = [[ry + 13, () => drawResident(R, rx, ry, RESIDENTS[h.room.who ?? h.rid], t, true)], [h.me.y, () => drawPlayer(R, t, h.me)]];
+  const people: [number, () => void][] = [[h.me.y, () => drawPlayer(R, t, h.me)]], r = h.room.resident;
+  if (r) people.push([r[1] + 13, () => drawResident(R, r[0], r[1], RESIDENTS[h.room.who ?? h.rid], t, true)]);
   people.sort((a, b) => a[0] - b[0]).forEach(([, d]) => d());
   if (near) drawPrompt(R, t, h.me);
-  // a cut-scene gets the cinema bars, sliding in and back out
-  if (scene != null) { const b = Math.round(14 * Math.min(1, scene * 6, (1 - scene) * 6)); R(0, 0, RW, b, '#120c0a'); R(0, RH - b, RW, b, '#120c0a'); }
+  // a cut-scene gets the cinema bars, sliding in and back out (or the room's own cover)
+  if (scene != null) {
+    if (h.room.cover) h.room.cover(R, scene, t);
+    else { const b = Math.round(14 * Math.min(1, scene * 6, (1 - scene) * 6)); R(0, 0, RW, b, '#120c0a'); R(0, RH - b, RW, b, '#120c0a'); }
+  }
   // the room in the middle of the map, with the dark around it
   const p = placement(W, H);
   ctx.fillStyle = '#1e1614'; ctx.fillRect(0, 0, W, H);

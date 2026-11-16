@@ -1,5 +1,5 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
-import { CHALLENGES, EXPANSIONS, HEARTS, ITEMS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
 import { $, byId, save, state, status } from './state.ts';
 import { openChallenge, openErrand } from './notebook.ts';
 import { isOpen } from './schedule.ts';
@@ -9,8 +9,8 @@ import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
 import { heldItem, holdLabel, openDoors, putBack, useHeld, visit } from './satchel.ts';
-import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract } from './rooms.ts';
-import { enterInterior, hasInterior, leaveInterior, roomLabel } from './interiors.ts';
+import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract, roomsOf } from './rooms.ts';
+import { enterInterior, leaveInterior, placeOf, roomLabel } from './interiors.ts';
 import type { Challenge, Expansion, GiftItem, ItemTarget } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
@@ -509,7 +509,7 @@ export function initTown(): void {
     const held = heldItem();
     if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
     const door = placeAt(...mapPoint(ev));
-    if (door) { if (hover !== 'door:' + door.resident) { hover = 'door:' + door.resident; $('#hoverLabel').innerHTML = doorLabel(door, 'Click'); } cv.style.cursor = 'pointer'; return; }
+    if (door) { const key = 'door:' + (door.room ?? door.it.resident); if (hover !== key) { hover = key; $('#hoverLabel').innerHTML = doorLabel(door, 'Click'); } cv.style.cursor = 'pointer'; return; }
     const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => {
     if (inRoom()) { roomHover(-1, -1, W, cv.height); $('#hoverLabel').innerHTML = roomLabel(null); return; }
@@ -523,7 +523,7 @@ export function initTown(): void {
     if (held) { useHeld(onTarget(held.target, x, y)); return; }
     // a place opened with a gift: a building's front door, or the spot outdoors (the hives, the boat, the pond)
     const door = placeAt(x, y);
-    if (door) { if (hasInterior(door.resident)) goInside(door.resident); else visit(door.resident); return; }
+    if (door) { if (door.room) goInside(door.room); else visit(door.it.resident); return; }
     const rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
     if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
@@ -590,9 +590,9 @@ function nearby(): Near | null {
     if (shown.has(rid) || !HOMES[rid]) continue;
     const [hx, hy] = HOMES[rid]; consider(Math.hypot(px - hx - 4, py - hy - 13), { kind: 'errand', rid, key: 'errand:' + rid, act: true });
   }
-  // the front door of a building you can go into
-  for (const it of enterable()) {
-    const [dx, dy] = frontDoor(it); consider(Math.hypot(px - dx, py - dy) - 4, { kind: 'door', rid: it.resident, key: 'door:' + it.resident, act: true });
+  // the front door of a building you can go into (or the boat, or a hive)
+  for (const w of ways()) {
+    const [dx, dy] = w.at; consider(Math.hypot(px - dx, py - dy) - 4, { kind: 'door', rid: w.room, key: 'door:' + w.room, act: true });
   }
   for (const [id, p] of visiblePlots()) {
     const [sx, sy] = p.stand, toStand = Math.hypot(px - sx - 4, py - sy - 13);
@@ -605,7 +605,7 @@ function nearby(): Near | null {
 function nearLabel(n: Near | null): string {
   if (!n) return plotLabel(null);
   if (n.kind === 'errand') return `<b>${RESIDENTS[n.rid].name}</b> has pinned an errand to the Notice Board. Press <kbd>E</kbd> to help.`;
-  if (n.kind === 'door') return doorLabel(ITEMS.find(i => i.resident === n.rid)!, 'Press <kbd>E</kbd>');
+  if (n.kind === 'door') { const w = ways().find(v => v.room === n.rid); return w ? doorLabel(w, 'Press <kbd>E</kbd>') : plotLabel(null); }
   return plotLabel(n.id).replace('Click to help!', 'Press <kbd>E</kbd> to help!').replace('click to revisit.', 'press <kbd>E</kbd> to revisit.').replace('Click the mailbox to read.', 'Press <kbd>E</kbd> to read.');
 }
 function interactWith(n: Target): void {
@@ -619,32 +619,50 @@ function interactWith(n: Target): void {
 
 
 // ---------- Going inside (the town interiors: interiors.ts, rooms.ts) ----------
-/** Places outdoors with a room, and where on the shore you step aboard (and come back to): Brine's boat, below the pier. */
-const ABOARD: Record<string, Pt> = { juniper: [366, 250] };
-/** A place outdoors you go aboard (the boat), rather than a building with a front door. */
-const isAboard = (it: GiftItem): boolean => !!it.target?.spot && it.resident in ABOARD;
-/** Places opened with a gift that you can walk into: a building with a front door, or Brine's boat. */
-const enterable = (): GiftItem[] => openDoors().filter(i => hasInterior(i.resident) && (isAboard(i) || (!i.target?.spot && !!i.target?.plot && PLOTS[i.target.plot].door != null)));
-/** Just outside a building's front door, on its path (or on the shore by the boat). */
-function frontDoor(it: GiftItem): Pt { if (isAboard(it)) return ABOARD[it.resident]; const p = PLOTS[it.target!.plot!]; return [p.door!, p.y + p.h + 3]; }
+/** A place opened with a gift, on the map: the room it leads into (null for the places that are only a card for now). */
+interface Place { it: GiftItem; room: string | null }
+/** A way into a room: where you stand to go in, and where you come back out. */
+interface Way extends Place { room: string; at: Pt }
+/** The beehives in the meadow (top-left of each 12×16 hive, from the meadow's corner). EXPANSION_ART.meadow draws them here. */
+const HIVE_AT: Record<string, Pt> = { nursery: [12, 20], honey: [30, 22], queen: [48, 20] };
+/** Where you stand to go into a room outdoors: on the shore below Brine's boat, or just in front of a hive. */
+function outdoorStand(room: string): Pt | null {
+  if (room === 'juniper') return [366, 250];
+  const h = HIVE_AT[room], m = EXPANSIONS.find(x => x.id === 'meadow'); if (!h || !m) return null;
+  const r = slotRect(m.slot); return [r.x + h[0] + 6, r.y + h[1] + 19];
+}
+/** Every way into a room that's open right now: the front doors of buildings, the boat, and each of the hives. */
+function ways(): Way[] {
+  const out: Way[] = [];
+  for (const it of openDoors()) for (const room of roomsOf(it.resident)) {
+    const p = it.target?.plot ? PLOTS[it.target.plot] : null;
+    const at = it.target?.spot ? outdoorStand(room) : p && p.door != null ? [p.door, p.y + p.h + 3] as Pt : null;
+    if (at) out.push({ it, room, at });
+  }
+  return out;
+}
+const capFirst = (s: string): string => s[0].toUpperCase() + s.slice(1);
 /** What the line under the map says about a way in: "Click to go inside", "Press E to go aboard", … */
-function doorLabel(it: GiftItem, how: string): string {
-  if (isAboard(it)) return `⛵ <b>${it.place}</b> is moored here. ${how} to go aboard.`;
-  if (hasInterior(it.resident)) return `🚪 The door to <b>${it.place}</b>. ${how} to go inside.`;
-  return `<b>${it.place}</b> is open to you. ${how} to pop in.`;
+function doorLabel(pl: Place, how: string): string {
+  if (pl.room === 'juniper') return `⛵ <b>${pl.it.place}</b> is moored here. ${how} to go aboard.`;
+  if (pl.room && HIVE_AT[pl.room]) return `🐝 <b>${capFirst(placeOf(pl.room))}</b>. ${how} to shrink down and step inside.`;
+  if (pl.room) return `🚪 The door to <b>${pl.it.place}</b>. ${how} to go inside.`;
+  return `<b>${pl.it.place}</b> is open to you. ${how} to pop in.`;
 }
-/** A click on the front door of a building you can go into. */
-function frontDoorAt(x: number, y: number): GiftItem | null {
-  return enterable().find(it => { const [dx, dy] = frontDoor(it); return Math.abs(x - dx) <= 6 && y >= dy - 16 && y <= dy + 3; }) ?? null;
+/** A click on a way in: a building's front door, the shore by the boat, or a hive. */
+function wayAt(x: number, y: number): Way | null {
+  return ways().find(w => { const [dx, dy] = w.at; return Math.abs(x - dx) <= 6 && y >= dy - 18 && y <= dy + 3; }) ?? null;
 }
-/** Walk to a building's front door (or be there already) and go in. Coming out, you stand on its doorstep. */
-export function goInside(rid: string, walk = true): void {
-  const it = enterable().find(i => i.resident === rid); if (!it) return;
+/** Walk to a room's way in (or be there already) and go in. Coming out, you stand where you went in.
+ *  A gift that opens several rooms (Rowan's tulip, three hives) walks you over to them, to pick one. */
+export function goInside(id: string, walk = true): void {
   if (heldItem()) putBack();
-  const [dx, dy] = frontDoor(it);
+  const all = ways(), w = all.find(v => v.room === id);
+  if (!w) { const some = all.filter(v => v.it.resident === id); if (some.length) { const [x, y] = some[Math.floor(some.length / 2)].at; goTo(x, y); } return; }
+  const [dx, dy] = w.at;
   const enter = (): void => {
     player.path = null; player.moving = false;
-    enterInterior(rid, () => { player.x = dx; player.y = dy; player.dir = 'down'; savePlayer(); hover = null; nearKey = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
+    enterInterior(w.room, () => { player.x = dx; player.y = dy; player.dir = 'down'; savePlayer(); hover = null; nearKey = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
   };
   if (walk) goTo(dx, dy, enter); else enter();
 }
@@ -683,11 +701,14 @@ function glow(b: Box, t: number): void {
   }
   ctx.globalAlpha = 1;
 }
-/** A place opened with a gift under the mouse: the front door of a building you can go into, or a place
- *  outdoors that is part of a plot (the hives, Brine's boat, the pond). Whole buildings without a room
- *  inside (the telescope, the station) aren't clickable here, since a click there opens their challenge. */
-function placeAt(x: number, y: number): GiftItem | null {
-  return frontDoorAt(x, y) ?? openDoors().find(i => i.target?.spot && onTarget(i.target, x, y)) ?? null;
+/** A place opened with a gift under the mouse: a way into a room (a front door, the boat, a hive), or a place
+ *  outdoors that is part of a plot (Brine's boat, the pond). Whole buildings without a room inside (the
+ *  telescope, the station) aren't clickable here, since a click there opens their challenge. The hives are
+ *  clicked one by one, since each is its own room. */
+function placeAt(x: number, y: number): Place | null {
+  const w = wayAt(x, y); if (w) return w;
+  const it = openDoors().find(i => i.target?.spot && roomsOf(i.resident).length < 2 && onTarget(i.target, x, y));
+  return it ? { it, room: roomsOf(it.resident)[0] ?? null } : null;
 }
 
 // ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------
@@ -772,7 +793,9 @@ const EXPANSION_ART: Record<string, (x: number, y: number, w: number, h: number,
     const fl = ['#f7c6d0', '#fff2a8', '#ffffff', '#e8a0bf', '#b48ad1', '#e07a5f'];
     for (let i = 0; i < 70; i++) { const fx = x + 4 + hsh(i, 11) * (w - 8), fy = y + 4 + hsh(i, 13) * (h - 8), sw = Math.round(Math.sin(t / 800 + i) * 0.6); R(fx, fy + 1, 1, 2, '#4f8a4a'); R(fx + sw, fy, 1, 1, fl[i % fl.length]); }
     fence(x + 4, y + 4, 60);
-    beehive(x + 12, y + 20, t, 0); beehive(x + 30, y + 22, t, 1);
+    Object.values(HIVE_AT).forEach(([hx, hy], i) => beehive(x + hx, y + hy, t, i));
+    // Rowan's tulip, once it's planted: the way into the hives
+    if (state.used?.rowan) { const sw = Math.round(Math.sin(t / 900) * 0.6); R(x + 5, y + 31, 1, 6, '#4f8a4a'); R(x + 3, y + 34, 2, 1, '#6aa85e'); R(x + 4 + sw, y + 28, 3, 3, '#e87a9a'); R(x + 4 + sw, y + 27, 1, 1, '#e87a9a'); R(x + 6 + sw, y + 27, 1, 1, '#e87a9a'); R(x + 5 + sw, y + 28, 1, 1, '#f7a8c0'); }
     sheep(x + 80, y + 18, t, 0); sheep(x + 110, y + 34, t, 1); sheep(x + 70, y + 46, t, 2);
   },
   orchard(x, y, w, h, t) {

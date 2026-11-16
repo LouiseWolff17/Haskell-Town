@@ -312,3 +312,60 @@ test("Brine's little boat: go aboard, look at the star, the wheel and the line, 
   await page.keyboard.press('KeyE');
   await expect(insideOf(page)).toHaveAttribute('aria-label', /^Aboard/);
 });
+
+// ---------- Inside the beehives (Rowan's tulip) ----------
+/** The meadow open (3 errands), Rowan at ♥ 2 with his tulip planted by the hives, standing in the meadow below them. */
+const byTheHives = {
+  done: village, lettersRead: { rowan: true }, used: { rowan: 1 }, player: { x: 36, y: 392 },
+  reviews: { started: 0, topics: {}, day: null, log: ['priced', 'sizes', 'parcel'].map(errand) },
+};
+const HIVE = { cells: [48, 18], nectar: [88, 60], queen: [88, 46] } as const;
+/** Step into a hive from the Satchel's list, and wait for the shrinking-down to finish. */
+async function intoHive(page: Page, name: RegExp): Promise<void> {
+  await page.locator('#satchelBtn').click();
+  await page.locator('#satchel').getByRole('button', { name }).click();
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^Inside the .* hive.*tulip petal/);
+  await page.waitForTimeout(1400);
+}
+
+test('the beehives: pick a hive, shrink down and step inside, and the tulip petal takes you back out', async ({ page }) => {
+  await openTown(page, byTheHives);
+  // the Satchel lists each of the three hives
+  await page.locator('#satchelBtn').click();
+  for (const name of ['The nursery hive', 'The honey-store hive', "The queen's hive"]) await expect(page.locator('#satchel').getByRole('button', { name })).toBeVisible();
+  await page.locator('#satchelBtn').click();
+
+  await intoHive(page, /The nursery hive/);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^Inside the nursery hive/);
+  await expect(say(page)).toContainText('tulip');
+  await expect(page.locator('#hoverLabel')).toContainText('tulip petal');
+  await clickRoom(page, ...HIVE.cells);
+  await expect(say(page)).toContainText('larva');
+  // the petal takes you back out, to just in front of the nursery hive, and E goes back in
+  await clickRoom(page, ...DOORMAT);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /map of Haskell Town/);
+  const p = (await savedState(page)).player;
+  expect(Math.abs(p.x - 18)).toBeLessThan(3);
+  expect(Math.abs(p.y - 379)).toBeLessThan(3);
+  await expect(page.locator('#hoverLabel')).toContainText('The nursery hive');
+  await page.keyboard.press('KeyE');
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^Inside the nursery hive/);
+  await page.waitForTimeout(1400);
+  await clickRoom(page, ...DOORMAT);
+
+  // the honey store: every look at the nectar cell pours in one more flower, combined with <>
+  await intoHive(page, /The honey-store hive/);
+  await clickRoom(page, ...HIVE.nectar);
+  await expect(say(page)).toContainText('"clover"');
+  await page.keyboard.press('KeyE');
+  await expect(say(page)).toContainText('"clover" <> "heather"');
+  await clickRoom(page, ...DOORMAT);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /map of Haskell Town/);
+
+  // the queen has heard all about you
+  await intoHive(page, /The queen's hive/);
+  await clickRoom(page, ...HIVE.queen);
+  await expect(say(page)).toContainText(/queen|Rowan/);
+  await clickRoom(page, ...DOORMAT);
+  expect(Object.keys((await savedState(page)).inside?.hives ?? {}).sort()).toEqual(['honey', 'nursery', 'queen']);
+});

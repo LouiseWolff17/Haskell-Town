@@ -30,7 +30,7 @@ export const ITEMS: GiftItem[] = [
     wrong: "The key to the town doesn't open anything here. Fern did say it doesn't open anything.",
     used: '…it fits. Fern is speechless. The council (Fern) will look into it.',
     place: "City Hall", visit: "Fern shows you the town records, the council minutes (all signed by Fern), and a proposal for a holiday in your honour." },
-  { resident: 'rowan', id: 'tulipBulb', target: { land: 'meadow', spot: [8, 16, 38, 24], name: 'beehives' },
+  { resident: 'rowan', id: 'tulipBulb', target: { land: 'meadow', spot: [8, 16, 56, 24], name: 'beehives' },
     notYet: 'Rowan said the bees would invite you in. There are no beehives in town yet. Keep solving errands and land will open.',
     wrong: "The ground here isn't quite right. Rowan mentioned bees.",
     used: 'The tulip blooms by the hives in an instant. A bee lands on your sleeve and waves you closer.',

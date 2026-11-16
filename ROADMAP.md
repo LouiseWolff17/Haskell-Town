@@ -71,7 +71,8 @@ Ordered by the design's suggested build order.
 - [ ] Your garden plot by Wren's cottage: seeds grow over real days, nothing wilts.
 
 **3. Magical and world places** (an item placed in the world becomes a doorway)
-- [ ] Inside the beehives (Rowan's tulip): pick a hive — nursery, honey store, queen's hive — with a tulip petal as the way back; collect honey.
+- [x] Inside the beehives (Rowan's tulip) as pixel-art rooms: three hives in the meadow, each its own room at bee size (the nursery, the honey store with its `<>` nectar cell, the queen's hive with the waggle dance), a shrinking-down cut-scene on the way in, and a tulip petal as the way back. The Journal remembers which hives you've been in.
+- [ ] Collect honey in the honey store to sell (needs coins and finds in the Satchel).
 - [ ] The open sea and fishing from Brine's boat (Juniper's sticker), catches as `Maybe Fish`.
 - [ ] The magical beach through Brine's conch at the Duck Pond, with endless shells.
 - [ ] A few finds per day per place; residents pay more for their own thing (fish → Brine, honey → Marigold, shells → Juniper, garden produce → Moss/Hazel).

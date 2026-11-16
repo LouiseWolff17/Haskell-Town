@@ -7,17 +7,18 @@ import { $, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
 import { goInside, plotLabel, targetBox } from './town.ts';
-import { hasInterior } from './interiors.ts';
+import { hasInterior, hivesNote, placeOf } from './interiors.ts';
+import { giftFor, roomsOf } from './rooms.ts';
 import type { GiftItem } from '../content/index.ts';
 
 const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
 /** "A spare key" → "the spare key", for sentences. */
 const the = (rid: string): string => giftOf(rid).name.replace(/^(A|An|The)\s+/, 'the ');
 
-/** A gift's Journal note, with its extra line once it has been used (Fern's key). */
+/** A gift's Journal note, with its extra line once it has been used (Fern's key), and the hives you've been inside (Rowan's tulip). */
 export function giftNote(rid: string): string {
-  const g = giftOf(rid);
-  return g.afterUse && state.used?.[rid] ? `${g.note} ${g.afterUse}` : g.note;
+  const g = giftOf(rid), note = g.afterUse && state.used?.[rid] ? `${g.note} ${g.afterUse}` : g.note, hives = hivesNote(rid);
+  return hives ? `${note} ${hives}` : note;
 }
 
 /** Gifts you've been given and haven't used yet, in the order of the Friends panel. */
@@ -54,7 +55,8 @@ export function useHeld(hit: boolean): void {
   toast(`${giftOf(it.resident).icon} ${it.used}<br><code class="use-code">use ${it.id} ${it.target!.name}</code>`);
   $('#hoverLabel').innerHTML = plotLabel(null);
   renderSatchel();
-  // a building you can go into: in you go, through its front door. The other places can be visited from now on.
+  // a building you can go into: in you go, through its front door (the hives: you're walked over to pick one).
+  // The other places can be visited from now on.
   if (hasInterior(it.resident)) goInside(it.resident);
 }
 
@@ -71,10 +73,11 @@ function pick(rid: string): void {
 export function openDoors(): GiftItem[] {
   return ITEMS.filter(i => state.used?.[i.resident] && i.target && i.place && targetBox(i.target));
 }
-/** Visit a place opened with a gift. The five town buildings (and Brine's boat) are rooms you walk into through their front
- *  door (interiors.ts); the other places are a small card for now (docs/gift-items-design.md section 4). */
+/** Visit a place opened with a gift (`rid` is the gift's resident, or one of the rooms it opens: a hive). The five town
+ *  buildings, Brine's boat and the hives are rooms you walk into (interiors.ts); the other places are a small card for
+ *  now (docs/gift-items-design.md section 4). */
 export function visit(rid: string): void {
-  const it = ITEMS.find(i => i.resident === rid); if (!it?.place) return;
+  const it = ITEMS.find(i => i.resident === giftFor(rid)); if (!it?.place) return;
   closeList();
   if (hasInterior(rid)) { goInside(rid); return; }
   const g = giftOf(rid), card = $('#visit');
@@ -99,9 +102,10 @@ export function renderSatchel(): void {
     ? items.map(i => { const g = giftOf(i.resident), ready = !!i.target && !!targetBox(i.target);
       return `<button class="satchel-item${ready ? '' : ' waiting'}" data-item="${i.resident}"><span class="satchel-icon">${g.icon}</span><span><b>${g.name}</b><small>From ${RESIDENTS[i.resident].name}${ready ? '' : ' · keep it for now'}</small></span></button>`; }).join('')
     : `<p class="board-small">Empty for now. Every gift has found its place.</p>`);
-  const doors = openDoors();
-  if (doors.length) list.innerHTML += `<div class="satchel-h satchel-h2">🚪 Open doors</div>` + doors.map(i =>
-    `<button class="satchel-item" data-door="${i.resident}"><span class="satchel-icon">${giftOf(i.resident).icon}</span><span><b>${i.place}</b><small>Pop in again</small></span></button>`).join('');
+  // a gift that opens several rooms (Rowan's tulip: three hives) lists each of them
+  const doors = openDoors().flatMap(i => { const rs = roomsOf(i.resident); return rs.length > 1 ? rs.map(r => ({ i, id: r, name: cap(placeOf(r)) })) : [{ i, id: i.resident, name: i.place! }]; });
+  if (doors.length) list.innerHTML += `<div class="satchel-h satchel-h2">🚪 Open doors</div>` + doors.map(({ i, id, name }) =>
+    `<button class="satchel-item" data-door="${id}"><span class="satchel-icon">${giftOf(i.resident).icon}</span><span><b>${name}</b><small>Pop in again</small></span></button>`).join('');
   list.querySelectorAll<HTMLElement>('[data-item]').forEach(b => b.onclick = () => pick(b.dataset.item!));
   list.querySelectorAll<HTMLElement>('[data-door]').forEach(b => b.onclick = () => visit(b.dataset.door!));
 }
