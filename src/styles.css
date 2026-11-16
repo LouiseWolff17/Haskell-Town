@@ -313,6 +313,44 @@ body.holding .satchel-btn{background:#fff2a8}
 .visit-text{margin:0 0 8px}
 .visit-from{margin:0; font-size:13px; color:var(--ink2)}
 .visit .go{margin-top:16px; display:flex; justify-content:flex-end}
+/* the five town interiors (interiors.ts, rooms.ts): the map becomes the room */
+.room-say{position:absolute; left:20px; right:20px; bottom:20px; z-index:2; display:flex; gap:12px; align-items:center; padding:10px 14px; background:var(--paper); border:3px solid var(--ink); border-radius:12px; box-shadow:0 4px 0 rgba(0,0,0,.3); animation:pop .2s}
+.room-say[hidden]{display:none}
+.room-say p{margin:0; font-size:14.5px}
+.room-say .portrait{width:44px; height:44px}
+.room-panel{margin-top:12px; padding:10px 14px 12px; overflow:visible}
+.room-head{display:flex; align-items:center; justify-content:space-between; gap:8px; font-family:var(--pixel); font-size:19px}
+.room-head .btn-soft.ghost{margin-top:0; font-family:var(--body); font-size:13px; padding:5px 11px}
+.room-spots{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px}
+.room-spots .btn-soft.ghost{margin-top:0; padding:4px 10px; font-size:13px}
+.room-body:not(:empty){margin-top:10px; padding-top:4px; border-top:2px dashed var(--line)}
+.room-body .board-h:first-child{margin-top:10px}
+.in-line{margin:8px 0; font-size:14.5px}
+.in-row{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0}
+.in-pins{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0}
+.in-pins span{background:var(--paper2); border:2px solid var(--line); border-radius:8px; padding:3px 9px; font-size:13px; transform:rotate(-1.5deg)}
+.in-pins span:nth-child(even){transform:rotate(1.5deg)}
+.in-layers{font-size:13px}
+.in-code{width:100%; box-sizing:border-box; margin-top:6px; background:var(--code-bg); color:var(--code-ink); caret-color:#ffd9a0; border:0; border-radius:9px; padding:10px 12px; font-family:var(--mono); font-size:13px; line-height:1.55; resize:vertical; tab-size:2}
+.in-console{margin:6px 0 0; white-space:pre-wrap}
+.in-console.in-ok{border-left:4px solid var(--sage)}
+.in-console.in-err{border-left:4px solid var(--terra)}
+.in-shelf{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
+.in-book{border:2px solid var(--line); background:var(--paper2); color:var(--ink); border-radius:7px 7px 3px 3px; padding:5px 9px; font-size:13px; font-weight:700}
+.in-book:hover{border-color:var(--ink2)}
+.in-book.marked{border-color:var(--ink); background:var(--honey)}
+.in-shelfrow{display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px}
+.in-item{display:flex; flex-direction:column; align-items:center; gap:2px; background:var(--paper2); border:2px solid var(--line); border-radius:10px; padding:8px 4px; font-size:13px}
+.in-item span{font-size:26px}
+.in-item small{color:var(--ink2)} .in-item s{text-decoration-color:var(--terra)}
+.in-prompt label{font-size:13.5px; font-weight:700}
+.in-input{flex:1; min-width:140px; border:2px solid var(--ink); border-radius:9px; padding:6px 10px; font-family:var(--mono); font-size:13px; background:#fff; color:var(--ink)}
+.in-tries{gap:4px 12px; margin-top:0}
+.in-tries .linkbtn{font-family:var(--mono)}
+.in-records{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; font-size:13.5px}
+.in-records li{background:var(--paper2); border:2px solid var(--line); border-radius:9px; padding:6px 10px}
+.in-records b{font-family:var(--pixel); font-size:18px; margin-right:4px}
+.in-proposal{margin:10px 0 0; padding:8px 12px; border:2px dashed var(--terra); border-radius:10px; font-size:13.5px; background:#fff}
 .use-code{display:inline-block; margin-top:6px; font-family:var(--mono); font-size:12.5px; background:rgba(255,250,240,.12); padding:1px 7px; border-radius:5px}
 
 /* ---------- The printable Journal (journal.ts printJournal) ---------- */

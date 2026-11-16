@@ -29,7 +29,8 @@ interface ErrandSession extends Omit<Errand, 'id'> {
 interface WorkshopSession { id: 'workshop'; workshop: true; errand?: never }
 type Session = ChallengeSession | ErrandSession | WorkshopSession;
 
-const runner = createRunner();
+/** The one runner for the whole game (the interiors use it too). Calls are queued, one at a time. */
+export const runner = createRunner();
 
 let current: Session | null = null;
 const ed = $<HTMLTextAreaElement>('#code'), hl = $('#hl'), gutter = $('#gutter');

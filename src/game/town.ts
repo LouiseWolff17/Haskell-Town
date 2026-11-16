@@ -1,14 +1,16 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
-import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, EXPANSIONS, HEARTS, ITEMS, RESIDENTS } from '../content/index.ts';
 import { $, byId, save, state, status } from './state.ts';
 import { openChallenge, openErrand } from './notebook.ts';
 import { isOpen } from './schedule.ts';
 import { errandById, hearts, practised, reviews, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.ts';
-import { drawPlayer, drawPrompt, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.ts';
+import { drawPlayer, drawPrompt, drawResident, heldKeys, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.ts';
 import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
-import { heldItem, holdLabel, openDoors, useHeld, visit } from './satchel.ts';
+import { heldItem, holdLabel, openDoors, putBack, useHeld, visit } from './satchel.ts';
+import { drawRoom, inRoom, roomClick, roomHover, roomInteract } from './rooms.ts';
+import { enterInterior, hasInterior, leaveInterior, roomLabel } from './interiors.ts';
 import type { Challenge, Expansion, GiftItem, ItemTarget } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
@@ -33,7 +35,7 @@ interface Plot extends Box {
 /** Hair and shirt colours: a resident, or someone passing through. */
 interface Look { hair: string; shirt: string }
 /** Something on the map the character can talk to. */
-type Target = { kind: 'errand'; rid: string } | { kind: 'plot'; id: string };
+type Target = { kind: 'errand'; rid: string } | { kind: 'plot'; id: string } | { kind: 'door'; rid: string };
 /** The closest Target, how far away it is, and whether pressing E does anything. */
 type Near = Target & { key: string; act: boolean; d: number };
 type Pt = [x: number, y: number];
@@ -349,14 +351,7 @@ function marketDeco(x: number, y: number, t: number): void {
   R(sx, sy + 4 - tip, 1, 5, '#8d8a84'); R(sx + 11, sy + 4 + tip, 1, 5, '#8d8a84');
   R(sx - 2, sy + 9 - tip, 5, 2, '#e0b040'); R(sx + 9, sy + 9 + tip, 5, 2, '#e0b040'); R(sx - 1, sy + 7 - tip, 3, 2, '#e07a5f');
 }
-function person(x: number, y: number, r: Look, t: number, bob: boolean): void {
-  const dy = bob ? Math.round(Math.sin(t / 380) * 0.6) : 0; y += dy;
-  R(x + 1, y + 13, 6, 1, 'rgba(0,0,0,.15)');
-  R(x + 1, y, 6, 3, r.hair); R(x + 1, y + 2, 6, 4, C.skin); R(x, y + 1, 1, 3, r.hair); R(x + 7, y + 1, 1, 3, r.hair);
-  R(x + 2, y + 3, 1, 1, C.ink); R(x + 5, y + 3, 1, 1, C.ink); R(x + 2, y + 5, 1, 1, '#f0a0a0'); R(x + 5, y + 5, 1, 1, '#f0a0a0');
-  R(x + 1, y + 6, 6, 5, r.shirt); R(x, y + 7, 1, 3, r.shirt); R(x + 7, y + 7, 1, 3, r.shirt);
-  R(x + 2, y + 11, 1, 2, '#5a4636'); R(x + 5, y + 11, 1, 2, '#5a4636');
-}
+const person = (x: number, y: number, r: Look, t: number, bob: boolean): void => drawResident(R, x, y, r, t, bob);
 // a blue ? for a resident who has pinned an errand to the Notice Board
 function errandBubble(x: number, y: number, t: number): void {
   const by = y + Math.round(Math.sin(t / 300) * 1.5);
@@ -393,6 +388,11 @@ function residentsOnMap(): { rid: string; x: number; y: number; task: 'request' 
 }
 let lastT: number | null = null;
 function draw(t: number): void {
+  // inside a building, the map is its room
+  if (inRoom()) {
+    syncSize(); drawRoom(ctx, W, cv.height, t, lastT == null ? 0 : Math.min(50, t - lastT), heldKeys()); lastT = t;
+    requestAnimationFrame(draw); return;
+  }
   const plots = visiblePlots();
   syncSize(); refreshSolids();
   updatePlayer(lastT == null ? 0 : Math.min(50, t - lastT), solidAt); lastT = t;
@@ -415,7 +415,7 @@ function draw(t: number): void {
   }
   drawFriends(t);
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
-  const folk = residentsOnMap(), talking = near?.act ? (near.kind === 'errand' ? near.rid : plotChallenges(near.id).find(c => status(c) === 'open')?.resident) : null;
+  const folk = residentsOnMap(), talking = near?.act ? (near.kind === 'errand' ? near.rid : near.kind === 'plot' ? plotChallenges(near.id).find(c => status(c) === 'open')?.resident : null) : null;
   // the resident the character can talk to swaps their ! or ? for the E prompt
   const drawFolk = (f: ReturnType<typeof residentsOnMap>[number]): void => { person(f.x, f.y, RESIDENTS[f.rid], f.task ? t : t + f.x * 50, !!f.task); if (f.task && f.rid !== talking) (f.task === 'request' ? bubble : errandBubble)(f.x - 1, f.y - 13, t); };
   folk.forEach(drawFolk);
@@ -434,7 +434,6 @@ function draw(t: number): void {
   if (hover && (hover.startsWith('exp:') || hover.startsWith('fog:'))) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
   const outline = hover?.startsWith('door:') ? null : hover || (near?.kind === 'plot' ? near.id : null);
   if (outline && PLOTS[outline] && !heldItem()) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
-  drawDoors(t);
   const held = heldItem(), glowAt = held?.target && targetBox(held.target);
   if (glowAt) glow(glowAt, t);
   requestAnimationFrame(draw);
@@ -482,24 +481,32 @@ export function initTown(): void {
   if (state.music) document.addEventListener('pointerdown', ev => { if (state.music && state.done.market && !(ev.target as Element | null)?.closest?.('#musicBtn')) { startMusic(); renderNightBtn(); } }, { once: true });
   renderNightBtn();
   cv.addEventListener('mousemove', ev => {
+    if (inRoom()) { const s = roomHover(...mapPoint(ev), W, cv.height); cv.style.cursor = s ? 'pointer' : 'default'; $('#hoverLabel').innerHTML = roomLabel(s); return; }
     const held = heldItem();
     if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
-    const door = doorAt(...mapPoint(ev));
-    if (door) { if (hover !== 'door:' + door.resident) { hover = 'door:' + door.resident; $('#hoverLabel').innerHTML = `🚪 <b>${door.place}</b> is open to you. Click the door to pop in.`; } cv.style.cursor = 'pointer'; return; }
+    const door = placeAt(...mapPoint(ev));
+    if (door) { if (hover !== 'door:' + door.resident) { hover = 'door:' + door.resident; $('#hoverLabel').innerHTML = hasInterior(door.resident) ? `🚪 The door to <b>${door.place}</b>. Click to go inside.` : `<b>${door.place}</b> is open to you. Click to pop in.`; } cv.style.cursor = 'pointer'; return; }
     const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
-  cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = heldItem() ? holdLabel() : nearLabel(nearby()); });
+  cv.addEventListener('mouseleave', () => {
+    if (inRoom()) { roomHover(-1, -1, W, cv.height); $('#hoverLabel').innerHTML = roomLabel(null); return; }
+    hover = null; $('#hoverLabel').innerHTML = heldItem() ? holdLabel() : nearLabel(nearby());
+  });
   // a click sends the character walking there; a click on a resident or a building also talks to them on arrival
   cv.addEventListener('click', ev => {
     const [x, y] = mapPoint(ev), held = heldItem();
+    if (inRoom()) { roomClick(x, y, W, cv.height); return; }
     // holding something from the Satchel: this click uses it, or puts it back with a gentle line
     if (held) { useHeld(onTarget(held.target, x, y)); return; }
-    const door = doorAt(x, y); if (door) { visit(door.resident); return; }
+    // a place opened with a gift: a building's front door, or the spot outdoors (the hives, the boat, the pond)
+    const door = placeAt(x, y);
+    if (door) { if (hasInterior(door.resident)) goInside(door.resident); else visit(door.resident); return; }
     const rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
     if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
     goTo(x, y);
   });
   initPlayerKeys(() => {
+    if (inRoom()) return roomInteract();
     const held = heldItem();
     if (held) { const b = held.target && targetBox(held.target); useHeld(!!b && Math.hypot(Math.max(b.x - player.x, 0, player.x - b.x - b.w), Math.max(b.y - player.y, 0, player.y - b.y - b.h)) < 14); return true; }
     const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
@@ -537,6 +544,7 @@ function goTo(x: number, y: number, then?: () => void): void {
 }
 /** Send the character to a challenge's building and open it there (the Requests list uses this). */
 export function goToChallenge(c: Challenge): void {
+  leaveInterior();
   const pid = c.plot || c.id, [sx, sy] = PLOTS[pid].stand;
   cv.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   goTo(sx + 4, sy + 15, () => openChallenge(c.id));
@@ -557,6 +565,10 @@ function nearby(): Near | null {
     if (shown.has(rid) || !HOMES[rid]) continue;
     const [hx, hy] = HOMES[rid]; consider(Math.hypot(px - hx - 4, py - hy - 13), { kind: 'errand', rid, key: 'errand:' + rid, act: true });
   }
+  // the front door of a building you can go into
+  for (const it of enterable()) {
+    const [dx, dy] = frontDoor(it); consider(Math.hypot(px - dx, py - dy) - 4, { kind: 'door', rid: it.resident, key: 'door:' + it.resident, act: true });
+  }
   for (const [id, p] of visiblePlots()) {
     const [sx, sy] = p.stand, toStand = Math.hypot(px - sx - 4, py - sy - 13);
     const toWall = Math.hypot(Math.max(p.x - px, 0, px - p.x - p.w), Math.max(p.y - py, 0, py - p.y - p.h));
@@ -568,16 +580,39 @@ function nearby(): Near | null {
 function nearLabel(n: Near | null): string {
   if (!n) return plotLabel(null);
   if (n.kind === 'errand') return `<b>${RESIDENTS[n.rid].name}</b> has pinned an errand to the Notice Board. Press <kbd>E</kbd> to help.`;
+  if (n.kind === 'door') return `🚪 The door to <b>${ITEMS.find(i => i.resident === n.rid)!.place}</b>. Press <kbd>E</kbd> to go inside.`;
   return plotLabel(n.id).replace('Click to help!', 'Press <kbd>E</kbd> to help!').replace('click to revisit.', 'press <kbd>E</kbd> to revisit.').replace('Click the mailbox to read.', 'Press <kbd>E</kbd> to read.');
 }
 function interactWith(n: Target): void {
   savePlayer();
   if (n.kind === 'errand') { const i = errandIndex(n.rid); if (i >= 0) openErrand(i); return; }
+  if (n.kind === 'door') { goInside(n.rid, false); return; }
   if (n.id === 'mailbox' && unreadLetters().length) { openLetters(); return; }
   const c = challengeForPlot(n.id);
   if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(n.id);
 }
 
+
+// ---------- Going inside (the five town interiors: interiors.ts, rooms.ts) ----------
+/** Places opened with a gift that you can walk into: a building with a front door. */
+const enterable = (): GiftItem[] => openDoors().filter(i => hasInterior(i.resident) && i.target?.plot && PLOTS[i.target.plot].door != null);
+/** Just outside a building's front door, on its path. */
+function frontDoor(it: GiftItem): Pt { const p = PLOTS[it.target!.plot!]; return [p.door!, p.y + p.h + 3]; }
+/** A click on the front door of a building you can go into. */
+function frontDoorAt(x: number, y: number): GiftItem | null {
+  return enterable().find(it => { const [dx, dy] = frontDoor(it); return Math.abs(x - dx) <= 6 && y >= dy - 16 && y <= dy + 3; }) ?? null;
+}
+/** Walk to a building's front door (or be there already) and go in. Coming out, you stand on its doorstep. */
+export function goInside(rid: string, walk = true): void {
+  const it = enterable().find(i => i.resident === rid); if (!it) return;
+  if (heldItem()) putBack();
+  const [dx, dy] = frontDoor(it);
+  const enter = (): void => {
+    player.path = null; player.moving = false;
+    enterInterior(rid, () => { player.x = dx; player.y = dy; player.dir = 'down'; savePlayer(); hover = null; nearKey = null; $('#hoverLabel').innerHTML = nearLabel(nearby()); });
+  };
+  if (walk) goTo(dx, dy, enter); else enter();
+}
 
 // ---------- The Satchel's targets (src/content/items.ts, the list itself is in satchel.ts) ----------
 /** Where an item's place is on the map right now, or null while it isn't there (not built, land still misty, no boat yet). */
@@ -613,20 +648,11 @@ function glow(b: Box, t: number): void {
   }
   ctx.globalAlpha = 1;
 }
-/** The door marker of a place opened with a gift: a little badge at the top-right corner of the place. */
-function doorBox(b: Box): Box { return { x: b.x + b.w - 6, y: b.y - 5, w: 9, h: 11 }; }
-function doorAt(x: number, y: number): GiftItem | null {
-  return openDoors().find(i => { const d = doorBox(targetBox(i.target!)!); return x >= d.x - 2 && x <= d.x + d.w + 2 && y >= d.y - 2 && y <= d.y + d.h + 2; }) ?? null;
-}
-/** A small arched door with a gold knob on a paper badge, with a twinkle now and then. */
-function drawDoors(t: number): void {
-  openDoors().forEach((it, i) => {
-    const { x, y } = doorBox(targetBox(it.target!)!), hot = hover === 'door:' + it.resident, lift = hot ? -1 : 0;
-    R(x, y + 1 + lift, 9, 10, C.ink); R(x + 1, y + lift, 7, 1, C.ink); R(x + 1, y + 1 + lift, 7, 9, hot ? '#fff2a8' : C.white);
-    R(x + 3, y + 2 + lift, 3, 1, C.door); R(x + 2, y + 3 + lift, 5, 6, C.door); R(x + 5, y + 6 + lift, 1, 1, '#e0b040');
-    R(x + 1, y + 11 + lift, 8, 1, 'rgba(0,0,0,.25)');
-    if (Math.floor(t / 900 + i * 3) % 7 === 0) { R(x + 9, y - 2, 1, 3, C.white); R(x + 8, y - 1, 3, 1, C.white); }
-  });
+/** A place opened with a gift under the mouse: the front door of a building you can go into, or a place
+ *  outdoors that is part of a plot (the hives, Brine's boat, the pond). Whole buildings without a room
+ *  inside (the telescope, the station) aren't clickable here, since a click there opens their challenge. */
+function placeAt(x: number, y: number): GiftItem | null {
+  return frontDoorAt(x, y) ?? openDoors().find(i => !hasInterior(i.resident) && i.target?.spot && onTarget(i.target, x, y)) ?? null;
 }
 
 // ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------
@@ -638,7 +664,8 @@ function slotRect(slot: number): Box {
 }
 /** Grow the canvas when a new strip of land is shown. The CSS keeps the same width and scales the height. */
 function syncSize(): void {
-  const h = H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
+  // inside a building the map is just the room, so it goes back to the village's size
+  const h = inRoom() ? H : H + stripsShown(EXPANSIONS, solvedErrands()) * STRIP;
   if (cv.height !== h) { cv.height = h; cv.style.aspectRatio = `${W} / ${h}`; }
 }
 // a stable pseudo-random number for (i, k), so the art doesn't flicker frame to frame

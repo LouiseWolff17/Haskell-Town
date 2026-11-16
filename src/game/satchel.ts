@@ -6,7 +6,8 @@ import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS } from '../content/index.ts';
 import { $, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
-import { plotLabel, targetBox } from './town.ts';
+import { goInside, plotLabel, targetBox } from './town.ts';
+import { hasInterior } from './interiors.ts';
 import type { GiftItem } from '../content/index.ts';
 
 const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
@@ -53,6 +54,8 @@ export function useHeld(hit: boolean): void {
   toast(`${giftOf(it.resident).icon} ${it.used}<br><code class="use-code">use ${it.id} ${it.target!.name}</code>`);
   $('#hoverLabel').innerHTML = plotLabel(null);
   renderSatchel();
+  // a building you can go into: in you go, through its front door. The other places can be visited from now on.
+  if (hasInterior(it.resident)) goInside(it.resident);
 }
 
 function pick(rid: string): void {
@@ -64,14 +67,16 @@ function pick(rid: string): void {
   renderSatchel();
 }
 
-/** Places opened with a gift, still on the map: each has a door marker and can be visited again. */
+/** Places opened with a gift, still on the map: each can be visited again (from the map, or the Satchel's list). */
 export function openDoors(): GiftItem[] {
   return ITEMS.filter(i => state.used?.[i.resident] && i.target && i.place && targetBox(i.target));
 }
-/** Visit a place opened with a gift: a small card for now (the interiors fill these in, docs/gift-items-design.md section 4). */
+/** Visit a place opened with a gift. The five town buildings are rooms you walk into through their front
+ *  door (interiors.ts); the other places are a small card for now (docs/gift-items-design.md section 4). */
 export function visit(rid: string): void {
   const it = ITEMS.find(i => i.resident === rid); if (!it?.place) return;
   closeList();
+  if (hasInterior(rid)) { goInside(rid); return; }
   const g = giftOf(rid), card = $('#visit');
   card.querySelector('.visit-icon')!.textContent = g.icon;
   card.querySelector('h2')!.textContent = it.place;

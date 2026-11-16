@@ -171,7 +171,7 @@ export interface GiftItem {
   wrong: string;
   /** Used in the right place. */
   used: string;
-  /** Once used, its place gets a door marker on the map. Clicking it visits: a card with this title and line. */
+  /** Once used, its place can be visited: a room for the five town buildings (interiors.ts), else a card with this title and line. */
   place?: string;
   visit?: string;
 }

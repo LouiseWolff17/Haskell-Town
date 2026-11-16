@@ -47,6 +47,8 @@ export interface GameState {
   wsInput?: string;
   /** Satchel items used on their place, by the resident who gave them: the day it was used. */
   used?: Record<string, number>;
+  /** The town interiors: the day the croissants were first baked, the book the sunflower marks, the name the hall greets. */
+  inside?: { baked?: number; bookmark?: string; name?: string };
   /** DEV panel: days the clock has been moved forward, and an hour override. */
   devDays?: number;
   devHour?: number;
