@@ -10,12 +10,12 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 4. **Choosing an instance from the result type alone in polymorphic code**, e.g. a user method `empty :: f a` inside a `Container f =>` function. `pure`/`return`/`mempty` do work.
 5. **Ambiguous runtime picks**: inside fully polymorphic code, a user class with instances for both `Int` and `Double` may pick the wrong one. `1 <> 2` with no type is a runtime error rather than a type error.
 6. **Record patterns** like `f (Student { name = n })`.
-7. **Full laziness**: only lists are lazy. `const 1 undefined` fails, and there are no character ranges (`['a'..'z']`).
+7. **Full laziness**: function arguments, constructor fields and tuples are lazy, but list *items* are worked out when the list is built (`length [undefined]` fails), and `foldr` doesn't stop early on an endless list. No character ranges (`['a'..'z']`).
 8. **Modules & imports**: `import` lines are ignored, and there's no `Data.Map`.
 9. **Most of IO**: no files, `interact`, `getContents`, `readLn`.
 10. **Big numbers**: no arbitrary-precision `Integer` (exact up to 2^53). `Float` = `Double`.
 11. **Very deep recursion** can hit the browser's stack limit.
-12. **Advanced type features**: GADTs, type families, `forall`, kind signatures, `seq`, strictness.
+12. **Advanced type features**: GADTs, type families, `forall`, kind signatures, `$!`, strictness annotations (`seq` works).
 13. **Display details**: unsigned polymorphic expressions show `Num a => [a]` instead of `[Integer]`, and there are extra parentheses around custom `show` inside constructors.
 
 ## Next steps
@@ -28,7 +28,8 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Browser tests (Playwright) for the main flows: solve a challenge, build, Workshop (`e2e/`).
 
 ### Haskell features
-- [ ] Fuller laziness: lazy function arguments and data fields (`const 1 undefined`, lazy trees).
+- [x] Fuller laziness: lazy function arguments and data fields (`const 1 undefined`, lazy trees), and `seq`. Cheap, safe arguments (`acc + x`, `acc ++ [x]`, `max x m`) are still worked out straight away, so accumulators don't pile up thunks (`tests/laziness.test.ts`).
+- [ ] Lazy list items and a lazy `foldr` (`length [undefined]`, `foldr (\x _ -> x) 0 [1..]`).
 - [ ] `Enum` for `Char` ranges (`['a'..'z']`).
 - [ ] Foldable-generic `sum`, `length`, `elem` …, keeping the friendly list error messages.
 - [ ] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15).

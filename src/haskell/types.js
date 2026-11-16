@@ -194,7 +194,7 @@ const PRELUDE_TYPES = {
   take: 'Int -> [a] -> [a]', drop: 'Int -> [a] -> [a]', maximum: 'Ord a => [a] -> a', minimum: 'Ord a => [a] -> a', max: 'Ord a => a -> a -> a', min: 'Ord a => a -> a -> a',
   even: 'Int -> Bool', odd: 'Int -> Bool', not: 'Bool -> Bool', show: 'Show a => a -> String', concat: '[[a]] -> [a]', concatMap: '(a -> [b]) -> [a] -> [b]',
   zip: '[a] -> [b] -> [(a, b)]', zipWith: '(a -> b -> c) -> [a] -> [b] -> [c]', replicate: 'Int -> a -> [a]', fst: '(a, b) -> a', snd: '(a, b) -> b',
-  id: 'a -> a', const: 'a -> b -> a', flip: '(a -> b -> c) -> b -> a -> c', abs: 'Num a => a -> a', negate: 'Num a => a -> a', subtract: 'Num a => a -> a -> a',
+  id: 'a -> a', const: 'a -> b -> a', seq: 'a -> b -> b', flip: '(a -> b -> c) -> b -> a -> c', abs: 'Num a => a -> a', negate: 'Num a => a -> a', subtract: 'Num a => a -> a -> a',
   succ: 'Int -> Int', pred: 'Int -> Int', div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
   fromIntegral: 'Num b => Int -> b', error: 'String -> a', words: 'String -> [String]', unwords: '[String] -> String', lines: 'String -> [String]', unlines: '[String] -> String',
   all: '(a -> Bool) -> [a] -> Bool', any: '(a -> Bool) -> [a] -> Bool', and: '[Bool] -> Bool', or: '[Bool] -> Bool', otherwise: 'Bool', undefined: 'a',

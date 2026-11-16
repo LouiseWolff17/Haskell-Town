@@ -1,5 +1,5 @@
 // Mini-Haskell: a small, type-checked interpreter for the beginner subset of Haskell.
-// Lexer → parser → Hindley–Milner type checker with type classes → lazy-list evaluator.
+// Lexer → parser → Hindley–Milner type checker with type classes → lazy evaluator.
 // This file is the public API; the stages live next to it (lexer, parser, types, typecheck, evaluator),
 // sharing one context object (context.js).
 // The game never imports this directly: it goes through src/runner (see docs/runner-api.md).
