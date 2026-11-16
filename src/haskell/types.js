@@ -37,6 +37,7 @@ function requireCls(c, t) {
   }
   if (c === 'Num') { if (k === 'Int' || k === 'Double') return; throw new UFail('class', { c, t }); }
   if (c === 'Fractional') { if (k === 'Double') return; throw new UFail('class', { c, t }); }
+  if (c === 'Enum') { if (k === 'Int' || k === 'Double' || k === 'Char') return; throw new UFail('class', { c, t }); }
   if (c === 'Read') { if (['Int', 'Double', 'Bool'].includes(k)) return; throw new UFail('class', { c, t }); }
   const ut = cx.types[k];
   if (ut) {
@@ -103,7 +104,7 @@ function ppScheme(s) {
 
 // ---- type syntax ----
 const TYPE_ARITY = { Int: 0, Integer: 0, Double: 0, Float: 0, Bool: 0, Char: 0, String: 0, Maybe: 1, Either: 2, IO: 1, Ordering: 0 };
-const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read'];
+const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read', 'Enum'];
 function parseTypeToks(toks) {
   const line = toks[0] ? toks[0].line : null;
   const fail = m => { throw new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line); };

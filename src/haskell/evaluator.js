@@ -775,12 +775,17 @@ function evalRest(n, env) {
     case 'list': return n.items.map(i => delay(i, env));
     case 'tuple': return n.items.length ? { tuple: n.items.map(i => delay(i, env)) } : UNIT;
     case 'range': {
-      const a = evalE(n.from, env), step = n.then ? evalE(n.then, env) - a : 1;
-      if (!n.to) { const go = x => new LCons(x, () => go(x + step)); return go(a); } // [1..] and [1, 3 ..] go on forever
-      const z = evalE(n.to, env);
+      const first = evalE(n.from, env), isChar = typeof first === 'string'; // ['a'..'z'] counts through character codes
+      const num = v => isChar ? v.codePointAt(0) : v, item = x => isChar ? String.fromCodePoint(x) : x;
+      const a = num(first), step = n.then ? num(evalE(n.then, env)) - a : 1;
+      if (!n.to) { // [1..] and [1, 3 ..] go on forever; ['a'..] stops after the last character
+        const go = x => isChar && (x < 0 || x > 0x10FFFF) ? [] : new LCons(item(x), () => go(x + step));
+        return go(a);
+      }
+      const z = num(evalE(n.to, env));
       if (step === 0) throw new HsError('That range never moves forward, so it would go on forever.');
       const out = [];
-      for (let x = a; step > 0 ? x <= z : x >= z; x += step) { out.push(x); if (out.length > 100000) throw new HsError('That range is too big for this little town (over 100,000 items).'); }
+      for (let x = a; step > 0 ? x <= z : x >= z; x += step) { out.push(item(x)); if (out.length > 100000) throw new HsError('That range is too big for this little town (over 100,000 items).'); }
       return out;
     }
     case 'neg': return -evalE(n.e, env);

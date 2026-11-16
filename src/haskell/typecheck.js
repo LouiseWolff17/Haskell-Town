@@ -42,6 +42,10 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
     if (c === 'Read') return new HsError(`${L}\`read\` can turn text into an Int, a Double or a Bool, but here it would need to make ${article(T)}.`, 'type', ctx.line);
     return new HsError(`${L}values of type \`${T}\` can't be ${VERB[c]}.`, 'type', ctx.line);
   }
+  if (e.kind === 'class' && e.info.c === 'Enum') {
+    const T = pp(e.info.t, namer());
+    return new HsError(`${L}A range like [a..b] counts through numbers or characters (['a'..'z']), but ${what} is made of ${article(T)}.${T === 'String' ? ` 'a' (single quotes) is a Char; "a" (double quotes) is a String.` : ''}`, 'type', ctx.line);
+  }
   if (e.kind === 'class' && !actWasVar && (ctx.op || e.info.c === 'Fractional' || e.info.c === 'Show' || e.info.c === 'Eq' || e.info.c === 'Ord')) {
     const { c, t } = e.info; const T = pp(t, namer());
     if (c === 'Num') return new HsError(`${L}${ctx.op ? '`' + ctx.op + '` works with numbers' : 'A number is needed here'}, but ${what} is ${article(T)}.${T === 'String' ? ' To join strings together, use ++.' : ''}${prune(t).con === '[]' && T !== 'String' ? " A list isn't a number — did you mean sum or length?" : ''}${prune(t).con === '->' ? ' Is a function missing its argument?' : ''}`, 'type', ctx.line);
@@ -207,7 +211,7 @@ function infer(n, env) {
     case 'paren': return infer(n.e, env);
     case 'list': { const el = tvar(); n.items.forEach(it => unifyAt(el, infer(it, env), { line: lineOf(it) || n.line, what: 'this list — every item in a list must have the same type' })); return tList(el); }
     case 'tuple': return n.items.length ? tTup(n.items.map(it => infer(it, env))) : tUnit;
-    case 'range': { const el = tvar(['Num']); [n.from, n.then, n.to].filter(Boolean).forEach(x => unifyAt(el, infer(x, env), { line: n.line, what: 'this range' })); return tList(el); }
+    case 'range': { const el = tvar(['Enum']); [n.from, n.then, n.to].filter(Boolean).forEach(x => unifyAt(el, infer(x, env), { line: n.line, what: 'this range' })); return tList(el); }
     case 'app': {
       const args = []; let h = n; while (h.k === 'app') { args.unshift(h.a); h = h.f; }
       const name = headName(h);

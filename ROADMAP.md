@@ -10,7 +10,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 4. **Choosing an instance from the result type alone in polymorphic code**, e.g. a user method `empty :: f a` inside a `Container f =>` function. `pure`/`return`/`mempty` do work.
 5. **Ambiguous runtime picks**: inside fully polymorphic code, a user class with instances for both `Int` and `Double` may pick the wrong one. `1 <> 2` with no type is a runtime error rather than a type error.
 6. **Record patterns** like `f (Student { name = n })`.
-7. **Full laziness**: function arguments, constructor fields, tuples and list items are lazy, and `foldr` stops early, but the results of `map`, `zipWith` and friends on a finite list are worked out straight away (`length (map undefined [1])` fails). No character ranges (`['a'..'z']`).
+7. **Full laziness**: function arguments, constructor fields, tuples and list items are lazy, and `foldr` stops early, but the results of `map`, `zipWith` and friends on a finite list are worked out straight away (`length (map undefined [1])` fails).
 8. **Modules & imports**: `import` lines are ignored, and there's no `Data.Map`.
 9. **Most of IO**: no files, `interact`, `getContents`, `readLn`.
 10. **Big numbers**: no arbitrary-precision `Integer` (exact up to 2^53). `Float` = `Double`.
@@ -30,7 +30,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 ### Haskell features
 - [x] Fuller laziness: lazy function arguments and data fields (`const 1 undefined`, lazy trees), and `seq`. Cheap, safe arguments (`acc + x`, `acc ++ [x]`, `max x m`) are still worked out straight away, so accumulators don't pile up thunks (`tests/laziness.test.ts`).
 - [x] Lazy list items and a lazy `foldr` (`length [undefined]`, `foldr (\x _ -> x) 0 [1..]`). A `foldr` that needs the whole list and overflows the stack is redone from the right end, so `foldr (+) 0 [1..100000]` still works.
-- [ ] `Enum` for `Char` ranges (`['a'..'z']`).
+- [x] `Enum` for `Char` ranges (`['a'..'z']`, `['a', 'c' ..]`); ranges of anything else (`[True ..]`, `["a".."z"]`) are friendly type errors (`tests/ranges.test.ts`).
 - [ ] Foldable-generic `sum`, `length`, `elem` …, keeping the friendly list error messages.
 - [ ] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15).
 - [ ] `deriving (Enum, Bounded)`, with `succ`/`pred`/`minBound`/`maxBound` (Glaschu's bakehouse).

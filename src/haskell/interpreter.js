@@ -61,7 +61,7 @@ function buildClassCtx(classes, instances, ctx) {
   for (const [n, b] of Object.entries(BUILTIN_CLASSES)) ctx.classes[n] = Object.assign({}, b, { instances: Object.assign({}, b.instances) });
   for (const ci of Object.values(ctx.classes)) for (const [k, inst] of Object.entries(ci.instances)) if (inst.libType && !(ctx.types[k] && ctx.types[k].lib)) delete ci.instances[k];
   setCtx(ctx);
-  const NOT_YOURS = ['Num', 'Fractional', 'Read', 'Integral'];
+  const NOT_YOURS = ['Num', 'Fractional', 'Read', 'Integral', 'Enum'];
   const err = (line, m) => new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line);
   ctx.methodOwner = {}; cx.pendingClasses = new Set(classes.map(c => c.name));
   for (const c of classes) {
