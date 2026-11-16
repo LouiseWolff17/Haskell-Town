@@ -58,6 +58,24 @@ function pick(rid: string): void {
   renderSatchel();
 }
 
+/** Places opened with a gift, still on the map: each has a door marker and can be visited again. */
+export function openDoors(): GiftItem[] {
+  return ITEMS.filter(i => state.used?.[i.resident] && i.target && i.place && targetBox(i.target));
+}
+/** Visit a place opened with a gift: a small card for now (the interiors fill these in, docs/gift-items-design.md section 4). */
+export function visit(rid: string): void {
+  const it = ITEMS.find(i => i.resident === rid); if (!it?.place) return;
+  closeList();
+  const g = giftOf(rid), card = $('#visit');
+  card.querySelector('.visit-icon')!.textContent = g.icon;
+  card.querySelector('h2')!.textContent = it.place;
+  card.querySelector('.visit-text')!.textContent = it.visit ?? '';
+  card.querySelector('.visit-from')!.textContent = `Opened with ${the(rid)} from ${RESIDENTS[rid].name}.`;
+  card.hidden = false; document.body.classList.add('modal-open');
+  setTimeout(() => card.querySelector<HTMLElement>('.btn-build')?.focus(), 50);
+}
+function closeVisit(): void { $('#visit').hidden = true; document.body.classList.remove('modal-open'); }
+
 const closeList = (): void => { $('#satchel').hidden = true; $('#satchelBtn').setAttribute('aria-expanded', 'false'); };
 
 export function renderSatchel(): void {
@@ -70,7 +88,11 @@ export function renderSatchel(): void {
     ? items.map(i => { const g = giftOf(i.resident), ready = !!i.target && !!targetBox(i.target);
       return `<button class="satchel-item${ready ? '' : ' waiting'}" data-item="${i.resident}"><span class="satchel-icon">${g.icon}</span><span><b>${g.name}</b><small>From ${RESIDENTS[i.resident].name}${ready ? '' : ' · keep it for now'}</small></span></button>`; }).join('')
     : `<p class="board-small">Empty for now. Every gift has found its place.</p>`);
+  const doors = openDoors();
+  if (doors.length) list.innerHTML += `<div class="satchel-h satchel-h2">🚪 Open doors</div>` + doors.map(i =>
+    `<button class="satchel-item" data-door="${i.resident}"><span class="satchel-icon">${giftOf(i.resident).icon}</span><span><b>${i.place}</b><small>Pop in again</small></span></button>`).join('');
   list.querySelectorAll<HTMLElement>('[data-item]').forEach(b => b.onclick = () => pick(b.dataset.item!));
+  list.querySelectorAll<HTMLElement>('[data-door]').forEach(b => b.onclick = () => visit(b.dataset.door!));
 }
 
 export function initSatchel(): void {
@@ -82,8 +104,10 @@ export function initSatchel(): void {
   };
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (held) putBack(); else if (!$('#satchel').hidden) { closeList(); $('#satchelBtn').focus(); }
+    if (!$('#visit').hidden) closeVisit(); else if (held) putBack(); else if (!$('#satchel').hidden) { closeList(); $('#satchelBtn').focus(); }
   });
+  $('#visit').querySelectorAll<HTMLElement>('.btn-build, .x').forEach(b => b.onclick = closeVisit);
+  $('#visit').addEventListener('click', e => { if (e.target === e.currentTarget) closeVisit(); });
   // a click outside the open list closes it
   document.addEventListener('pointerdown', e => { const t = e.target as Element | null; if (!$('#satchel').hidden && !t?.closest?.('#satchel, #satchelBtn')) closeList(); });
   renderSatchel();

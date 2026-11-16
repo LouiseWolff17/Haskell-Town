@@ -170,6 +170,9 @@ export interface GiftItem {
   wrong: string;
   /** Used in the right place. */
   used: string;
+  /** Once used, its place gets a door marker on the map. Clicking it visits: a card with this title and line. */
+  place?: string;
+  visit?: string;
 }
 
 /** A bit of life on the map that appears the first time you solve an errand on a topic. */

@@ -57,7 +57,7 @@ Ordered by the design's suggested build order.
 
 **1. Satchel and town interiors**
 - [x] 🎒 Satchel button on the map (appears with the first gift), listing unused items; pick one and valid targets glow, wrong targets give a gentle line and nothing is lost.
-- [ ] Used places get a door marker on the map so they can be revisited; optional `use spareKey wrensCottage` toast.
+- [x] Used places get a door marker on the map so they can be revisited; optional `use spareKey wrensCottage` toast.
 - [ ] Rewrite the gift notes so each hints where it goes (Fern's key keeps its twist; Iris's bookmark, Sorrel's plasters and Marigold's honey say "For your travels").
 - [ ] Five town interiors as scene cards: Wren's cottage, the bakery kitchen (croissant recipe), the library reading room (Moss's sunflower as a bookmark), the general store (Bram's 10% card), City Hall (Fern's key).
 - [ ] Given-away items stay in the Journal as a memory.

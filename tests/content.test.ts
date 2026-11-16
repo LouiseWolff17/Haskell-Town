@@ -90,6 +90,7 @@ test('every gift is a Satchel item that points somewhere real', async () => {
     assert.ok(i.notYet && i.wrong, `${i.id} has its gentle lines`);
     const t = i.target; if (!t) continue;
     assert.ok(i.used, `${i.id} says what happens when it's used`);
+    assert.ok(i.place && i.visit, `${i.id} opens a place you can visit again`);
     assert.match(t.name, /^[a-z][A-Za-z]*$/, `${t.name} reads as a Haskell name`);
     assert.ok(!!t.plot !== !!t.land, `${i.id} targets a plot or a piece of land`);
     if (t.plot) assert.ok(plots.has(t.plot), `${i.id}: no plot ${t.plot}`);

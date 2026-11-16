@@ -16,6 +16,8 @@ async function clickMap(page: Page, x: number, y: number): Promise<void> {
   await cv.click({ position: { x: x * box.width / 400, y: y * box.height / h } });
 }
 const HOUSE = [54, 60] as const, BAKERY = [146, 55] as const;
+/** The door marker on Wren's cottage (plot 30,36 48×50): a badge at its top-right corner. */
+const HOUSE_DOOR = [76, 36] as const;
 
 test('there is no Satchel before the first gift', async ({ page }) => {
   await openTown(page, { done: village });
@@ -51,6 +53,7 @@ test('a gift used in the wrong place goes back in the Satchel, and in the right 
   await expect(btn).not.toContainText('1');
   await btn.click();
   await expect(list).toContainText('Empty for now');
+  await expect(list.getByRole('button', { name: /Wren's cottage/ })).toBeVisible();
 });
 
 test('Escape puts the held item back without using it', async ({ page }) => {
@@ -61,4 +64,24 @@ test('Escape puts the held item back without using it', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('#satchelBtn')).toContainText('Satchel 1');
   expect((await savedState(page)).used).toBeUndefined();
+});
+
+test('a used place gets a door marker, and the door visits it again', async ({ page }) => {
+  await openTown(page, { ...withWrensKey, used: { wren: 1 } });
+  await expect(page.locator('#satchelBtn')).toBeVisible();
+  await clickMap(page, ...HOUSE_DOOR);
+  const card = page.locator('#visit');
+  await expect(card).toBeVisible();
+  await expect(card.locator('h2')).toHaveText("Wren's cottage");
+  await expect(card).toContainText('Opened with the spare key from Wren');
+  await page.keyboard.press('Escape');
+  await expect(card).toBeHidden();
+  await expect(page.locator('#notebook')).toBeHidden();
+
+  // the Satchel lists open doors too, so the keyboard can get there
+  await page.locator('#satchelBtn').click();
+  await page.locator('#satchel').getByRole('button', { name: /Wren's cottage/ }).click();
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Back to town' }).click();
+  await expect(card).toBeHidden();
 });

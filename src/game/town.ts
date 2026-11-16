@@ -8,8 +8,8 @@ import { drawPlayer, drawPrompt, initPlayerKeys, player, savePlayer, updatePlaye
 import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
-import { heldItem, holdLabel, useHeld } from './satchel.ts';
-import type { Challenge, Expansion, ItemTarget } from '../content/index.ts';
+import { heldItem, holdLabel, openDoors, useHeld, visit } from './satchel.ts';
+import type { Challenge, Expansion, GiftItem, ItemTarget } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
 /** A rectangle on the map, in map pixels. */
@@ -431,9 +431,10 @@ function draw(t: number): void {
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
     if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
   drawNight(t);
-  if (hover && hover.includes(':')) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
-  const outline = hover || (near?.kind === 'plot' ? near.id : null);
+  if (hover && (hover.startsWith('exp:') || hover.startsWith('fog:'))) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
+  const outline = hover?.startsWith('door:') ? null : hover || (near?.kind === 'plot' ? near.id : null);
   if (outline && PLOTS[outline] && !heldItem()) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
+  drawDoors(t);
   const held = heldItem(), glowAt = held?.target && targetBox(held.target);
   if (glowAt) glow(glowAt, t);
   requestAnimationFrame(draw);
@@ -483,6 +484,8 @@ export function initTown(): void {
   cv.addEventListener('mousemove', ev => {
     const held = heldItem();
     if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
+    const door = doorAt(...mapPoint(ev));
+    if (door) { if (hover !== 'door:' + door.resident) { hover = 'door:' + door.resident; $('#hoverLabel').innerHTML = `🚪 <b>${door.place}</b> is open to you. Click the door to pop in.`; } cv.style.cursor = 'pointer'; return; }
     const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => { hover = null; $('#hoverLabel').innerHTML = heldItem() ? holdLabel() : nearLabel(nearby()); });
   // a click sends the character walking there; a click on a resident or a building also talks to them on arrival
@@ -490,6 +493,7 @@ export function initTown(): void {
     const [x, y] = mapPoint(ev), held = heldItem();
     // holding something from the Satchel: this click uses it, or puts it back with a gentle line
     if (held) { useHeld(onTarget(held.target, x, y)); return; }
+    const door = doorAt(x, y); if (door) { visit(door.resident); return; }
     const rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
     if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
@@ -608,6 +612,21 @@ function glow(b: Box, t: number): void {
     ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t / 300 + i); R(sx, sy - 1, 1, 3, '#fffaf0'); R(sx - 1, sy, 3, 1, '#fffaf0');
   }
   ctx.globalAlpha = 1;
+}
+/** The door marker of a place opened with a gift: a little badge at the top-right corner of the place. */
+function doorBox(b: Box): Box { return { x: b.x + b.w - 6, y: b.y - 5, w: 9, h: 11 }; }
+function doorAt(x: number, y: number): GiftItem | null {
+  return openDoors().find(i => { const d = doorBox(targetBox(i.target!)!); return x >= d.x - 2 && x <= d.x + d.w + 2 && y >= d.y - 2 && y <= d.y + d.h + 2; }) ?? null;
+}
+/** A small arched door with a gold knob on a paper badge, with a twinkle now and then. */
+function drawDoors(t: number): void {
+  openDoors().forEach((it, i) => {
+    const { x, y } = doorBox(targetBox(it.target!)!), hot = hover === 'door:' + it.resident, lift = hot ? -1 : 0;
+    R(x, y + 1 + lift, 9, 10, C.ink); R(x + 1, y + lift, 7, 1, C.ink); R(x + 1, y + 1 + lift, 7, 9, hot ? '#fff2a8' : C.white);
+    R(x + 3, y + 2 + lift, 3, 1, C.door); R(x + 2, y + 3 + lift, 5, 6, C.door); R(x + 5, y + 6 + lift, 1, 1, '#e0b040');
+    R(x + 1, y + 11 + lift, 8, 1, 'rgba(0,0,0,.25)');
+    if (Math.floor(t / 900 + i * 3) % 7 === 0) { R(x + 9, y - 2, 1, 3, C.white); R(x + 8, y - 1, 3, 1, C.white); }
+  });
 }
 
 // ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------
