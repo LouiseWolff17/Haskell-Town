@@ -1,6 +1,6 @@
 import type { Checkable } from './types.ts';
 
-// The town interiors, Brine's boat and the beehives (docs/gift-items-design.md, sections 2a and 4): what's inside a place once its gift
+// The town interiors, Brine's boat, the beehives and the magical beach (docs/gift-items-design.md, sections 2a and 4): what's inside a place once its gift
 // has opened it. Each is a small scene card with a cozy toy or an optional Haskell bonus, never a
 // required challenge. The game side is src/game/interiors.ts.
 
@@ -200,4 +200,38 @@ export const HIVES = {
       'A royal cell is made of the same wax as every other cell, just more of it. The bees say that\'s true of queens too.',
     ],
   },
+};
+
+/** The magical beach (Brine's conch at the Duck Pond): endless waves, and shells washing up forever. Selling shells comes with coins (ROADMAP). */
+export const BEACH = {
+  enter: [
+    'You hold the conch to your ear. The waves get louder, and louder, and then a warm wave rolls right over you. When it draws back, you\'re standing on a beach that isn\'t on any map.',
+    'Back through the conch. The wave rolls over you, warm as a bath, and leaves you on the magical beach. The shells are still washing up.',
+  ],
+  waves: [
+    'Wave after wave, and never a last one. The sea here is `repeat wave`: a list that goes on forever. Haskell only works out the wave that\'s breaking right now, so it never runs out of time. That\'s laziness.',
+    'You count the waves: one, two, three… The sea says `take 3 (repeat wave)` is a perfectly good answer, and you can stop whenever you like.',
+    'The waves sound exactly like the conch. Of course they do. This is where the sound was coming from.',
+  ],
+  /** The shells on the tideline, in the order the waves bring them: `cycle shells`, so after the last comes the first again. */
+  shells: [
+    { name: 'cowrie', line: 'A wave brings in a cowrie, smooth as a sweet and speckled like an egg.' },
+    { name: 'scallop', line: 'A scallop, pink and ridged, like a little fan.' },
+    { name: 'whelk', line: 'A whelk, curled round and round to a point.' },
+    { name: 'cockle', line: 'A cockle, ribbed, the colour of milky tea.' },
+    { name: 'moon snail', line: 'A moon snail, round and pale, with a spiral on top like a sleepy eye.' },
+  ],
+  /** Said before the first shell, each time the list goes round again. */
+  again: 'And here comes a cowrie again: `cycle` starts the list over whenever it runs out, so the beach never does.',
+  crab: [
+    'A hermit crab, scuttling sideways in a borrowed whelk shell. It\'s looking for a bigger one, and on this beach there will always be a bigger one.',
+    'The crab checks every shell the waves bring: `head (filter fitsMe (cycle shells))`. The beach never ends, but the crab stops at the first one that fits. That\'s laziness too.',
+    'The crab waves a claw at you. You wave back. It seems satisfied, and goes back to shell-shopping.',
+  ],
+  pool: [
+    'A rock pool, left behind by the tide: a starfish, two anemones and a very small fish who thinks it owns the place.',
+    'The tide fills the pool and leaves it again, forever: `iterate tide pool`. You only ever see the one that\'s happening now.',
+    'The little fish swims round and round, `cycle ["left", "right"]`. It has never once been bored.',
+    'Juniper would love this. Her class has a shelf at the school waiting for a shell collection.',
+  ],
 };

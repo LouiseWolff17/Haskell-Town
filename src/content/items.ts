@@ -44,7 +44,7 @@ export const ITEMS: GiftItem[] = [
     notYet: 'It wants to go back in the water, but not the sea. Somewhere calmer. Keep solving errands and land will open.',
     wrong: 'It wants to go back in the water. Calm water, not here.',
     used: 'You set the shell at the edge of the pond. The ducks go quiet. You can hear waves that aren\'t there.',
-    place: "The conch by the pond", visit: "The shell sits at the water's edge. Put it to your ear and the waves are still there, somewhere warm." },
+    place: "The magical beach", visit: "The shell sits at the water's edge. Put it to your ear and the waves are still there, somewhere warm." },
   { resident: 'orla', id: 'brassTelescope', target: { plot: 'observatory', name: 'observatory' },
     notYet: 'It would fit the big telescope, once there is an Observatory.',
     wrong: 'You look through it. Lovely, but the sky is the other way. Orla would know.',

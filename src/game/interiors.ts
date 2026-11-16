@@ -1,9 +1,9 @@
-// The town interiors (docs/gift-items-design.md, sections 2a and 4): five buildings, Brine's little boat, and the three beehives. Once a gift has opened a place, its door
+// The town interiors (docs/gift-items-design.md, sections 2a and 4): five buildings, Brine's little boat, the three beehives, and the magical beach. Once a gift has opened a place, its door
 // on the map leads inside: the map becomes the room (rooms.ts). Looking at things there either gets a line
 // in the dialogue box over the map, or opens a pop-up (the recipe, the till, the letters, …).
 // The doormat leads back to town. Every interior is optional: a cozy toy or a small Haskell bonus,
 // never a required challenge. Content is in src/content/interiors.ts.
-import { BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, HIVES, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
+import { BEACH, BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, HIVES, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
 import { $, esc, save, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, solvedErrands, today } from './errands.ts';
@@ -96,7 +96,7 @@ function describe(rid: string): void {
   const out = ROOMS[rid].away?.out(current?.view ?? {}) ?? 'go back out by the doormat';
   $('#town').setAttribute('aria-label', `${where(rid)} ${placeOf(rid)}. Walk with the arrow keys, press E to look at things, and ${out}.`);
 }
-/** "Inside" a building or a hive, "Aboard" the boat. */
+/** "Inside" a building or a hive, "Aboard" the boat, "On" the beach. */
 const where = (rid: string): string => ROOMS[rid]?.away?.where ?? 'Inside';
 /** The line under the map while you're inside: what the mouse is over, or how to get about. */
 export function roomLabel(s: Spot | null): string {
@@ -356,4 +356,33 @@ export function hivesNote(rid: string): string {
   const seen = roomsOf(rid).filter(r => state.inside?.hives?.[r]).map(placeOf);
   if (roomsOf(rid).length < 2 || !seen.length) return '';
   return `You've been inside ${seen.length > 1 ? `${seen.slice(0, -1).join(', ')} and ${seen[seen.length - 1]}` : seen[0]}.`;
+}
+
+// ---------- The magical beach (Brine's conch at the Duck Pond): endless waves, and shells washing up forever ----------
+/** The shells the waves have brought so far, across every visit: the beach is `cycle shells`, so it never runs out. */
+const shellsFound = (): number => state.inside?.shells ?? 0;
+INTERIORS.brine = {
+  // a wave carries you there (rooms.ts plays it as a cut-scene from `since`)
+  view: () => ({ since: performance.now(), shells: shellsFound(), washed: -Infinity }),
+  enter: (() => { const enter = cycler(BEACH.enter); return () => { inside().beach ??= today(); save(); return enter(); }; })(),
+  act: (() => {
+    const lines = { waves: cycler(BEACH.waves), crab: cycler(BEACH.crab), pool: cycler(BEACH.pool) };
+    return (id: string, room: Room) => {
+      if (id in lines) { room.say(codeHTML(esc(lines[id as keyof typeof lines]()))); return; }
+      if (id !== 'tideline') return;
+      // every look, the next wave brings the next shell: take n (cycle shells)
+      const S = BEACH.shells, n = shellsFound() + 1, shell = S[(n - 1) % S.length];
+      inside().shells = n; save();
+      room.view.shells = n; room.view.washed = performance.now();
+      const last = Math.min(n, 3), names = Array.from({ length: last }, (_, i) => `"${S[(n - last + i) % S.length].name}"`);
+      const expr = `take ${n} (cycle shells)  -- [${n > last ? '…, ' : ''}${names.join(', ')}]`;
+      const again = n > S.length && (n - 1) % S.length === 0 ? codeHTML(esc(BEACH.again)) + ' ' : '';
+      room.say(`${again}${codeHTML(esc(shell.line))} <code class="in-layers">${esc(expr)}</code>`);
+    };
+  })(),
+};
+/** For the Journal: how many shells you've found on the beach ("" before the first). */
+export function beachNote(rid: string): string {
+  const n = rid === 'brine' ? shellsFound() : 0;
+  return n ? `You've found ${n} ${n === 1 ? 'shell' : 'shells'} on the magical beach, and the tide keeps bringing more.` : '';
 }

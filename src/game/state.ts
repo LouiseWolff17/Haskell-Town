@@ -48,7 +48,7 @@ export interface GameState {
   /** Satchel items used on their place, by the resident who gave them: the day it was used. */
   used?: Record<string, number>;
   /** The town interiors: the day the croissants were first baked, the book the sunflower marks, the name the hall greets. */
-  inside?: { baked?: number; bookmark?: string; name?: string; /** The hives you've been inside, and the day you first went in. */ hives?: Record<string, number> };
+  inside?: { baked?: number; bookmark?: string; name?: string; /** The hives you've been inside, and the day you first went in. */ hives?: Record<string, number>; /** The magical beach: the day you first went, and how many shells you've found there. */ beach?: number; shells?: number };
   /** DEV panel: days the clock has been moved forward, and an hour override. */
   devDays?: number;
   devHour?: number;

@@ -369,3 +369,46 @@ test('the beehives: pick a hive, shrink down and step inside, and the tulip peta
   await clickRoom(page, ...DOORMAT);
   expect(Object.keys((await savedState(page)).inside?.hives ?? {}).sort()).toEqual(['honey', 'nursery', 'queen']);
 });
+
+// ---------- The magical beach (Brine's conch at the Duck Pond) ----------
+/** The Duck Pond open (15 errands), Brine's conch set down at the water's edge, standing by the pond. */
+const byThePond = {
+  done: village, lettersRead: { brine: true }, used: { brine: 1 }, player: { x: 40, y: 480 },
+  reviews: { started: 0, topics: {}, day: null, log: Array.from({ length: 15 }, (_, i) => errand(['parcel', 'cargoTotal', 'weather'][i % 3])) },
+};
+const BEACH_AT = { waves: [100, 20], tideline: [58, 62], crab: [68, 99], pool: [144, 100] } as const;
+const onBeach = (page: Page, what: keyof typeof BEACH_AT) => { const [x, y] = BEACH_AT[what]; return clickRoom(page, x, y); };
+
+test('the magical beach: the conch at the pond washes you there, shells wash up forever with cycle, and the conch takes you back', async ({ page }) => {
+  await openTown(page, byThePond);
+  await page.locator('#satchelBtn').click();
+  await page.locator('#satchel').getByRole('button', { name: /The magical beach/ }).click();
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^On the magical beach.*conch/);
+  await expect(say(page)).toContainText('wave');
+  await expect(page.locator('#hoverLabel')).toContainText('conch');
+  await page.waitForTimeout(1400);
+
+  await onBeach(page, 'waves');
+  await expect(say(page)).toContainText('repeat wave');
+  await onBeach(page, 'crab');
+  await expect(say(page)).toContainText('crab');
+  await onBeach(page, 'pool');
+  await expect(say(page)).toContainText('rock pool');
+  // every look at the tideline brings the next shell, and after the fifth the list starts over
+  await onBeach(page, 'tideline');
+  await expect(say(page)).toContainText('cowrie');
+  await expect(say(page)).toContainText('take 1 (cycle shells)');
+  for (let i = 2; i <= 6; i++) { await page.keyboard.press('KeyE'); await expect(say(page)).toContainText(`take ${i} (cycle shells)`); }
+  await expect(say(page)).toContainText('cowrie again');
+  expect((await savedState(page)).inside?.shells).toBe(6);
+
+  // the conch takes you back to the pond's edge, and E goes back through it
+  await clickRoom(page, ...DOORMAT);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /map of Haskell Town/);
+  const p = (await savedState(page)).player;
+  expect(Math.abs(p.x - 70)).toBeLessThan(3);
+  expect(Math.abs(p.y - 475)).toBeLessThan(3);
+  await expect(page.locator('#hoverLabel')).toContainText("Brine's conch");
+  await page.keyboard.press('KeyE');
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^On the magical beach/);
+});

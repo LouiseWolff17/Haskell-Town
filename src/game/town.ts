@@ -625,9 +625,12 @@ interface Place { it: GiftItem; room: string | null }
 interface Way extends Place { room: string; at: Pt }
 /** The beehives in the meadow (top-left of each 12×16 hive, from the meadow's corner). EXPANSION_ART.meadow draws them here. */
 const HIVE_AT: Record<string, Pt> = { nursery: [12, 20], honey: [30, 22], queen: [48, 20] };
-/** Where you stand to go into a room outdoors: on the shore below Brine's boat, or just in front of a hive. */
+/** Brine's conch at the Duck Pond, once it's set down at the water's edge (top-left, from the pond's corner). EXPANSION_ART.pond draws it here. */
+const CONCH_AT: Pt = [66, 55];
+/** Where you stand to go into a room outdoors: on the shore below Brine's boat, just in front of a hive, or by the conch at the pond. */
 function outdoorStand(room: string): Pt | null {
   if (room === 'juniper') return [366, 250];
+  if (room === 'brine') { const p = EXPANSIONS.find(x => x.id === 'pond'); if (!p) return null; const r = slotRect(p.slot); return [r.x + CONCH_AT[0] + 4, r.y + CONCH_AT[1] + 8]; }
   const h = HIVE_AT[room], m = EXPANSIONS.find(x => x.id === 'meadow'); if (!h || !m) return null;
   const r = slotRect(m.slot); return [r.x + h[0] + 6, r.y + h[1] + 19];
 }
@@ -645,6 +648,7 @@ const capFirst = (s: string): string => s[0].toUpperCase() + s.slice(1);
 /** What the line under the map says about a way in: "Click to go inside", "Press E to go aboard", … */
 function doorLabel(pl: Place, how: string): string {
   if (pl.room === 'juniper') return `⛵ <b>${pl.it.place}</b> is moored here. ${how} to go aboard.`;
+  if (pl.room === 'brine') return `🐚 <b>Brine's conch</b> sits at the water's edge. ${how} to hold it to your ear.`;
   if (pl.room && HIVE_AT[pl.room]) return `🐝 <b>${capFirst(placeOf(pl.room))}</b>. ${how} to shrink down and step inside.`;
   if (pl.room) return `🚪 The door to <b>${pl.it.place}</b>. ${how} to go inside.`;
   return `<b>${pl.it.place}</b> is open to you. ${how} to pop in.`;
@@ -818,6 +822,13 @@ const EXPANSION_ART: Record<string, (x: number, y: number, w: number, h: number,
     // reeds on the west bank, a jetty on the east
     for (let i = 0; i < 7; i++) { const sw = Math.round(Math.sin(t / 700 + i) * 0.7); R(x + 14 + i * 3 + sw, y + 22 + (i % 3) * 3, 1, 9, '#4f8a4a'); R(x + 14 + i * 3 + sw, y + 21 + (i % 3) * 3, 1, 3, '#8a5a3b'); }
     R(cx + 30, cy - 2, 28, 5, '#a0764e'); R(cx + 30, cy - 2, 28, 1, '#c49a6c'); for (let i = 0; i < 28; i += 9) R(cx + 32 + i, cy + 3, 2, 4, '#6b4429');
+    // Brine's conch, once it's set down at the water's edge: the way to the magical beach (it glints now and then)
+    if (state.used?.brine) {
+      const [ax, ay] = [x + CONCH_AT[0], y + CONCH_AT[1]];
+      R(ax, ay + 4, 8, 1, 'rgba(0,0,0,.15)'); R(ax + 1, ay, 5, 4, '#f4c6c0'); R(ax, ay + 1, 7, 2, '#f4c6c0'); R(ax + 6, ay, 1, 1, '#e8a8a8'); R(ax + 7, ay - 1, 1, 1, '#e8a8a8');
+      R(ax + 1, ay + 2, 2, 1, '#e87a8a'); R(ax + 3, ay + 1, 1, 2, '#d88a8a'); R(ax + 2, ay, 2, 1, '#fff0ec');
+      if (Math.sin(t / 650) > 0.93) { R(ax + 8, ay - 3, 1, 3, C.white); R(ax + 7, ay - 2, 3, 1, C.white); }
+    }
     // a duck family paddling round
     for (let d = 0; d < 3; d++) {
       const a = t / 5200 - d * 0.22, dx = cx + Math.cos(a) * 30, dy = cy + Math.sin(a) * 11, s = d ? 0 : 1;

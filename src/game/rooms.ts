@@ -3,12 +3,14 @@
 // into its room (town.ts draws it with drawRoom), and the doormat inside takes you back out. Brine's little
 // boat works the same way, with a deck instead of a floor and a gangplank down to the pier instead of a door,
 // and so do the three beehives in the meadow (Rowan's tulip): you shrink to bee size and step inside, and a
-// tulip petal by the entrance takes you back out.
+// tulip petal by the entrance takes you back out. Brine's conch at the Duck Pond leads to the magical beach: a wave
+// washes you there, and the conch on the sand takes you back.
 // Walk with the arrow keys / WASD or by clicking. Things you can look at glow when you're close or the
 // mouse is over them; click them or press E. What they do is up to interiors.ts (the `onSpot` callback).
 import { RESIDENTS } from '../content/index.ts';
 import { drawPlayer, drawPrompt, drawResident, steer, walkTo } from './player.ts';
-import { nightOn } from './town.ts';
+import { hourNow, nightOn } from './town.ts';
+import { nightness } from './rewards.ts';
 import type { Dir, Rect, Walker } from './player.ts';
 
 /** A room is 176×150 room pixels, drawn at 2× in the middle of the map. */
@@ -50,6 +52,8 @@ interface Room {
 }
 
 const INK = '#3b2a2a', WHITE = '#fffaf0';
+/** Dark outside: the night cycle is on (the Observatory is built) and it's past dusk on the clock. */
+const dark = (): boolean => nightOn() && nightness(hourNow()) >= 0.5;
 const inBox = (b: Box, x: number, y: number): boolean => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
 // a seeded random, so the bookshelves look the same on every visit
 const seeded = (s: number) => () => (s = (s * 16807) % 2147483647) / 2147483647;
@@ -76,7 +80,7 @@ function shell(R: Rect, wall: string, trim: string, floor: Floor): void {
 }
 /** A window on the back wall: sky by day, stars by night (once the Observatory is up). */
 function windowAt(R: Rect, x: number, y: number, w: number, h: number, t: number, curtain?: string): void {
-  const night = nightOn();
+  const night = dark();
   R(x - 1, y - 1, w + 2, h + 2, '#6b4429');
   R(x, y, w, h, night ? '#2c3550' : '#a8dbe8');
   if (night) [[3, 3], [w - 6, 5], [w / 2, 2], [6, h - 6]].forEach(([a, b], i) => R(x + a, y + b, 1, 1, (Math.floor(t / 600) + i) % 4 ? '#fff2a8' : '#8890b0'));
@@ -212,7 +216,56 @@ function nectarCell(R: Rect, x: number, y: number, drops: number): void {
   if (drops >= 6) { for (let dy = 0; dy < H; dy++) { const i = inset(dy); R(x + i, y + dy, W - 2 * i, 1, CAP); } R(x + 7, y + 4, 8, 2, 'rgba(255,255,255,.5)'); R(x + 5, y + 7, 3, 1, 'rgba(255,255,255,.4)'); }
 }
 
-// ---------- The rooms, by the resident whose gift opens them (or by hive) ----------
+// ---------- The magical beach (Brine's conch at the Duck Pond): warm sea, endless waves, shells washing up ----------
+/** How long the wave that carries you through the conch takes to draw back out to sea (the cut-scene as you arrive), in ms. */
+export const WASH_MS = 1300;
+const FOAM = '#f4fbf6';
+/** The beach's colours, by day and by (moonlit) night. */
+const shore = (night: boolean) => night
+  ? { deep: '#25305a', sea: '#2f4472', shallow: '#4a6a98', wet: '#8a7e6a', sand: '#b4a688', speck: '#9a8e74' }
+  : { deep: '#2a8fa6', sea: '#38a9b8', shallow: '#7fd6d0', wet: '#d9b77a', sand: '#f1d9a4', speck: '#dcc08a' };
+/** Where the water reaches at x: the waves wash up and draw back, never past y 56. */
+const waterline = (x: number, t: number): number => Math.round(49 + Math.sin(x / 13 + t / 1700) * 2 + Math.sin(t / 2300) * 4.5);
+/** Where the shells wash up on the tideline, newest last (the six most recent are lying there). */
+const SHELL_AT: [number, number][] = [[22, 61], [36, 63], [50, 60], [64, 62], [78, 61], [92, 63]];
+/** One shell, about 5×4 from (x, y): a cowrie, a scallop, a whelk, a cockle or a moon snail (the order of BEACH.shells). */
+function seashell(R: Rect, x: number, y: number, kind: number): void {
+  R(x, y + 4, 5, 1, 'rgba(0,0,0,.12)');
+  if (kind === 0) { R(x + 1, y, 3, 1, '#f2e6d0'); R(x, y + 1, 5, 2, '#f2e6d0'); R(x + 1, y + 3, 3, 1, '#f2e6d0'); R(x + 1, y + 1, 1, 1, '#b88a5a'); R(x + 3, y + 2, 1, 1, '#b88a5a'); }
+  else if (kind === 1) { R(x + 1, y, 3, 1, '#f2a8b4'); R(x, y + 1, 5, 2, '#f2a8b4'); R(x + 2, y + 3, 1, 1, '#d8788a'); R(x + 1, y + 1, 1, 2, '#d8788a'); R(x + 3, y + 1, 1, 2, '#d8788a'); }
+  else if (kind === 2) { R(x, y + 1, 3, 2, '#e8c8a0'); R(x + 3, y + 1, 1, 1, '#e8c8a0'); R(x + 4, y, 1, 1, '#c8a070'); R(x + 1, y + 2, 2, 1, '#b8885a'); R(x, y + 3, 2, 1, '#e8c8a0'); }
+  else if (kind === 3) { R(x + 1, y, 3, 1, '#d8b890'); R(x, y + 1, 5, 2, '#d8b890'); R(x + 1, y + 1, 1, 2, '#a88660'); R(x + 3, y + 1, 1, 2, '#a88660'); R(x + 2, y + 3, 1, 1, '#a88660'); }
+  else { R(x + 1, y, 3, 1, '#e8e0f0'); R(x, y + 1, 5, 2, '#e8e0f0'); R(x + 1, y + 3, 3, 1, '#e8e0f0'); R(x + 2, y + 1, 1, 1, '#8a7a9a'); R(x + 3, y + 2, 1, 1, '#b8acc8'); }
+}
+/** The hermit crab, 10×8 from (x, y), in its borrowed whelk shell, scuttling sideways. */
+function hermitCrab(R: Rect, x: number, y: number, t: number, dir: number): void {
+  x = Math.round(x); y = Math.round(y);
+  const X = (dx: number, w = 1): number => dir > 0 ? x + dx : x + 10 - dx - w, step = Math.floor(t / 140) % 2;
+  R(x + 1, y + 8, 9, 1, 'rgba(0,0,0,.15)');
+  for (const lx of [3, 5, 7]) R(X(lx), y + 6 + ((lx + step) % 2), 1, 2, '#c8482a');
+  R(X(1, 6), y, 6, 6, '#e8c8a0'); R(X(0), y + 2, 1, 3, '#e8c8a0'); R(X(2, 3), y + 1, 3, 1, '#b8885a'); R(X(1, 3), y + 3, 3, 1, '#b8885a'); R(X(3), y + 4, 1, 1, '#b8885a');
+  R(X(6, 3), y + 3, 3, 3, '#e0603a'); R(X(9), y + 4, 1, 2, '#e0603a');
+  R(X(7), y + 1, 1, 2, '#e0603a'); R(X(9), y + 1, 1, 2, '#e0603a'); R(X(7), y, 1, 1, INK); R(X(9), y, 1, 1, INK);
+}
+/** The hermit crab's portrait, for the dialogue box (nobody lives on the beach, so the crab does the talking). */
+export function crabPortrait(size: number): HTMLCanvasElement {
+  const c = document.createElement('canvas'); c.width = 10; c.height = 10; c.className = 'portrait'; c.style.width = c.style.height = size + 'px';
+  const g = c.getContext('2d')!, P: Rect = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  P(0, 0, 10, 10, '#f1d9a4');
+  P(0, 3, 6, 6, '#e8c8a0'); P(1, 4, 3, 1, '#b8885a'); P(1, 6, 3, 1, '#b8885a'); P(2, 7, 1, 1, '#b8885a');
+  P(5, 5, 4, 4, '#e0603a'); P(9, 6, 1, 2, '#e0603a'); P(6, 2, 1, 3, '#e0603a'); P(8, 2, 1, 3, '#e0603a'); P(6, 1, 1, 1, INK); P(8, 1, 1, 1, INK);
+  return c;
+}
+/** Arriving: the wave that carried you through the conch draws back up the beach and out to sea. */
+function washCover(R: Rect, k: number, t: number): void {
+  const edge = RH * (1 - ease(k)), c = shore(dark());
+  for (let x = 0; x < RW; x++) {
+    const e = Math.round(edge + Math.sin(x / 9 + t / 200) * 3); if (e <= 0) continue;
+    R(x, 0, 1, e, c.sea); R(x, Math.max(0, e - 3), 1, 3, c.shallow); R(x, e, 1, 1, FOAM);
+  }
+  for (let i = 0; i < 12; i++) { const bx = (i * 37) % RW, by = RH - ((i * 53 + t / 5) % RH); if (by < edge - 4) R(bx, by, 1, 1, 'rgba(255,255,255,.6)'); }
+}
+// ---------- The rooms, by the resident whose gift opens them (or by hive, or the beach) ----------
 export const ROOMS: Record<string, Room> = {
   // Wren's cottage: the stove and kettle, a tea table on a rug, the cat on a chair, her letters pinned up, a patchwork bed.
   wren: {
@@ -504,7 +557,7 @@ export const ROOMS: Record<string, Room> = {
       { id: 'wheel', label: '☸️ The wheel', box: { x: 56, y: 63, w: 14, h: 14 }, stand: [63, 88] },
     ],
     draw(R, t, v) {
-      const night = nightOn(), sea = night ? '#2c3f5c' : '#5b93bf', glint = night ? '#4a5f80' : '#8fbde0';
+      const night = dark(), sea = night ? '#2c3f5c' : '#5b93bf', glint = night ? '#4a5f80' : '#8fbde0';
       // the voyage: the gangplank comes up first, then the sail fills and the pier slides away behind
       const { k } = voyage(v, t), plank = clamp01(1 - k / 0.2), away = ease(clamp01((k - 0.2) / 0.8)), sail = ease(clamp01((k - 0.1) / 0.5));
       const ox = -Math.round(away * (RW + 10));
@@ -742,6 +795,89 @@ export const ROOMS: Record<string, Room> = {
       for (const [wx, wy, d] of [[12, 66, 1], [14, 78, 1], [52, 64, -1], [50, 78, -1]] as const) bee(R, wx, wy, t + wx * 31, d);
       flyer(R, { x: 110, y: 74, w: 50, h: 40 }, t, 4);
       flyer(R, { x: 56, y: 92, w: 60, h: 30 }, t, 5);
+    },
+  },
+  // ---------- The magical beach (Brine's conch at the Duck Pond). Somewhere warm, not on any map. ----------
+  // The sea along the top with the waves rolling in, the tideline where shells wash up forever (`cycle`), a rock pool,
+  // a hermit crab shell-shopping, a palm, and the conch on the sand: the way back to the pond.
+  brine: {
+    name: 'the magical beach', voice: crabPortrait,
+    away: { where: 'On', exit: '🐚 The conch', hint: () => 'The conch on the sand takes you back to the Duck Pond.', out: () => 'go back to the Duck Pond by the conch' },
+    // the sand, below where the waves reach
+    walk: (x, y) => x >= 7 && x <= RW - 7 && y >= 66 && y <= RH - 4,
+    // interiors.ts sets `since` when you arrive
+    scene: (v, t) => { const k = (t - (Number(v.since) || -Infinity)) / WASH_MS; return k >= 0 && k < 1 ? k : null; },
+    cover: washCover,
+    solids: [{ x: 124, y: 88, w: 42, h: 24 }, { x: 12, y: 130, w: 8, h: 6 }],
+    spots: [
+      { id: 'waves', label: '🌊 The waves', box: { x: 4, y: 4, w: 168, h: 44 }, stand: [124, 70] },
+      { id: 'tideline', label: '🐚 The tideline', box: { x: 16, y: 56, w: 86, h: 12 }, stand: [58, 74] },
+      { id: 'crab', label: '🦀 The hermit crab', box: { x: 40, y: 90, w: 56, h: 18 }, stand: [68, 116] },
+      { id: 'pool', label: '⭐ The rock pool', box: { x: 122, y: 82, w: 46, h: 34 }, stand: [144, 124] },
+    ],
+    draw(R, t, v) {
+      const night = dark(), c = shore(night);
+      R(0, 0, RW, RH, INK); R(4, 4, RW - 8, RH - 8, c.sand);
+      const rnd = seeded(11);
+      for (let i = 0; i < 80; i++) R(5 + Math.floor(rnd() * (RW - 12)), 64 + Math.floor(rnd() * (RH - 70)), 1, 1, c.speck);
+      // the sea, the shallows and the foam, washing up and drawing back; the sand it leaves behind is wet
+      for (let x = 4; x < RW - 4; x++) {
+        const w = waterline(x, t);
+        R(x, 4, 1, 59 + Math.round(Math.sin(x / 9)) - 4, c.wet);
+        R(x, 4, 1, w - 4, c.sea); R(x, 4, 1, 12 + Math.round(Math.sin(x / 21 + 1) * 3), c.deep);
+        R(x, w - 6, 1, 5, c.shallow); R(x, w - 1, 1, 1, 'rgba(255,255,255,.55)'); R(x, w, 1, 1, FOAM);
+      }
+      // waves rolling in towards the shore, fading as they come
+      for (let i = 0; i < 4; i++) {
+        const ph = (t / 2600 + i / 4) % 1, y = 8 + ph * 34, a = (0.45 * (1 - ph)).toFixed(2);
+        for (let x = 6 + ((i * 17) % 13); x < RW - 10; x += 19) if (y < waterline(x, t) - 4) R(x, Math.round(y + Math.sin(x / 7) * 1.5), 7, 1, `rgba(255,255,255,${a})`);
+      }
+      // the magic: sparkles twinkling on the water, pink and gold (stars on it at night)
+      for (let i = 0; i < 16; i++) {
+        const sx = 8 + ((i * 47) % (RW - 18)), sy = 6 + ((i * 29) % 34), on = (Math.floor(t / 380) + i * 5) % 9;
+        if (on < 3 && sy < waterline(sx, t) - 5) { const col = night ? '#fff2a8' : i % 2 ? '#ffd6e2' : '#fff2a8'; R(sx, sy, 1, 1, col); if (on === 1) { R(sx - 1, sy, 3, 1, col); R(sx, sy - 1, 1, 3, col); } }
+      }
+      // the shells on the tideline: the six most recent, and the newest riding in on the foam
+      const n = Number(v.shells) || 0, since = t - (Number(v.washed) || -Infinity);
+      if (!n && Math.sin(t / 500) > 0.6) { R(52, 61, 1, 3, WHITE); R(51, 62, 3, 1, WHITE); }
+      for (let k = Math.max(1, n - SHELL_AT.length + 1); k <= n; k++) {
+        const [sx, sy] = SHELL_AT[(k - 1) % SHELL_AT.length], p = k === n && since < 800 ? ease(since / 800) : 1;
+        seashell(R, sx, Math.round(48 + (sy - 48) * p), (k - 1) % 5);
+        if (k === n && since < 1400 && since > 800 && Math.sin(t / 90) > 0) { R(sx + 6, sy - 2, 1, 3, WHITE); R(sx + 5, sy - 1, 3, 1, WHITE); }
+      }
+      // the rock pool: rocks round a little pool, a starfish, two anemones and a fish swimming round
+      shadow(R, 124, 112, 42);
+      R(126, 86, 38, 26, '#7a7a84'); R(124, 89, 42, 20, '#7a7a84'); R(127, 86, 36, 1, '#9a9aa6'); R(124, 89, 2, 1, '#9a9aa6'); R(164, 89, 2, 1, '#9a9aa6');
+      R(130, 90, 30, 18, '#5a5a64'); R(131, 91, 28, 16, night ? '#2f4472' : '#3fa8b0'); R(133, 90, 24, 1, '#5a5a64');
+      R(134, 92, 8, 1, 'rgba(255,255,255,.35)');
+      const SF = '#e87a3a'; R(135, 100, 5, 1, SF); R(137, 98, 1, 5, SF); R(136, 99, 3, 3, SF); R(134, 102, 1, 1, SF); R(140, 102, 1, 1, SF);
+      for (const [ax, ay] of [[151, 93], [154, 101]]) { const sw = Math.round(Math.sin(t / 600 + ax)); R(ax, ay + 1, 3, 2, '#d8788a'); R(ax + sw, ay, 1, 1, '#f2a8b4'); R(ax + 2 + sw, ay, 1, 1, '#f2a8b4'); }
+      const fa = t / 1100, fx = 145 + Math.cos(fa) * 9, fy = 99 + Math.sin(fa) * 4;
+      R(fx, fy, 2, 1, '#f2c94c'); R(fx + (Math.sin(fa) > 0 ? 2 : -1), fy, 1, 1, '#e0a020');
+      // the hermit crab, shell-shopping along the sand
+      const ca = t / 2600, cx = 64 + Math.sin(ca) * 22;
+      hermitCrab(R, cx, 96, t, Math.cos(ca) > 0 ? 1 : -1);
+      // a palm leaning over the sand, its fronds swaying, coconuts at the top
+      shadow(R, 10, 136, 12);
+      for (let i = 0; i < 34; i++) { const tx = 14 + Math.round((i / 34) ** 2 * 10); R(tx, 135 - i, 4, 1, i % 4 ? '#a0764e' : '#8a6240'); }
+      const sway = Math.sin(t / 1100) * 1.2;
+      for (const [a, len] of [[-2.7, 13], [-2.1, 12], [-1.2, 9], [-0.5, 12], [0.2, 13], [0.8, 10]] as const) {
+        for (let s = 1; s <= len; s++) { const fx2 = 26 + Math.cos(a) * s + sway * (s / len), fy2 = 101 + Math.sin(a) * s * 0.6 + (s / len) ** 2 * 6; R(fx2, fy2, 2, 1, s > len - 3 ? '#6aa85e' : '#4f8a4a'); }
+      }
+      R(24, 102, 3, 3, '#6b4429'); R(27, 103, 3, 3, '#5a3a24');
+      // a little magic drifting up off the sand
+      for (let i = 0; i < 5; i++) {
+        const ph = (t / 3200 + i / 5) % 1, mx = 30 + ((i * 41) % 120) + Math.sin(t / 600 + i) * 2, my = 140 - ph * 70;
+        R(mx, my, 1, 1, `rgba(255,${i % 2 ? 214 : 242},${i % 2 ? 226 : 168},${(0.8 * Math.sin(ph * Math.PI)).toFixed(2)})`);
+      }
+      // the conch, lying on the sand where you arrived: the way back to the pond, glowing faintly
+      const glow = (0.14 + Math.sin(t / 700) * 0.08).toFixed(3);
+      R(80, 137, 16, 10, `rgba(255,214,226,${glow})`);
+      R(81, 146, 14, 1, 'rgba(0,0,0,.15)');
+      R(84, 139, 8, 6, '#f4c6c0'); R(82, 141, 12, 3, '#f4c6c0'); R(92, 139, 2, 2, '#e8a8a8'); R(94, 138, 1, 1, '#e8a8a8');
+      R(83, 142, 4, 2, '#e87a8a'); R(87, 140, 1, 4, '#d88a8a'); R(90, 140, 1, 4, '#d88a8a'); R(85, 139, 3, 1, '#fff0ec');
+      // the frame again, over anything that ran past its edge
+      R(0, 0, RW, 4, INK); R(0, RH - 4, RW, 4, INK); R(0, 0, 4, RH, INK); R(RW - 4, 0, 4, RH, INK);
     },
   },
 };

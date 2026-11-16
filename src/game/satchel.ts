@@ -7,7 +7,7 @@ import { $, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
 import { goInside, plotLabel, targetBox } from './town.ts';
-import { hasInterior, hivesNote, placeOf } from './interiors.ts';
+import { beachNote, hasInterior, hivesNote, placeOf } from './interiors.ts';
 import { giftFor, roomsOf } from './rooms.ts';
 import type { GiftItem } from '../content/index.ts';
 
@@ -15,10 +15,11 @@ const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
 /** "A spare key" → "the spare key", for sentences. */
 const the = (rid: string): string => giftOf(rid).name.replace(/^(A|An|The)\s+/, 'the ');
 
-/** A gift's Journal note, with its extra line once it has been used (Fern's key), and the hives you've been inside (Rowan's tulip). */
+/** A gift's Journal note, with its extra line once it has been used (Fern's key), the hives you've been inside (Rowan's tulip),
+ *  and the shells you've found on the beach (Brine's conch). */
 export function giftNote(rid: string): string {
-  const g = giftOf(rid), note = g.afterUse && state.used?.[rid] ? `${g.note} ${g.afterUse}` : g.note, hives = hivesNote(rid);
-  return hives ? `${note} ${hives}` : note;
+  const g = giftOf(rid), note = g.afterUse && state.used?.[rid] ? `${g.note} ${g.afterUse}` : g.note;
+  return [note, hivesNote(rid), beachNote(rid)].filter(Boolean).join(' ');
 }
 
 /** Gifts you've been given and haven't used yet, in the order of the Friends panel. */

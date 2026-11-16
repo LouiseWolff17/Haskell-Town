@@ -74,7 +74,8 @@ Ordered by the design's suggested build order.
 - [x] Inside the beehives (Rowan's tulip) as pixel-art rooms: three hives in the meadow, each its own room at bee size (the nursery, the honey store with its `<>` nectar cell, the queen's hive with the waggle dance), a shrinking-down cut-scene on the way in, and a tulip petal as the way back. The Journal remembers which hives you've been in.
 - [ ] Collect honey in the honey store to sell (needs coins and finds in the Satchel).
 - [ ] The open sea and fishing from Brine's boat (Juniper's sticker), catches as `Maybe Fish`.
-- [ ] The magical beach through Brine's conch at the Duck Pond, with endless shells.
+- [x] The magical beach through Brine's conch at the Duck Pond as a pixel-art scene: a warm wave washes you there (a cut-scene) and the conch on the sand takes you back. The waves (`repeat wave`), a hermit crab, a rock pool, and shells washing up forever on the tideline, one per look, as `take n (cycle shells)`. The Journal counts the shells you've found.
+- [ ] Collect shells on the beach to sell (needs coins and finds in the Satchel).
 - [ ] A few finds per day per place; residents pay more for their own thing (fish → Brine, honey → Marigold, shells → Juniper, garden produce → Moss/Hazel).
 
 **4. Bigger things and a growing map**
