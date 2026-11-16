@@ -13,13 +13,13 @@ export default defineConfig({
   // The character walks to a building before its notebook opens, and code runs in a worker.
   expect: { timeout: 10_000 },
   use: {
-    baseURL: `http://localhost:${PORT}/Haskell-Town/`,
+    baseURL: `http://localhost:${PORT}/`,
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}/Haskell-Town/`,
+    url: `http://localhost:${PORT}/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

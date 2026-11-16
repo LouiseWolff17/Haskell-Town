@@ -17,7 +17,7 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **Market music and a printable Journal.** Once the Market is built, a 🎵 button plays a soft music-box tune (made on the fly, no sound files) while a fiddler plays by the stalls. The Journal can be printed or saved as a PDF: a little "what I learned" booklet with every building's code, your errands, letters and land.
 - **The Workshop** is free play with the whole language: your own data types, classes, IO and a λ> prompt.
 
-Play it at **https://louisewolff17.github.io/Haskell-Town/** (it goes live after the first deploy, see below).
+Play it at **https://haskelltown.lwolff.com/**.
 
 ## Running it locally
 
@@ -106,7 +106,7 @@ Add an entry to `EXPANSIONS` in `src/content/expansions.ts` with the next `slot`
 
 ## The DEV panel
 
-Under `npm run dev` there's a DEV panel in the bottom-right corner: **Solve next**, **Solve stage**, **Solve errands**, **+3 h** (try the night) and **+1 day** (move the Notice Board's clock). On the live site, add `?dev` to the address to get it, e.g. `https://louisewolff17.github.io/Haskell-Town/?dev`. It changes your saved progress, so use it in a private window if you want to keep your real town.
+Under `npm run dev` there's a DEV panel in the bottom-right corner: **Solve next**, **Solve stage**, **Solve errands**, **+3 h** (try the night) and **+1 day** (move the Notice Board's clock). On the live site, add `?dev` to the address to get it, e.g. `https://haskelltown.lwolff.com/?dev`. It changes your saved progress, so use it in a private window if you want to keep your real town.
 
 ## Deploying
 

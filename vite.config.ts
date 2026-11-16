@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite';
 
-// GitHub Pages serves the site from /Haskell-Town/. The dev server serves it from /.
-// `vite preview` serves the build, so it needs the build's base too.
-export default defineConfig(({ command, isPreview }) => ({
-  base: command === 'build' || isPreview ? (process.env.BASE_PATH ?? '/Haskell-Town/') : '/',
+// The site is served from the root of its custom domain (haskelltown.lwolff.com).
+// Set BASE_PATH (e.g. /Haskell-Town/) to build for a sub-path instead.
+export default defineConfig({
+  base: process.env.BASE_PATH ?? '/',
   build: { target: 'es2022', sourcemap: true },
   // The runner's Web Worker (src/runner/worker.ts) is an ES module worker.
   worker: { format: 'es' },
-}));
+});
