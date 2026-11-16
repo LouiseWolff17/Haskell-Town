@@ -1,6 +1,7 @@
 // The town interiors as pixel-art rooms, drawn like the town map: a top-down room with a back wall, a floor
 // and furniture, the resident who lives there, and you. Going through a building's door turns the map
-// into its room (town.ts draws it with drawRoom), and the doormat inside takes you back out.
+// into its room (town.ts draws it with drawRoom), and the doormat inside takes you back out. Brine's little
+// boat works the same way, with a deck instead of a floor and a gangplank down to the pier instead of a door.
 // Walk with the arrow keys / WASD or by clicking. Things you can look at glow when you're close or the
 // mouse is over them; click them or press E. What they do is up to interiors.ts (the `onSpot` callback).
 import { RESIDENTS } from '../content/index.ts';
@@ -18,6 +19,16 @@ export interface Spot { id: string; label: string; box: Box; stand: [x: number, 
 /** What changes how a room looks (letters pinned up, folds of the dough, …), set by interiors.ts. */
 export type View = Record<string, number | boolean | undefined>;
 interface Room {
+  /** Who's there, when it isn't the resident whose gift opened it (Juniper's star opens Brine's boat). */
+  who?: string;
+  /** Where you can stand, when it isn't the whole floor (the boat: its deck, the gangplank and the pier). */
+  walk?(x: number, y: number, v: View): boolean;
+  /** Not a building: "Aboard" instead of "Inside", the way back out isn't a doormat, and the hint says how to get off. */
+  aboard?: { exit: string; hint(v: View): string };
+  /** A cut-scene playing (the boat sailing out or home): how far along it is, 0 to 1, or null. Nobody walks during one. */
+  scene?(v: View, t: number): number | null;
+  /** Spots that aren't there right now (the way ashore, out at sea). */
+  gone?(id: string, v: View): boolean;
   /** Where the resident stands (top-left of their 8×14 sprite). */
   resident: [x: number, y: number];
   /** Furniture you can't walk through, as floor footprints. */
@@ -70,7 +81,30 @@ function plant(R: Rect, x: number, y: number): void {
   R(x + 2, y, 6, 7, '#4f7f64'); R(x, y + 2, 3, 4, '#6f9e83'); R(x + 7, y + 1, 3, 5, '#6f9e83'); R(x + 4, y - 2, 2, 3, '#6f9e83');
 }
 
-// ---------- The five rooms, by the resident whose gift opens them ----------
+// ---------- Brine's boat: the hull's shape, which is also where the deck is ----------
+/** The middle of the boat, from bow to stern. */
+const CY = 76;
+/** Half the hull's height at x: rounded at the stern (left), pointed at the bow (right), -1 where there's only sea. */
+function hull(x: number): number {
+  if (x < 10 || x > 168) return -1;
+  if (x < 18) return 32 + Math.sqrt(64 - (18 - x) ** 2);
+  if (x > 128) return 40 * (1 - ((x - 128) / 40) ** 2);
+  return 40;
+}
+/** How long the boat takes to sail out, or home again (the cut-scene), in ms. */
+export const SAIL_MS = 4200;
+const clamp01 = (k: number): number => Math.max(0, Math.min(1, k));
+const ease = (k: number): number => k < 0.5 ? 2 * k * k : 1 - (2 - 2 * k) ** 2 / 2;
+/** How far out the boat is: 0 moored at the pier, 1 out at sea, in between while it sails (`p` is the cut-scene's progress).
+ *  interiors.ts sets `out` (where it's headed) and `since` (when it set off). */
+function voyage(v: View, t: number): { k: number; p: number } {
+  const p = clamp01((t - (Number(v.since) || -Infinity)) / SAIL_MS);
+  return { p, k: v.out ? p : 1 - p };
+}
+/** How far the sea has scrolled past: it drifts gently at the pier and streams by under sail. */
+let seaX = 0, seaT = 0;
+
+// ---------- The rooms, by the resident whose gift opens them ----------
 export const ROOMS: Record<string, Room> = {
   // Wren's cottage: the stove and kettle, a tea table on a rug, the cat on a chair, her letters pinned up, a patchwork bed.
   wren: {
@@ -339,12 +373,146 @@ export const ROOMS: Record<string, Room> = {
       }
     },
   },
+  // Brine's little boat, moored at the pier: the wheelhouse at the stern, the wheel, the mast with its sail
+  // furled, a lobster pot, Brine coiling rope at the bow, a line out over the side, and Juniper's gold star on the rail.
+  juniper: {
+    who: 'brine',
+    aboard: { exit: '⚓ Back ashore', hint: v => v.out ? 'Out at sea. Talk to Brine to sail home.' : 'Talk to Brine to sail out to sea. The gangplank takes you back ashore.' },
+    // the deck always; the gangplank and the pier only while moored
+    walk: (x, y, v) => (x >= 16 && x <= 160 && Math.abs(y - CY) < hull(x) - 5)
+      || (voyage(v, performance.now()).k === 0 && ((x >= 81 && x < 95 && y >= 104 && y < 136) || (x >= 7 && x <= RW - 7 && y >= 132 && y <= RH - 4))),
+    scene: (v, t) => { const { p } = voyage(v, t); return p < 1 ? p : null; },
+    gone: (id, v) => id === 'leave' && voyage(v, performance.now()).k > 0,
+    resident: [130, 80],
+    solids: [{ x: 22, y: 50, w: 32, h: 50 }, { x: 60, y: 68, w: 8, h: 8 }, { x: 72, y: 71, w: 31, h: 8 }, { x: 142, y: 86, w: 12, h: 10 }, { x: 100, y: 96, w: 20, h: 10 }],
+    spots: [
+      { id: 'brine', label: '👋 Brine', box: { x: 128, y: 78, w: 12, h: 16 }, stand: [120, 93] },
+      { id: 'star', label: "⭐ Juniper's star", box: { x: 106, y: 32, w: 12, h: 12 }, stand: [112, 50] },
+      { id: 'rod', label: '🎣 The line', box: { x: 124, y: 12, w: 36, h: 34 }, stand: [128, 54] },
+      { id: 'wheel', label: '☸️ The wheel', box: { x: 56, y: 63, w: 14, h: 14 }, stand: [63, 88] },
+    ],
+    draw(R, t, v) {
+      const night = nightOn(), sea = night ? '#2c3f5c' : '#5b93bf', glint = night ? '#4a5f80' : '#8fbde0';
+      // the voyage: the gangplank comes up first, then the sail fills and the pier slides away behind
+      const { k } = voyage(v, t), plank = clamp01(1 - k / 0.2), away = ease(clamp01((k - 0.2) / 0.8)), sail = ease(clamp01((k - 0.1) / 0.5));
+      const ox = -Math.round(away * (RW + 10));
+      seaX += Math.min(50, Math.max(0, t - seaT)) * (1 / 90 - away * (1 / 90 + 1 / 28)); seaT = t;
+      R(0, 0, RW, RH, INK); R(4, 4, RW - 8, RH - 8, sea);
+      // little waves, drifting (streaming past under sail); stars on the water at night
+      const span = RW - 18, mod = (n: number) => ((n % span) + span) % span;
+      for (let i = 0; i < 46; i++) {
+        const wx = 6 + mod(i * 37 + seaX), wy = 6 + ((i * 53) % (RH - 30));
+        if (Math.abs(wy - CY) < hull(wx) + 3 || Math.abs(wy - CY) < hull(wx + 4) + 3) continue;
+        R(wx, wy, 4, 1, (Math.floor(t / 700) + i) % 5 ? glint : WHITE);
+        if (night && i % 6 === 0) R(wx + 2, wy + 3, 1, 1, (Math.floor(t / 600) + i) % 4 ? '#fff2a8' : '#8890b0');
+      }
+      // the pier, its posts, a bollard with the mooring rope (cast off as you leave), and a gull keeping watch
+      if (ox > -RW) {
+        const P: Rect = (x, y, w, h, c) => R(x + ox, y, w, h, c);
+        P(4, 128, RW - 8, 22, '#a0764e'); P(4, 128, RW - 8, 1, '#c49a6c'); P(4, 129, RW - 8, 1, 'rgba(0,0,0,.15)');
+        for (let x = 10; x < RW - 4; x += 7) P(x, 130, 1, 20, '#8a6240');
+        for (const px of [8, 46, 126, 164]) { P(px, 125, 4, 5, '#6b4429'); P(px, 125, 4, 1, '#8a5a3b'); }
+        P(66, 133, 6, 5, '#5a5a62'); P(67, 132, 4, 1, '#7a7a84');
+        if (k === 0) { P(69, 116, 1, 17, '#c8a870'); P(70, 120, 1, 4, '#c8a870'); } else P(68, 131, 3, 2, '#c8a870');
+        P(165, 121, 4, 3, WHITE); P(164, 120, 2, 2, WHITE); P(163, 121, 1, 1, '#f2b04a'); P(166, 121, 3, 1, '#b8c0c8'); P(165, 124, 1, 1, '#f2b04a'); P(167, 124, 1, 1, '#f2b04a');
+      }
+      // out at sea: now and then a dolphin leaps alongside
+      if (away > 0.9) {
+        const q = (t % 6500) / 1500;
+        if (q < 1) { const dx = 150 - q * 50, dy = 126 - Math.sin(q * Math.PI) * 9; R(dx, dy, 7, 2, '#6a7f99'); R(dx + 1, dy - 1, 4, 1, '#8a9fb9'); R(dx + 3, dy - 2, 2, 1, '#6a7f99'); R(dx + 7, dy + 1, 2, 2, '#6a7f99'); }
+        if (q >= 1 && q < 1.3) R(100 - (q - 1) * 10, 127, 8, 1, 'rgba(255,255,255,.6)');
+      }
+      // the hull: blue sides, a wooden rail, a planked deck (rounded at the stern, pointed at the bow)
+      for (let x = 10; x <= 168; x++) {
+        const h = Math.floor(hull(x + 0.5)); if (h <= 0) continue;
+        R(x, CY + h, 1, 2, 'rgba(0,0,0,.18)');
+        if ((x + Math.floor(t / (140 - 100 * away))) % 9 < 2 + away * 3) { R(x, CY + h + 2, 1, 1, 'rgba(255,255,255,.55)'); if (away > 0.5) R(x, CY - h - 2, 1, 1, 'rgba(255,255,255,.45)'); }
+        R(x, CY - h, 1, 2 * h, '#4a7fa7'); R(x, CY - h, 1, 1, '#7aa8cc'); R(x, CY + h - 2, 1, 2, '#365f7f');
+        if (h > 2) R(x, CY - h + 2, 1, 2 * h - 4, '#8a5a3b');
+        const d = h - 4; if (d <= 0) continue;
+        R(x, CY - d, 1, 2 * d, '#c49a6c');
+        for (let y = CY - 36, row = 0; y < CY + 36; y += 6, row++) {
+          if (Math.abs(y - CY) >= d) continue;
+          R(x, y, 1, 1, '#a0764e');
+          if ((x + (row % 2 ? 14 : 0)) % 28 === 0) R(x, y, 1, Math.min(6, CY + d - y), '#a0764e');
+        }
+      }
+      // the gangplank down to the pier, pulled aboard when Brine casts off
+      if (plank > 0) {
+        const len = Math.round(26 * plank);
+        R(81, 106, 14, len, '#8a5a3b'); R(82, 106, 12, len, '#b08458');
+        for (let y = 109; y < 106 + len; y += 4) R(82, y, 12, 1, '#8a6240');
+        R(81, 106 + len, 14, 2, 'rgba(0,0,0,.18)');
+      }
+      // spray off the bow under sail
+      if (away > 0.3) for (let i = 0; i < 4; i++) { const ph = (t / 500 + i / 4) % 1; R(168 + ph * 5, CY - 3 + (i % 2 ? -1 : 1) * ph * 8, 1, 1, `rgba(255,255,255,${(0.8 * (1 - ph) * away).toFixed(2)})`); }
+      // the wheelhouse: white roof, a stovepipe puffing, a lifebuoy, and windows that glow at night
+      shadow(R, 22, 100, 32);
+      R(22, 50, 32, 50, '#c8c0b0'); R(23, 51, 30, 48, '#fffaf0');
+      for (let y = 57; y < 99; y += 6) R(23, y, 30, 1, '#ece4d4');
+      R(52, 55, 2, 40, night ? '#f2cc8f' : '#a8dbe8'); R(52, 74, 2, 2, '#c8c0b0');
+      if (night) R(54, 55, 3, 40, 'rgba(255,230,150,.18)');
+      R(29, 59, 5, 5, '#3a3640'); R(30, 60, 3, 3, '#2a2630');
+      for (let k = 0; k < 3; k++) {
+        const ph = (t / 1300 + k / 3) % 1;
+        R(31 + Math.sin(t / 340 + k * 2) * 1.5, 57 - ph * 12, 2, 2, `rgba(255,255,255,${(0.7 * (1 - ph)).toFixed(2)})`);
+      }
+      R(37, 78, 6, 8, '#d1495b'); R(36, 79, 8, 6, '#d1495b'); R(39, 80, 2, 4, '#fffaf0'); R(38, 81, 4, 2, '#fffaf0');
+      R(39, 78, 2, 1, WHITE); R(39, 85, 2, 1, WHITE); R(36, 81, 1, 2, WHITE); R(43, 81, 1, 2, WHITE);
+      // the wheel
+      shadow(R, 59, 76, 10);
+      R(62, 72, 3, 4, '#6b4429');
+      R(60, 65, 7, 1, '#a0683f'); R(60, 73, 7, 1, '#a0683f'); R(58, 67, 1, 5, '#a0683f'); R(68, 67, 1, 5, '#a0683f');
+      R(59, 66, 1, 1, '#a0683f'); R(67, 66, 1, 1, '#a0683f'); R(59, 72, 1, 1, '#a0683f'); R(67, 72, 1, 1, '#a0683f');
+      R(63, 64, 1, 11, '#8a5a3b'); R(57, 69, 13, 1, '#8a5a3b'); R(62, 68, 3, 3, '#e0b040');
+      // the mast, the furled sail on its boom, a lantern, the pennant, and the stay down to the bow
+      shadow(R, 72, 79, 31);
+      R(72, 74, 26, 3, '#a0683f');
+      if (sail < 0.15) { R(74, 71, 22, 4, WHITE); R(74, 74, 22, 1, '#e3dccb'); for (const x of [78, 85, 92]) R(x, 71, 1, 4, '#c8b8a0'); }
+      else for (let x = 73; x < 97; x++) {
+        // the sail, filling with wind: tallest at the mast, with a little flutter at the edge
+        const hh = Math.max(1, Math.round(sail * 30 * ((x - 72) / 25) ** 0.7 + (x < 78 ? Math.sin(t / 90 + x) * 0.8 : 0)));
+        R(x, 74 - hh, 1, hh, x % 6 ? WHITE : '#ece4d4'); R(x, 74 - hh, 1, 1, '#d8d0c0');
+      }
+      R(103, 75, 62, 1, 'rgba(59,42,42,.45)');
+      R(96, 72, 7, 7, '#6b4429'); R(97, 73, 5, 5, '#8a5a3b'); R(99, 75, 1, 1, '#a0683f');
+      const flap = Math.round(Math.sin(t / 220) * 1.5);
+      R(102, 69, 5 + flap, 2, '#d1495b'); R(102, 71, 3 + Math.max(0, flap), 1, '#d1495b');
+      R(97, 69, 3, 3, night ? '#ffe08a' : '#e0b040');
+      if (night) { const g = `rgba(255,230,150,${(0.25 + Math.sin(t / 600) * 0.06).toFixed(3)})`; R(94, 66, 9, 9, g); R(92, 68, 13, 5, g); }
+      // the lobster pot and its float
+      shadow(R, 100, 106, 14);
+      R(100, 96, 14, 10, '#8a6a40'); for (let k = 0; k < 6; k++) R(101 + k * 2, 97, 1, 8, '#b89060'); R(100, 100, 14, 1, '#b89060');
+      R(115, 100, 5, 5, '#d1495b'); R(116, 99, 3, 1, '#d1495b'); R(116, 102, 3, 1, WHITE);
+      // the coil of rope Brine is working on
+      shadow(R, 142, 96, 12);
+      R(142, 86, 12, 10, '#c8a870'); R(143, 85, 10, 12, '#c8a870'); R(144, 88, 8, 6, '#a8885a'); R(146, 89, 4, 4, '#c8a870'); R(147, 90, 2, 2, '#8a6a40');
+      R(138, 90, 4, 1, '#c8a870');
+      // the line out over the side: rod, reel, and a float bobbing on the water
+      for (let i = 0; i <= 26; i++) R(126 + i, 44 - Math.round(i * 30 / 26), 1, 1, i > 20 ? '#a0683f' : '#6b4429');
+      R(127, 41, 3, 3, '#7a8a96');
+      const bob = Math.round(Math.sin(t / 380));
+      for (let y = 15; y < 25 + bob; y++) R(152 + Math.floor((y - 15) / 3), y, 1, 1, 'rgba(255,255,255,.6)');
+      R(155, 25 + bob, 3, 2, '#d1495b'); R(155, 27 + bob, 3, 1, WHITE);
+      const rip = (t / 1600) % 1; R(156 - rip * 6, 29, 1 + rip * 12, 1, `rgba(255,255,255,${(0.5 * (1 - rip)).toFixed(2)})`);
+      // Juniper's gold star on the rail, a little crooked, catching the light now and then
+      const S = (dx: number, dy: number, w: number, c = '#f2c94c') => R(109 + dx, 35 + dy, w, 1, c);
+      S(3, 0, 1); S(3, 1, 1); S(0, 2, 7); S(1, 3, 5); S(2, 4, 3); S(1, 5, 2); S(4, 5, 2); S(0, 6, 2); S(5, 6, 2);
+      S(3, 3, 1, '#fff2a8');
+      if (Math.sin(t / 700) > 0.92) { R(118, 31, 1, 3, WHITE); R(117, 32, 3, 1, WHITE); }
+      // a gull, passing over
+      const gx = 4 + ((t / 55) % (RW + 30)) - 15, gy = 18 + Math.sin(t / 500) * 3, fl = Math.sin(t / 120) > 0 ? 0 : 1;
+      if (gx > 4 && gx < RW - 10) { R(gx, gy + fl, 2, 1, WHITE); R(gx + 2, gy + 1, 1, 1, WHITE); R(gx + 3, gy + fl, 2, 1, WHITE); }
+      // the frame again, over anything that slid past its edge
+      R(0, 0, RW, 4, INK); R(0, RH - 4, RW, 4, INK); R(0, 0, 4, RH, INK); R(RW - 4, 0, 4, RH, INK);
+    },
+  },
 };
 
 // ---------- Being inside ----------
 /** The doormat: every room's way back to town. */
 export const DOOR: Spot = { id: 'leave', label: '🚪 Back to town', box: { x: RW / 2 - 9, y: RH - 10, w: 18, h: 10 }, stand: [RW / 2, RH - 8] };
-const roomSpots = (rid: string): Spot[] => [...ROOMS[rid].spots, DOOR];
+const roomSpots = (rid: string): Spot[] => { const r = ROOMS[rid]; return [...r.spots, r.aboard ? { ...DOOR, label: r.aboard.exit } : DOOR]; };
 
 interface Here {
   rid: string; room: Room; spots: Spot[]; solids: Box[]; me: Walker; view: View; hover: Spot | null;
@@ -367,12 +535,16 @@ export function enterRoom(rid: string, view: View, onSpot: (id: string) => void,
 }
 export function exitRoom(): void { here = null; }
 
-const inBounds = (x: number, y: number): boolean => x >= 7 && x <= RW - 7 && y >= 40 && y <= RH - 4;
+const inBounds = (x: number, y: number): boolean => here?.room.walk ? here.room.walk(x, y, here.view) : x >= 7 && x <= RW - 7 && y >= 40 && y <= RH - 4;
 const solidAt = (x: number, y: number): boolean => !here || !inBounds(x, y) || here.solids.some(b => inBox(b, x, y));
 /** The spot you're standing at, close enough to look at. */
-const nearSpot = (h: Here): Spot | null => h.me.moving ? null : h.spots.find(s => Math.hypot(s.stand[0] - h.me.x, s.stand[1] - h.me.y) < 10) ?? null;
+/** The spots there right now (out at sea, there's no way ashore). */
+const spotsNow = (h: Here): Spot[] => h.spots.filter(s => !h.room.gone?.(s.id, h.view));
+/** A cut-scene is playing: nothing to click, nowhere to walk. */
+const busy = (h: Here): boolean => h.room.scene?.(h.view, performance.now()) != null;
+const nearSpot = (h: Here): Spot | null => h.me.moving ? null : spotsNow(h).find(s => Math.hypot(s.stand[0] - h.me.x, s.stand[1] - h.me.y) < 10) ?? null;
 function face(h: Here, s: Spot): void {
-  if (s === DOOR) { h.me.dir = 'down'; return; }
+  if (s.id === DOOR.id) { h.me.dir = 'down'; return; }
   const dx = s.box.x + s.box.w / 2 - h.me.x, dy = s.box.y + s.box.h / 2 - h.me.y;
   h.me.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
 }
@@ -388,7 +560,7 @@ function placement(W: number, H: number): { s: number; ox: number; oy: number } 
   return { s, ox: Math.floor((W - RW * s) / 2), oy: Math.floor((H - RH * s) / 2) };
 }
 const toRoom = (mx: number, my: number, W: number, H: number): [number, number] => { const p = placement(W, H); return [(mx - p.ox) / p.s, (my - p.oy) / p.s]; };
-const spotAt = (h: Here, x: number, y: number): Spot | null => h.spots.find(s => inBox(s.box, x, y)) ?? null;
+const spotAt = (h: Here, x: number, y: number): Spot | null => busy(h) ? null : spotsNow(h).find(s => inBox(s.box, x, y)) ?? null;
 
 /** The mouse moved over the map (in map pixels): what it's over, if anything. */
 export function roomHover(mx: number, my: number, W: number, H: number): Spot | null {
@@ -397,13 +569,13 @@ export function roomHover(mx: number, my: number, W: number, H: number): Spot | 
 }
 /** A click on the map: walk there, and look at what was clicked. */
 export function roomClick(mx: number, my: number, W: number, H: number): void {
-  if (!here) return;
+  if (!here || busy(here)) return;
   const [x, y] = toRoom(mx, my, W, H), s = spotAt(here, x, y);
   if (s) walkToSpot(here, s); else if (inBounds(x, y)) walkTo(x, y, solidAt, RW / 4, Math.ceil(RH / 4), null, here.me);
 }
 /** E: look at what you're standing at. False if there's nothing there. */
 export function roomInteract(): boolean {
-  const s = here && nearSpot(here); if (!here || !s) return false;
+  const s = here && !busy(here) && nearSpot(here); if (!here || !s) return false;
   face(here, s); here.onSpot(s.id); return true;
 }
 
@@ -411,21 +583,24 @@ let off: HTMLCanvasElement | null = null;
 /** Move and draw one frame of the room onto the map's canvas (W×H map pixels). */
 export function drawRoom(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, dt: number, keys: ReadonlySet<Dir>): void {
   const h = here; if (!h) return;
-  const was = h.me.moving;
-  // no walking while a pop-up is open
-  steer(h.me, document.body.classList.contains('modal-open') ? new Set() : keys, dt, solidAt);
+  const was = h.me.moving, scene = h.room.scene?.(h.view, t) ?? null;
+  // no walking while a pop-up is open, or during a cut-scene
+  if (scene != null) h.me.path = null;
+  steer(h.me, scene != null || document.body.classList.contains('modal-open') ? new Set() : keys, dt, solidAt);
   if (h.me.moving && !was) h.onWalk();
   if (!off) { off = document.createElement('canvas'); off.width = RW; off.height = RH; }
   const g = off.getContext('2d')!;
   const R: Rect = (x, y, w, hh, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, hh); };
   h.room.draw(R, t, h.view);
-  const near = nearSpot(h), lit = h.hover ?? near;
+  const near = scene == null ? nearSpot(h) : null, lit = scene == null ? h.hover ?? near : null;
   if (lit) { const b = lit.box, c = '#fff2a8'; R(b.x - 1, b.y - 1, b.w + 2, 1, c); R(b.x - 1, b.y + b.h, b.w + 2, 1, c); R(b.x - 1, b.y, 1, b.h, c); R(b.x + b.w, b.y, 1, b.h, c); }
   // people, back to front
   const [rx, ry] = h.room.resident;
-  const people: [number, () => void][] = [[ry + 13, () => drawResident(R, rx, ry, RESIDENTS[h.rid], t, true)], [h.me.y, () => drawPlayer(R, t, h.me)]];
+  const people: [number, () => void][] = [[ry + 13, () => drawResident(R, rx, ry, RESIDENTS[h.room.who ?? h.rid], t, true)], [h.me.y, () => drawPlayer(R, t, h.me)]];
   people.sort((a, b) => a[0] - b[0]).forEach(([, d]) => d());
   if (near) drawPrompt(R, t, h.me);
+  // a cut-scene gets the cinema bars, sliding in and back out
+  if (scene != null) { const b = Math.round(14 * Math.min(1, scene * 6, (1 - scene) * 6)); R(0, 0, RW, b, '#120c0a'); R(0, RH - b, RW, b, '#120c0a'); }
   // the room in the middle of the map, with the dark around it
   const p = placement(W, H);
   ctx.fillStyle = '#1e1614'; ctx.fillRect(0, 0, W, H);

@@ -509,7 +509,7 @@ export function initTown(): void {
     const held = heldItem();
     if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
     const door = placeAt(...mapPoint(ev));
-    if (door) { if (hover !== 'door:' + door.resident) { hover = 'door:' + door.resident; $('#hoverLabel').innerHTML = hasInterior(door.resident) ? `🚪 The door to <b>${door.place}</b>. Click to go inside.` : `<b>${door.place}</b> is open to you. Click to pop in.`; } cv.style.cursor = 'pointer'; return; }
+    if (door) { if (hover !== 'door:' + door.resident) { hover = 'door:' + door.resident; $('#hoverLabel').innerHTML = doorLabel(door, 'Click'); } cv.style.cursor = 'pointer'; return; }
     const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => {
     if (inRoom()) { roomHover(-1, -1, W, cv.height); $('#hoverLabel').innerHTML = roomLabel(null); return; }
@@ -605,7 +605,7 @@ function nearby(): Near | null {
 function nearLabel(n: Near | null): string {
   if (!n) return plotLabel(null);
   if (n.kind === 'errand') return `<b>${RESIDENTS[n.rid].name}</b> has pinned an errand to the Notice Board. Press <kbd>E</kbd> to help.`;
-  if (n.kind === 'door') return `🚪 The door to <b>${ITEMS.find(i => i.resident === n.rid)!.place}</b>. Press <kbd>E</kbd> to go inside.`;
+  if (n.kind === 'door') return doorLabel(ITEMS.find(i => i.resident === n.rid)!, 'Press <kbd>E</kbd>');
   return plotLabel(n.id).replace('Click to help!', 'Press <kbd>E</kbd> to help!').replace('click to revisit.', 'press <kbd>E</kbd> to revisit.').replace('Click the mailbox to read.', 'Press <kbd>E</kbd> to read.');
 }
 function interactWith(n: Target): void {
@@ -618,11 +618,21 @@ function interactWith(n: Target): void {
 }
 
 
-// ---------- Going inside (the five town interiors: interiors.ts, rooms.ts) ----------
-/** Places opened with a gift that you can walk into: a building with a front door. */
-const enterable = (): GiftItem[] => openDoors().filter(i => hasInterior(i.resident) && i.target?.plot && PLOTS[i.target.plot].door != null);
-/** Just outside a building's front door, on its path. */
-function frontDoor(it: GiftItem): Pt { const p = PLOTS[it.target!.plot!]; return [p.door!, p.y + p.h + 3]; }
+// ---------- Going inside (the town interiors: interiors.ts, rooms.ts) ----------
+/** Places outdoors with a room, and where on the shore you step aboard (and come back to): Brine's boat, below the pier. */
+const ABOARD: Record<string, Pt> = { juniper: [366, 250] };
+/** A place outdoors you go aboard (the boat), rather than a building with a front door. */
+const isAboard = (it: GiftItem): boolean => !!it.target?.spot && it.resident in ABOARD;
+/** Places opened with a gift that you can walk into: a building with a front door, or Brine's boat. */
+const enterable = (): GiftItem[] => openDoors().filter(i => hasInterior(i.resident) && (isAboard(i) || (!i.target?.spot && !!i.target?.plot && PLOTS[i.target.plot].door != null)));
+/** Just outside a building's front door, on its path (or on the shore by the boat). */
+function frontDoor(it: GiftItem): Pt { if (isAboard(it)) return ABOARD[it.resident]; const p = PLOTS[it.target!.plot!]; return [p.door!, p.y + p.h + 3]; }
+/** What the line under the map says about a way in: "Click to go inside", "Press E to go aboard", … */
+function doorLabel(it: GiftItem, how: string): string {
+  if (isAboard(it)) return `⛵ <b>${it.place}</b> is moored here. ${how} to go aboard.`;
+  if (hasInterior(it.resident)) return `🚪 The door to <b>${it.place}</b>. ${how} to go inside.`;
+  return `<b>${it.place}</b> is open to you. ${how} to pop in.`;
+}
 /** A click on the front door of a building you can go into. */
 function frontDoorAt(x: number, y: number): GiftItem | null {
   return enterable().find(it => { const [dx, dy] = frontDoor(it); return Math.abs(x - dx) <= 6 && y >= dy - 16 && y <= dy + 3; }) ?? null;
@@ -677,7 +687,7 @@ function glow(b: Box, t: number): void {
  *  outdoors that is part of a plot (the hives, Brine's boat, the pond). Whole buildings without a room
  *  inside (the telescope, the station) aren't clickable here, since a click there opens their challenge. */
 function placeAt(x: number, y: number): GiftItem | null {
-  return frontDoorAt(x, y) ?? openDoors().find(i => !hasInterior(i.resident) && i.target?.spot && onTarget(i.target, x, y)) ?? null;
+  return frontDoorAt(x, y) ?? openDoors().find(i => i.target?.spot && onTarget(i.target, x, y)) ?? null;
 }
 
 // ---------- New land south of the railway, opened by errands (src/content/expansions.ts) ----------

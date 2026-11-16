@@ -84,3 +84,45 @@ export const HALL = {
   ],
   program: 'main :: IO ()\nmain = do\n  putStrLn "Who goes there?"\n  name <- getLine\n  putStrLn ("Welcome to City Hall, " ++ name ++ "!")\n',
 };
+
+/** Brine's little boat, with Juniper's gold star on the rail. Talk to Brine to sail out to sea and back. Fishing comes later (ROADMAP). */
+export const BOAT = {
+  /** Talking to Brine at the pier: he casts off, and the cut-scene sails you out to sea. */
+  sailOut: [
+    '"Right then," says Brine. "Let\'s see what\'s past the lighthouse." He pulls in the gangplank and casts off.',
+    '"Fancy a trip out?" Brine doesn\'t wait for an answer. Ropes off, sail up, and away you go.',
+    'Brine casts off and the sail fills with a snap. "Mind the bucket," he says. There isn\'t a bucket.',
+  ],
+  atSea: [
+    'Out at sea. The harbour is a smudge behind you and the water goes on and on. Talk to Brine when you want to head home.',
+    'Nothing but sea and sky, and the boat creaking happily. "Say the word and we\'ll head home," says Brine.',
+  ],
+  /** Talking to Brine out at sea: he brings her about, and the cut-scene sails you home. */
+  sailHome: [
+    '"Home, then," says Brine, and brings her about. The sail swings over your head.',
+    '"The kettle\'s on at the harbour," says Brine. "Let\'s not keep it waiting."',
+  ],
+  home: [
+    'Back at the pier. Brine ties up with a knot you\'ve never seen before, and the gangplank goes down.',
+    'Home again. Brine pats the rail. "Good girl," he says to the boat.',
+  ],
+  star: [
+    "Juniper's gold star, stuck on a little crooked. Brine won't hear of straightening it.",
+    '"Best-looking boat in the harbour," says Brine. "It\'s the star. Juniper\'s class came down to wave at it."',
+    'The star catches the light off the water and throws it back, twice as bright.',
+  ],
+  wheel: [
+    'Brine lets you take the wheel. The boat is still tied up, so you steer her very carefully nowhere.',
+    'You turn the wheel a little to the left. "Aye aye," says Brine, very seriously.',
+    "The wheel is worn smooth where Brine's hands go. Yours fit there too.",
+  ],
+  rod: [
+    'A line out over the side, and a red float bobbing. Nothing bites in the harbour. "They all know me here," says Brine.',
+    'What comes back on a line is a `Maybe Fish`, Brine says: sometimes `Just` a fish, mostly `Nothing`. Out at sea, more `Just`.',
+    'The float bobs. You wait. The float bobs again. "Out at sea it\'s a different story," says Brine.',
+  ],
+  rodAtSea: [
+    'Out here the float dances on every wave. Nothing yet. "They\'re thinking about it," says Brine.',
+    'Still `Nothing`. Brine says the sea is lazy: it only hands over a fish when you really need one.',
+  ],
+};

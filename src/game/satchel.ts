@@ -71,7 +71,7 @@ function pick(rid: string): void {
 export function openDoors(): GiftItem[] {
   return ITEMS.filter(i => state.used?.[i.resident] && i.target && i.place && targetBox(i.target));
 }
-/** Visit a place opened with a gift. The five town buildings are rooms you walk into through their front
+/** Visit a place opened with a gift. The five town buildings (and Brine's boat) are rooms you walk into through their front
  *  door (interiors.ts); the other places are a small card for now (docs/gift-items-design.md section 4). */
 export function visit(rid: string): void {
   const it = ITEMS.find(i => i.resident === rid); if (!it?.place) return;

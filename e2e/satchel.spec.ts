@@ -266,3 +266,49 @@ test("City Hall: sign the visitors' book and Fern updates the holiday", async ({
   await clickRoom(page, ...DOORMAT);
   await expect(insideOf(page)).toHaveAttribute('aria-label', /map of Haskell Town/);
 });
+
+// ---------- Brine's little boat (Juniper's star) ----------
+/** Brine at ♥ 4 (his boat is at the pier), Juniper at ♥ 2 with her star used on it, standing on the shore below it. */
+const aboard = {
+  done: village, lettersRead: { brine: true, juniper: true }, used: { juniper: 1 }, player: { x: 366, y: 250 },
+  reviews: { started: 0, topics: {}, day: null, log: ['parcel', 'cargoTotal', 'parcel', 'cargoTotal', 'weather', 'nameTag'].map(errand) },
+};
+const BOAT = { brine: [134, 86], star: [112, 38], rod: [140, 28], wheel: [63, 70] } as const;
+const lookAboard = (page: Page, what: keyof typeof BOAT) => { const [x, y] = BOAT[what]; return clickRoom(page, x, y); };
+
+test("Brine's little boat: go aboard, look at the star, the wheel and the line, sail out with Brine and home again, and back ashore", async ({ page }) => {
+  await openTown(page, aboard);
+  await page.locator('#satchelBtn').click();
+  await page.locator('#satchel').getByRole('button', { name: "Brine's little boat" }).click();
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^Aboard Brine's little boat.*gangplank/);
+  await expect(say(page)).toContainText('coiling rope');
+  await expect(page.locator('#hoverLabel')).toContainText('gangplank');
+  await lookAboard(page, 'star');
+  await expect(say(page)).toContainText('star');
+  await lookAboard(page, 'wheel');
+  await expect(say(page)).toContainText('wheel');
+  await lookAboard(page, 'rod');
+  await expect(say(page)).toContainText('float');
+  // talking to Brine sails out to sea: a cut-scene, then there's no way ashore until you talk to him again
+  await lookAboard(page, 'brine');
+  await expect(say(page)).toContainText('Brine');
+  await expect(page.locator('#hoverLabel')).toContainText('Talk to Brine to sail home');
+  await expect(say(page)).toContainText(/Out at sea|head home/);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /talk to Brine to sail home/);
+  await clickRoom(page, ...DOORMAT);
+  await page.waitForTimeout(400);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^Aboard/);
+  await lookAboard(page, 'brine');
+  await expect(say(page)).toContainText(/Home|home|kettle/);
+  await expect(say(page)).toContainText(/Back at the pier|Home again/);
+  // the gangplank takes you back to the shore below the pier
+  await clickRoom(page, ...DOORMAT);
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /map of Haskell Town/);
+  const p = (await savedState(page)).player;
+  expect(Math.abs(p.x - 366)).toBeLessThan(3);
+  expect(Math.abs(p.y - 250)).toBeLessThan(3);
+  // standing there, E goes aboard again
+  await expect(page.locator('#hoverLabel')).toContainText('Press E to go aboard');
+  await page.keyboard.press('KeyE');
+  await expect(insideOf(page)).toHaveAttribute('aria-label', /^Aboard/);
+});

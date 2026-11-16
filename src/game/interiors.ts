@@ -1,16 +1,16 @@
-// The five town interiors (docs/gift-items-design.md, section 4). Once a gift has opened a place, its door
+// The town interiors (docs/gift-items-design.md, section 4): five buildings, and Brine's little boat. Once a gift has opened a place, its door
 // on the map leads inside: the map becomes the room (rooms.ts). Looking at things there either gets a line
 // in the dialogue box over the map, or opens a pop-up (the recipe, the till, the letters, …).
 // The doormat leads back to town. Every interior is optional: a cozy toy or a small Haskell bonus,
 // never a required challenge. Content is in src/content/interiors.ts.
-import { CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
+import { BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
 import { $, esc, save, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, solvedErrands, today } from './errands.ts';
 import { openExpansions } from './rewards.ts';
 import { runner } from './notebook.ts';
 import { portrait } from './town.ts';
-import { ROOMS, enterRoom, exitRoom, inRoom } from './rooms.ts';
+import { ROOMS, SAIL_MS, enterRoom, exitRoom, inRoom } from './rooms.ts';
 import type { Spot, View } from './rooms.ts';
 
 /** What a room shows: a line in the dialogue box, or a pop-up. */
@@ -58,36 +58,47 @@ export function initInteriors(): void {
 }
 
 let leaving: (() => void) | null = null;
+/** The room you're in (its view says how it looks right now, like the boat being out at sea). */
+let current: Room | null = null;
 /** Go inside `rid`'s place. `onLeave` puts you back outside its door. */
 export function enterInterior(rid: string, onLeave: () => void): void {
   const it = INTERIORS[rid]; if (!it) return;
   leaving = onLeave;
-  const sayBox = $('#roomSay');
+  const sayBox = $('#roomSay'), who = ROOMS[rid].who ?? rid;
   const room: Room = {
     say: html => {
       sayBox.innerHTML = `<div class="room-say-who"></div><p>${html}</p>`;
-      sayBox.querySelector('.room-say-who')!.append(portrait(rid, 44));
+      sayBox.querySelector('.room-say-who')!.append(portrait(who, 44));
       sayBox.hidden = false;
     },
     panel: openPop,
     view: it.view(),
   };
+  current = room;
   enterRoom(rid, room.view, id => id === 'leave' ? leaveInterior() : it.act(id, room), () => { sayBox.hidden = true; });
   $('#hoverLabel').innerHTML = roomLabel(null);
-  $('#town').setAttribute('aria-label', `Inside ${placeOf(rid)}. Walk with the arrow keys, press E to look at things, and go back out by the doormat.`);
+  describe(rid);
   room.say(esc(ITEMS.find(i => i.resident === rid)?.visit ?? ''));
 }
 /** Step back out through the door. */
 export function leaveInterior(): void {
   if (!inRoom()) return;
-  closePop(); exitRoom();
+  closePop(); exitRoom(); current = null;
   $('#roomSay').hidden = true; $('#town').setAttribute('aria-label', 'Pixel-art map of Haskell Town');
   const f = leaving; leaving = null; f?.();
 }
+/** The map's label for screen readers: where you are and how to get about. */
+function describe(rid: string): void {
+  const out = ROOMS[rid].aboard ? (current?.view.out ? 'talk to Brine to sail home' : 'go back ashore by the gangplank') : 'go back out by the doormat';
+  $('#town').setAttribute('aria-label', `${where(rid)} ${placeOf(rid)}. Walk with the arrow keys, press E to look at things, and ${out}.`);
+}
+/** "Inside" a building, "Aboard" the boat. */
+const where = (rid: string): string => ROOMS[rid]?.aboard ? 'Aboard' : 'Inside';
 /** The line under the map while you're inside: what the mouse is over, or how to get about. */
 export function roomLabel(s: Spot | null): string {
   if (s) return `<b>${esc(s.label)}</b>: click to ${s.id === 'leave' ? 'go back out' : 'look'}, or stand next to it and press <kbd>E</kbd>.`;
-  return `Inside <b>${esc(placeOf(inRoom() ?? ''))}</b>. Walk with <kbd>←↑↓→</kbd> or <kbd>WASD</kbd> (or click), and press <kbd>E</kbd> to look at things. The doormat takes you back to town.`;
+  const rid = inRoom() ?? '';
+  return `${where(rid)} <b>${esc(placeOf(rid))}</b>. Walk with <kbd>←↑↓→</kbd> or <kbd>WASD</kbd> (or click), and press <kbd>E</kbd> to look at things. ${ROOMS[rid]?.aboard?.hint(current?.view ?? {}) ?? 'The doormat takes you back to town.'}`;
 }
 const inside = (): NonNullable<typeof state.inside> => (state.inside ||= {});
 /** The next line of a list each time, so repeat visits don't feel the same. */
@@ -275,4 +286,31 @@ function visitorsBook(room: Room): void {
   };
   go.onclick = run;
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+}
+
+// ---------- Brine's little boat: talk to Brine to sail out to sea (a cut-scene) and home again ----------
+INTERIORS.juniper = {
+  view: () => ({ out: false, since: -Infinity }),
+  act: (() => {
+    const lines = { star: cycler(BOAT.star), wheel: cycler(BOAT.wheel), rod: cycler(BOAT.rod), rodAtSea: cycler(BOAT.rodAtSea) };
+    const voyage = { sailOut: cycler(BOAT.sailOut), atSea: cycler(BOAT.atSea), sailHome: cycler(BOAT.sailHome), home: cycler(BOAT.home) };
+    return (id: string, room: Room) => {
+      if (id === 'brine') { sail(room, voyage); return; }
+      const key = id === 'rod' && room.view.out ? 'rodAtSea' : id;
+      if (key in lines) room.say(codeHTML(esc(lines[key as keyof typeof lines]())));
+    };
+  })(),
+};
+/** Set sail (or head home): the boat's view changes, rooms.ts plays it as a cut-scene, and when it's over Brine says where you are. */
+function sail(room: Room, lines: Record<'sailOut' | 'atSea' | 'sailHome' | 'home', () => string>): void {
+  const v = room.view, t = performance.now();
+  if (t - Number(v.since) < SAIL_MS) return; // already under way
+  v.out = !v.out; v.since = t;
+  room.say(esc(v.out ? lines.sailOut() : lines.sailHome()));
+  $('#hoverLabel').innerHTML = roomLabel(null); describe('juniper');
+  setTimeout(() => {
+    if (current !== room) return; // went ashore some other way in the meantime
+    room.say(esc(v.out ? lines.atSea() : lines.home()));
+    $('#hoverLabel').innerHTML = roomLabel(null); describe('juniper');
+  }, SAIL_MS);
 }
