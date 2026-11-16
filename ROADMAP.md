@@ -6,7 +6,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 
 1. **Some type class features**: multi-parameter classes, default method signatures, `deriving` beyond Show/Eq/Ord (no `deriving Functor`), instances for tuples or type synonyms like `String` (FlexibleInstances).
 2. **Your own Num / Fractional / Read instances.**
-3. **Parts of Foldable and Traversable**: `sum`, `length`, `elem`, `maximum`, `foldr` etc. only take lists. Foldable instances must define `foldMap`. `traverse`/`mapM`/`sequence` only work over lists (there's no `Traversable` class). No Monoid for functions. `Min`/`Max` are Semigroups only.
+3. **Parts of Foldable and Traversable**: `sum`, `length`, `elem`, `maximum`, `foldr` etc. take any Foldable, but there's no Foldable for tuples. Foldable instances must define `foldMap`. `traverse`/`mapM`/`sequence` only work over lists (`mapM_`/`traverse_` take any Foldable) (there's no `Traversable` class). No Monoid for functions. `Min`/`Max` are Semigroups only.
 4. **Choosing an instance from the result type alone in polymorphic code**, e.g. a user method `empty :: f a` inside a `Container f =>` function. `pure`/`return`/`mempty` do work.
 5. **Ambiguous runtime picks**: inside fully polymorphic code, a user class with instances for both `Int` and `Double` may pick the wrong one. `1 <> 2` with no type is a runtime error rather than a type error.
 6. **Record patterns** like `f (Student { name = n })`.
@@ -31,7 +31,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Fuller laziness: lazy function arguments and data fields (`const 1 undefined`, lazy trees), and `seq`. Cheap, safe arguments (`acc + x`, `acc ++ [x]`, `max x m`) are still worked out straight away, so accumulators don't pile up thunks (`tests/laziness.test.ts`).
 - [x] Lazy list items and a lazy `foldr` (`length [undefined]`, `foldr (\x _ -> x) 0 [1..]`). A `foldr` that needs the whole list and overflows the stack is redone from the right end, so `foldr (+) 0 [1..100000]` still works.
 - [x] `Enum` for `Char` ranges (`['a'..'z']`, `['a', 'c' ..]`); ranges of anything else (`[True ..]`, `["a".."z"]`) are friendly type errors (`tests/ranges.test.ts`).
-- [ ] Foldable-generic `sum`, `length`, `elem` …, keeping the friendly list error messages.
+- [x] Foldable-generic `sum`, `length`, `elem`, `maximum`, `foldr`, `null`, `any`, `concatMap`, `mapM_` … (lists, `Maybe`, `Either e`, your own instances), keeping the friendly list error messages: `length 'a'` still says `Expected: [a]` with the list tip (`tests/foldable.test.ts`).
 - [ ] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15).
 - [ ] `deriving (Enum, Bounded)`, with `succ`/`pred`/`minBound`/`maxBound` (Glaschu's bakehouse).
 - [ ] Record update syntax `p { street = s }` and record patterns (Glaschu's post office).

@@ -1,7 +1,7 @@
 // Type checking: Hindley–Milner inference with type classes, and the friendly type error messages.
 import { cx } from './context.js';
 import { HsError } from './errors.js';
-import { CONS0, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, namer, parseTypeToks, pp, prune, sigScheme, skolemize, tBool, tChar, tFun, tList, tString, tTup, tUnit, tvar, unify } from './types.js';
+import { CONS0, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, namer, parseTypeToks, pp, prune, sigScheme, skolemize, tBool, tChar, tFun, tList, tString, tTup, tUnit, tvar, unify, listView } from './types.js';
 
 const ord = n => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
 const article = s => /^(a |an )/.test(s) ? s : (/^[AEIOU]/.test(s) ? 'an ' : 'a ') + '`' + s + '`';
@@ -18,7 +18,7 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
   if (e.kind === 'occurs') return new HsError(`${L}${what} would need an infinite type. That usually means a list and one of its items got mixed up — for example writing xs : xs instead of x : xs.`, 'type', ctx.line);
   if (e.kind === 'rigidcls') {
     const { c, t } = e.info;
-    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show' }[c];
+    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show', Foldable: 'list functions (like sum, length or foldr)' }[c];
     return new HsError(`${L}${what} uses ${verb} on values of type \`${t.con}\`, but the type signature doesn't promise that \`${t.con}\` supports it. Add \`${c} ${t.con} =>\` to the start of the signature, like: f :: ${c} ${t.con} => …`, 'type', ctx.line);
   }
   const VERB = { Show: 'shown (with show or print)', Eq: 'compared with ==', Ord: 'put in order (with <, max, sort …)', Read: 'read from text' };
@@ -53,7 +53,7 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
     return new HsError(`${L}${c === 'Show' ? "A function can't be shown" : "Functions can't be compared"} — ${what} is a function. Is it missing an argument?`, 'type', ctx.line);
   }
   let msg = `${L}Type mismatch in ${what}.\n  Expected: ${ppE}\n  Found:    ${ppA}`;
-  const E = prune(exp), A = prune(act);
+  const E = listView(exp), A = listView(act); // length 5 still gets the list tips
   const tips = [];
   if (!isVar(E) && !isVar(A)) {
     if (ctx.op && (E.con === 'IO') !== (A.con === 'IO')) tips.push(`A function call grabs its argument before \`${ctx.op}\` does, so putStrLn "a" ${ctx.op} b means (putStrLn "a") ${ctx.op} b. Put the whole thing in parentheses: putStrLn ("a" ${ctx.op} b).`);

@@ -27,10 +27,15 @@ function requireCls(c, t) {
   if (isVar(t)) { t.cls.add(c); return; }
   if (t.rigid) { if (entails(t.cls, c)) return; throw new UFail('rigidcls', { c, t }); }
   const k = t.con;
-  if (k === '@') { if (isVar(prune(t.args[0]))) return; throw new UFail('class', { c, t }); }
+  if (k === '@') {
+    const h = prune(t.args[0]);
+    if (isVar(h)) { if (h.cls.has('Foldable') && ['Num', 'Fractional', 'Enum'].includes(c)) throw new UFail('class', { c, t }); return; } // a container is never a number
+    throw new UFail('class', { c, t });
+  }
   const ci = cx.classes[c];
   if (ci && (ci.user || ci.hkt)) { // your own classes, and Functor / Applicative / Monad
     const inst = ci.instances[k];
+    if (!inst && c === 'Foldable' && !cx.types[k]) throw new UFail('mismatch'); // sum 5, length getLine: reported like a list mismatch
     if (!inst) throw new UFail('noinst', { c, t });
     (inst.ctx || []).forEach(([c2, i]) => { if (t.args[i]) requireCls(c2, t.args[i]); });
     return;
@@ -83,10 +88,12 @@ function pp(t, nm, prec = 0, friendly = false) {
     if (friendly && t.cls.has('Fractional')) return 'a fractional number';
     if (friendly && t.cls.has('Num')) return 'a number';
     if (friendly && (t.cls.has('Monad') || t.cls.has('Applicative') || t.cls.has('Functor')) && !nm.has(t)) return nm(t, t.cls.has('Monad') ? 'm' : 'f');
+    if (t.cls.has('Foldable') && !nm.has(t)) return nm(t, 't');
     return nm(t);
   }
   if (t.rigid) return t.con;
   const f = friendly;
+  if (t.con === '@' && friendly && isFoldableVar(t.args[0])) return '[' + pp(t.args[1], nm, 0, f) + ']'; // length 5: "Expected: [a]"
   if (t.con === '@') { const s = pp(t.args[0], nm, 2, f) + ' ' + pp(t.args[1], nm, 2, f); return prec > 1 ? '(' + s + ')' : s; }
   if (t.con === '[]' && !t.args.length) return '[]';
   if (t.con === '[]') { const e = prune(t.args[0]); return !isVar(e) && e.con === 'Char' ? 'String' : '[' + pp(e, nm, 0, f) + ']'; }
@@ -95,6 +102,9 @@ function pp(t, nm, prec = 0, friendly = false) {
   if (!t.args.length) return t.con;
   const s = t.con + ' ' + t.args.map(a => pp(a, nm, 2, f)).join(' '); return prec > 1 ? '(' + s + ')' : s;
 }
+const isFoldableVar = h => { h = prune(h); return isVar(h) && h.cls.has('Foldable'); };
+// a Foldable `t a` seen as the list [a], for error messages (beginners meet these functions on lists first)
+const listView = t => { t = prune(t); return t.con === '@' && isFoldableVar(t.args[0]) ? tList(t.args[1]) : t; };
 function ppScheme(s) {
   const nm = namer(); const body = pp(s.type, nm); const cs = [];
   const seen = new Set(); const walk = t => { t = prune(t); if (isVar(t)) { if (!seen.has(t)) { seen.add(t); [...t.cls].forEach(c => { if (!(c === 'Eq' && t.cls.has('Ord')) && !(c === 'Num' && t.cls.has('Fractional'))) cs.push(`${c} ${nm(t)}`); }); } } else t.args.forEach(walk); };
@@ -189,16 +199,16 @@ function generalize(t) {
 }
 
 const PRELUDE_TYPES = {
-  length: '[a] -> Int', sum: 'Num a => [a] -> a', product: 'Num a => [a] -> a', map: '(a -> b) -> [a] -> [b]', filter: '(a -> Bool) -> [a] -> [a]',
-  foldr: '(a -> b -> b) -> b -> [a] -> b', foldl: '(b -> a -> b) -> b -> [a] -> b', null: '[a] -> Bool', head: '[a] -> a', last: '[a] -> a',
-  tail: '[a] -> [a]', init: '[a] -> [a]', reverse: '[a] -> [a]', elem: 'Eq a => a -> [a] -> Bool', notElem: 'Eq a => a -> [a] -> Bool',
-  take: 'Int -> [a] -> [a]', drop: 'Int -> [a] -> [a]', maximum: 'Ord a => [a] -> a', minimum: 'Ord a => [a] -> a', max: 'Ord a => a -> a -> a', min: 'Ord a => a -> a -> a',
-  even: 'Int -> Bool', odd: 'Int -> Bool', not: 'Bool -> Bool', show: 'Show a => a -> String', concat: '[[a]] -> [a]', concatMap: '(a -> [b]) -> [a] -> [b]',
+  map: '(a -> b) -> [a] -> [b]', filter: '(a -> Bool) -> [a] -> [a]',
+  head: '[a] -> a', last: '[a] -> a',
+  tail: '[a] -> [a]', init: '[a] -> [a]', reverse: '[a] -> [a]', 
+  take: 'Int -> [a] -> [a]', drop: 'Int -> [a] -> [a]', max: 'Ord a => a -> a -> a', min: 'Ord a => a -> a -> a',
+  even: 'Int -> Bool', odd: 'Int -> Bool', not: 'Bool -> Bool', show: 'Show a => a -> String', 
   zip: '[a] -> [b] -> [(a, b)]', zipWith: '(a -> b -> c) -> [a] -> [b] -> [c]', replicate: 'Int -> a -> [a]', fst: '(a, b) -> a', snd: '(a, b) -> b',
   id: 'a -> a', const: 'a -> b -> a', seq: 'a -> b -> b', flip: '(a -> b -> c) -> b -> a -> c', abs: 'Num a => a -> a', negate: 'Num a => a -> a', subtract: 'Num a => a -> a -> a',
   succ: 'Int -> Int', pred: 'Int -> Int', div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
   fromIntegral: 'Num b => Int -> b', error: 'String -> a', words: 'String -> [String]', unwords: '[String] -> String', lines: 'String -> [String]', unlines: '[String] -> String',
-  all: '(a -> Bool) -> [a] -> Bool', any: '(a -> Bool) -> [a] -> Bool', and: '[Bool] -> Bool', or: '[Bool] -> Bool', otherwise: 'Bool', undefined: 'a',
+  otherwise: 'Bool', undefined: 'a',
   putStrLn: 'String -> IO ()', putStr: 'String -> IO ()', print: 'Show a => a -> IO ()', getLine: 'IO String', return: 'a -> IO a', pure: 'a -> IO a',
   mapM_: '(a -> IO b) -> [a] -> IO ()', forM_: '[a] -> (a -> IO b) -> IO ()', mapM: '(a -> IO b) -> [a] -> IO [b]', when: 'Bool -> IO () -> IO ()',
   read: 'Read a => String -> a', compare: 'Ord a => a -> a -> Ordering',
@@ -265,10 +275,18 @@ for (const [name, d] of Object.entries(LIB_CLASS_DEFS)) {
     ci.schemes[m] = TENV0[m] = libScheme(str, name, d.param, (d.extra || {})[m]);
   }
 }
+// Prelude functions that go through any Foldable (lists, Maybe, Either e, your own instances), not only lists
+const FOLDABLE_TYPES = {
+  length: 't a -> Int', null: 't a -> Bool', sum: 'Num a => t a -> a', product: 'Num a => t a -> a',
+  elem: 'Eq a => a -> t a -> Bool', notElem: 'Eq a => a -> t a -> Bool', maximum: 'Ord a => t a -> a', minimum: 'Ord a => t a -> a',
+  foldr: '(a -> b -> b) -> b -> t a -> b', foldl: '(b -> a -> b) -> b -> t a -> b', concat: 't [a] -> [a]', concatMap: '(a -> [b]) -> t a -> [b]',
+  all: '(a -> Bool) -> t a -> Bool', any: '(a -> Bool) -> t a -> Bool', and: 't Bool -> Bool', or: 't Bool -> Bool',
+};
+for (const [m, str] of Object.entries(FOLDABLE_TYPES)) { const [c, body] = str.includes('=>') ? str.split(' => ') : [null, str]; TENV0[m] = typeFromString(`${c ? `(Foldable t, ${c})` : 'Foldable t'} => ${body}`); }
 // Prelude helpers that now work for any monad (or applicative), not only IO
 const LIB_MONAD_TYPES = {
-  mapM_: ['Monad', '(a -> m b) -> [a] -> m ()'], forM_: ['Monad', '[a] -> (a -> m b) -> m ()'], mapM: ['Monad', '(a -> m b) -> [a] -> m [b]'], forM: ['Monad', '[a] -> (a -> m b) -> m [b]'],
-  sequence: ['Monad', '[m a] -> m [a]'], sequence_: ['Monad', '[m a] -> m ()'], traverse: ['Applicative', '(a -> m b) -> [a] -> m [b]'], traverse_: ['Applicative', '(a -> m b) -> [a] -> m ()'],
+  mapM_: ['Monad', 'Foldable t => (a -> m b) -> t a -> m ()'], forM_: ['Monad', 'Foldable t => t a -> (a -> m b) -> m ()'], mapM: ['Monad', '(a -> m b) -> [a] -> m [b]'], forM: ['Monad', '[a] -> (a -> m b) -> m [b]'],
+  sequence: ['Monad', '[m a] -> m [a]'], sequence_: ['Monad', 'Foldable t => t (m a) -> m ()'], traverse: ['Applicative', '(a -> m b) -> [a] -> m [b]'], traverse_: ['Applicative', 'Foldable t => (a -> m b) -> t a -> m ()'],
   when: ['Applicative', 'Bool -> m () -> m ()'], unless: ['Applicative', 'Bool -> m () -> m ()'], replicateM: ['Applicative', 'Int -> m a -> m [a]'], replicateM_: ['Applicative', 'Int -> m a -> m ()'],
   foldM: ['Monad', '(b -> a -> m b) -> b -> [a] -> m b'],
 };
@@ -277,4 +295,4 @@ for (const [m, [cls, str]] of Object.entries(LIB_MONAD_TYPES)) TENV0[m] = libSch
 const LIB_DATA_SRC = ['Sum', 'Product', 'Min', 'Max', 'Any', 'All'].map(n => `newtype ${n}${['Any', 'All'].includes(n) ? '' : ' a'} = ${n} { get${n} :: ${['Any', 'All'].includes(n) ? 'Bool' : 'a'} } deriving (Show, Eq, Ord)`).join('\n');
 
 
-export { CONS0, LIB_CLASSES, LIB_DATA_SRC, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, methodSchemeAst, namer, parseTypeToks, pp, ppScheme, prune, sigScheme, skolemize, tBool, tChar, tDouble, tFun, tList, tString, tTup, tUnit, tvar, unify };
+export { CONS0, LIB_CLASSES, listView, LIB_DATA_SRC, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, methodSchemeAst, namer, parseTypeToks, pp, ppScheme, prune, sigScheme, skolemize, tBool, tChar, tDouble, tFun, tList, tString, tTup, tUnit, tvar, unify };

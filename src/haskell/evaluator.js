@@ -298,6 +298,7 @@ function foldMapG(tKey, mT, f, c) {
   let r;
   if (key === '[]') r = spine(c).reduceRight((acc, x) => sappend(apply(f, x), acc), MEMPTY);
   else if (key === 'Maybe') r = c.con === 'Just' ? apply(f, c.args[0]) : isPure(c) ? apply(f, c.pureOf) : MEMPTY;
+  else if (key === 'Either') r = c.con === 'Right' ? apply(f, c.args[0]) : isPure(c) ? apply(f, c.pureOf) : MEMPTY;
   else if (key) r = apply(apply(implFor(ci, key, 'foldMap'), f), c);
   else throw new HsError(`\`foldMap\` doesn't know how to go through ${showShort(c)}${c && c.con && cx.cons[c.con] ? ` — there's no \`instance Foldable ${cx.cons[c.con].typeName}\`` : ''}.`);
   return r === MEMPTY && mT ? memptyT(mT) : r;
@@ -306,6 +307,7 @@ function toListG(tKey, c) {
   const key = tKey || valueKey(c, cx.classes.Foldable);
   if (key === '[]' || c === MEMPTY) return toList(c);
   if (key === 'Maybe') return c.con === 'Just' ? [c.args[0]] : [];
+  if (key === 'Either') return c.con === 'Right' ? [c.args[0]] : []; // a Left holds no items: length (Left 1) is 0
   const own = libMethodOf('Foldable', key, 'toList'); if (own) return apply(own, c);
   const r = foldMapG(key, null, mkFn(x => [x]), c); return r === MEMPTY ? [] : r;
 }
@@ -328,7 +330,7 @@ function toListG(tKey, c) {
   both('Max', (a, b) => cmp(f0(a), f0(b)) >= 0 ? a : b, undefined, [['Ord', 0]], [], { libType: true });
   both('Any', (a, b) => nt('Any', f0(a) || f0(b)), nt('Any', false), [], [], { libType: true });
   both('All', (a, b) => nt('All', f0(a) && f0(b)), nt('All', true), [], [], { libType: true });
-  F['[]'] = inst('[]', {}); F.Maybe = inst('Maybe', {});
+  F['[]'] = inst('[]', {}); F.Maybe = inst('Maybe', {}); F.Either = inst('Either', {});
 }
 // is v the mempty of its type? (used when comparing with the MEMPTY placeholder)
 function isEmptyish(v) {
@@ -345,7 +347,7 @@ function isEmptyish(v) {
 }
 // Applicative / Monad helpers for any monad: the type checker tells us which one (key), or we look at the values.
 function traverseG(key, f, xs, keep = true) {
-  const l = toList(xs, 'traverse'); const done = out => keep ? out : UNIT;
+  const l = toList(foldArg(xs, 'traverse'), 'traverse'); const done = out => keep ? out : UNIT;
   if (!l.length) return pureG(key, done([]));
   if (key === 'IO') return io(rt => done(l.map(x => runAction(apply(f, x), rt))));
   const first = apply(f, l[0]);
@@ -562,6 +564,30 @@ for (const k in LIBFN) PRELUDE[k] = LIBFN[k](null);
   const oldIdx = BINOPS['!!'];
   BINOPS['!!'] = prim(2, (xs, n) => { if (!isL(xs)) return apply(apply(oldIdx, xs), n); if (n < 0) throw new HsError('!! needs an index of 0 or more.'); const h = takeN(xs, n + 1); if (h.length <= n) throw new HsError(`Index ${n} is too large — the list only has ${h.length} items (counting from 0).`); return h[n]; });
   BINOPS['++'] = prim(2, append);
+}
+// ---- Foldable ----
+// sum, length, elem, foldr … take any Foldable: anything that isn't already a list (Maybe, Either, your own
+// instance) is first turned into one with toList, and then the list code runs as before. Lists, strings and
+// lazy lists go straight through, so endless lists keep working and nothing is copied.
+function foldArg(v, name) {
+  v = force(v);
+  if (isListV(v) || v === MEMPTY) return v;
+  if (isPure(v)) return [v.pureOf];
+  if (v && v.con && valueKey(v, cx.classes.Foldable)) return toListG(null, v);
+  throw new HsError(`${name} expects a list, but was given ${showShort(v)}.`);
+}
+{
+  const FOLDABLE_ARG = { length: [1, 0], null: [1, 0], sum: [1, 0], product: [1, 0], maximum: [1, 0], minimum: [1, 0], and: [1, 0], or: [1, 0], concat: [1, 0],
+    elem: [2, 1], notElem: [2, 1], all: [2, 1], any: [2, 1], concatMap: [2, 1], foldr: [3, 2], foldl: [3, 2] }; // name: [arity, which argument is the container]
+  for (const [name, [arity, pos]] of Object.entries(FOLDABLE_ARG)) {
+    const listFn = PRELUDE[name];
+    const needsItem = name === 'maximum' || name === 'minimum';
+    PRELUDE[name] = prim(arity, (...a) => {
+      const c = force(a[pos]); a[pos] = foldArg(c, name);
+      if (needsItem && a[pos] !== c && !spine(a[pos]).length) throw new HsError(`${name} was given ${showShort(c)}, which holds nothing — there's nothing there to take!`);
+      return a.reduce((f, x) => apply(f, x), listFn);
+    }, name, name === 'foldr' ? [1] : undefined);
+  }
 }
 // endless lists
 def('repeat', 1, x => { const c = new LCons(x, null); c.done = true; c.t = c; return c; }, [0]);
