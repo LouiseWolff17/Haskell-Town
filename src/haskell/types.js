@@ -225,7 +225,7 @@ const PRELUDE_TYPES = {
   fromMaybe: 'a -> Maybe a -> a', catMaybes: '[Maybe a] -> [a]', mapMaybe: '(a -> Maybe b) -> [a] -> [b]', isJust: 'Maybe a -> Bool', isNothing: 'Maybe a -> Bool', either: '(a -> c) -> (b -> c) -> Either a b -> c', lookup: 'Eq a => a -> [(a, b)] -> Maybe b', maybe: 'b -> (a -> b) -> Maybe a -> b', sortOn: 'Ord b => (a -> b) -> [a] -> [a]', sort: 'Ord a => [a] -> [a]',
   toUpper: 'Char -> Char', toLower: 'Char -> Char', isDigit: 'Char -> Bool', isAlpha: 'Char -> Bool', isUpper: 'Char -> Bool', isLower: 'Char -> Bool', isSpace: 'Char -> Bool',
   ord: 'Char -> Int', chr: 'Int -> Char', digitToInt: 'Char -> Int', replicateM_: 'Int -> IO a -> IO ()',
-  repeat: 'a -> [a]', cycle: '[a] -> [a]', iterate: '(a -> a) -> a -> [a]', scanl: '(b -> a -> b) -> b -> [a] -> [b]', scanl1: '(a -> a -> a) -> [a] -> [a]',
+  repeat: 'a -> [a]', cycle: '[a] -> [a]', iterate: '(a -> a) -> a -> [a]', unfoldr: '(b -> Maybe (a, b)) -> b -> [a]', scanl: '(b -> a -> b) -> b -> [a] -> [b]', scanl1: '(a -> a -> a) -> [a] -> [a]',
   takeWhile: '(a -> Bool) -> [a] -> [a]', dropWhile: '(a -> Bool) -> [a] -> [a]', splitAt: 'Int -> [a] -> ([a], [a])',
 };
 const OP_TYPES = {

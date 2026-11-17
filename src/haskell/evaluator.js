@@ -722,6 +722,16 @@ function foldArg(v, name) {
 def('repeat', 1, x => { const c = new LCons(x, null); c.done = true; c.t = c; return c; }, [0]);
 def('cycle', 1, xs => { if (!takeN(xs, 1).length) throw new HsError('cycle was given an empty list — there is nothing to repeat!'); return lazyGen(function* () { for (;;) yield* iter(xs); }); });
 def('iterate', 2, (f, x) => { const go = v => new LCons(v, () => go(apply(f, v))); return go(x); });
+// unfoldr f s: f gives Just (item, next seed) to go on or Nothing to stop. Lazy, so an unfold that never stops works with take.
+def('unfoldr', 2, (f, s) => {
+  const go = seed => {
+    const m = asMaybe(apply(f, seed));
+    if (m.con === 'Nothing') return [];
+    const p = force(m.args[0]);
+    return new LCons(p.tuple[0], () => go(p.tuple[1]));
+  };
+  return go(s);
+}, [1]);
 def('scanl', 3, (f, z, xs) => lazyGen(function* () { let acc = z; yield acc; for (const x of iter(xs)) { acc = apply(apply(f, acc), x); yield acc; } }));
 def('scanl1', 2, (f, xs) => lazyGen(function* () { let first = true, acc; for (const x of iter(xs)) { acc = first ? x : apply(apply(f, acc), x); first = false; yield acc; } }));
 PRELUDE.otherwise = true;
