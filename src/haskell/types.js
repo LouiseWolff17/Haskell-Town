@@ -49,7 +49,7 @@ function requireCls(c, t) {
     if (c === 'Bounded' && k === '(,)') { t.args.forEach(a => requireCls(c, a)); return; }
     if (!cx.types[k]) throw new UFail('class', { c, t });
   }
-  if (c === 'Read') { if (['Int', 'Double', 'Bool'].includes(k)) return; throw new UFail('class', { c, t }); }
+  if (c === 'Read') { if (['Int', 'Double', 'Bool', 'Char'].includes(k)) return; if (k === '[]' || k === '(,)') { t.args.forEach(a => requireCls(c, a)); return; } throw new UFail('class', { c, t }); }
   const ut = cx.types[k];
   if (ut) {
     const ui = ci && ci.instances[k];
@@ -219,7 +219,7 @@ const PRELUDE_TYPES = {
   div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
   fromIntegral: 'Num b => Int -> b', error: 'String -> a', words: 'String -> [String]', unwords: '[String] -> String', lines: 'String -> [String]', unlines: '[String] -> String',
   otherwise: 'Bool', undefined: 'a',
-  putStrLn: 'String -> IO ()', putStr: 'String -> IO ()', print: 'Show a => a -> IO ()', getLine: 'IO String', return: 'a -> IO a', pure: 'a -> IO a',
+  putStrLn: 'String -> IO ()', putStr: 'String -> IO ()', print: 'Show a => a -> IO ()', getLine: 'IO String', readLn: 'Read a => IO a', return: 'a -> IO a', pure: 'a -> IO a',
   mapM_: '(a -> IO b) -> [a] -> IO ()', forM_: '[a] -> (a -> IO b) -> IO ()', mapM: '(a -> IO b) -> [a] -> IO [b]', when: 'Bool -> IO () -> IO ()',
   read: 'Read a => String -> a', compare: 'Ord a => a -> a -> Ordering',
   fromMaybe: 'a -> Maybe a -> a', catMaybes: '[Maybe a] -> [a]', mapMaybe: '(a -> Maybe b) -> [a] -> [b]', isJust: 'Maybe a -> Bool', isNothing: 'Maybe a -> Bool', either: '(a -> c) -> (b -> c) -> Either a b -> c', lookup: 'Eq a => a -> [(a, b)] -> Maybe b', maybe: 'b -> (a -> b) -> Maybe a -> b', sortOn: 'Ord b => (a -> b) -> [a] -> [a]', sort: 'Ord a => [a] -> [a]',

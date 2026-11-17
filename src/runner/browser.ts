@@ -14,14 +14,20 @@ const KINDS: DiagnosticKind[] = ['parse', 'scope', 'type', 'runtime', 'loop', 'i
 
 function diagnostic(e: unknown): Diagnostic {
   if (e instanceof HS.HsError) {
-    return { kind: KINDS.includes(e.kind) ? e.kind : 'runtime', message: e.message, line: e.line ?? null };
+    // 'input' (ran out of input lines) is a runtime error; RunOutput.waiting says the rest
+    return { kind: (KINDS as string[]).includes(e.kind) ? e.kind as DiagnosticKind : 'runtime', message: e.message, line: e.line ?? null };
   }
   const message = e instanceof Error ? e.message : String(e);
   return { kind: 'internal', message: 'Something went wrong inside the interpreter: ' + message, line: null };
 }
 
-function output(r: { out: string; error?: unknown }): RunOutput {
-  return r.error ? { out: r.out, error: diagnostic(r.error) } : { out: r.out };
+function output(r: { out: string; reads?: number[]; error?: unknown; waiting?: boolean }): RunOutput {
+  return {
+    out: r.out,
+    ...(r.reads && r.reads.length ? { reads: r.reads } : {}),
+    ...(r.error ? { error: diagnostic(r.error) } : {}),
+    ...(r.waiting ? { waiting: true as const } : {}),
+  };
 }
 
 function summarize(prog: Program): ProgramSummary {

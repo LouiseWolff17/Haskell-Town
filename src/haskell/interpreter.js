@@ -214,13 +214,16 @@ function evalIn(env, src) {
     return evalE(e, env);
   });
 }
-const newRt = input => ({ out: [], size: 0, pos: 0, input: (input || '').split('\n').filter((l, i, a) => i < a.length - 1 || l !== '') });
-// Run an IO action value with the given input text. Returns { out, error? } — output so far is kept even on errors.
+const newRt = input => ({ out: [], size: 0, pos: 0, reads: [], waiting: false, input: (input || '').split('\n').filter((l, i, a) => i < a.length - 1 || l !== '') });
+// Run an IO action value with the given input text. Returns { out, reads, error?, waiting? }: output so far is kept even
+// on errors, reads[i] is how much had been printed when input line i was read, and waiting means the program wanted
+// another line after the last one (error then says so, for callers that can't ask for more).
 function runIO(action, input, ctx) {
   if (ctx) setCtx(ctx);
   const rt = newRt(input);
-  try { guard(() => runAction(action, rt)); return { out: rt.out.join('') }; }
-  catch (e) { return { out: rt.out.join(''), error: e }; }
+  const done = e => ({ out: rt.out.join(''), reads: rt.reads, ...(e ? { error: e } : {}), ...(e && rt.waiting && e.kind === 'input' ? { waiting: true } : {}) });
+  try { guard(() => runAction(action, rt)); return done(); }
+  catch (e) { return done(e); }
 }
 function runMain(prog, input) {
   setCtx(prog.ctx);

@@ -231,12 +231,34 @@ function runAction(a, rt) {
   return force(a.io(rt));
 }
 function emit(rt, s) { rt.out.push(s); rt.size += s.length; if (rt.size > 50000) throw new HsError('Your program printed a LOT of output, so Haskell Town stopped it. Is there a loop that never ends?'); }
+// read: Int, Double and Bool, and Char, String, lists and tuples of readable things. With no known type, a whole number.
+const readName = t => { t = t ? prune(t) : null; if (!t || isVar(t)) return 'Int'; if (t.con === '[]') return prune(t.args[0]).con === 'Char' ? 'String' : `[${readName(t.args[0])}]`; if (t.con === '(,)') return `(${t.args.map(readName).join(', ')})`; return t.con; };
+const A_NAME = { Int: 'whole number (Int)', Double: 'Double', Char: 'Char', String: 'String' };
 function readT(s, t) {
-  const tt = t ? prune(t) : null; const k = !tt || isVar(tt) ? 'Int' : tt.con; const str = s.trim();
-  if (k === 'Bool') { if (str === 'True' || str === 'False') return str === 'True'; throw new HsError(`read: "${s}" isn't True or False.`); }
-  if (k === 'Double') { if (/^-?\d+(\.\d+)?$/.test(str)) return parseFloat(str); throw new HsError(`read: "${s}" isn't a valid Double.`); }
-  if (/^-?\d+$/.test(str)) return parseInt(str, 10);
-  throw new HsError(`read: "${s}" isn't a valid whole number (Int).`);
+  const top = t ? prune(t) : null, k = !top || isVar(top) ? 'Int' : top.con, str = s.trim();
+  if (k === 'Bool' && str !== 'True' && str !== 'False') throw new HsError(`read: "${s}" isn't True or False.`);
+  const bad = () => { const n = readName(top); return new HsError(`read: "${s}" isn't a valid ${A_NAME[n] || n}.`); };
+  let i = 0;
+  const ws = () => { while (i < str.length && /\s/.test(str[i])) i++; };
+  const eat = c => { ws(); if (str[i] !== c) throw bad(); i++; };
+  const esc = () => { const c = str[++i]; i++; const m = { n: '\n', t: '\t', '\\': '\\', '"': '"', "'": "'" }[c]; if (m === undefined) throw bad(); return m; };
+  const val = ty => {
+    // A type still unknown here (e.g. let x = read s, used later as a Double) reads any number. (t a) reads like a list.
+    ty = ty ? prune(ty) : null; const c = !ty || isVar(ty) ? 'num' : ty.con === '@' ? '[]' : ty.con; ws();
+    if (c === '[]' && ty.con === '@') ty = { con: '[]', args: [ty.args[1]] };
+    if (c === 'Int' || c === 'Double' || c === 'num') {
+      const m = (c === 'Int' ? /^-?\d+/ : /^-?\d+(\.\d+)?([eE][-+]?\d+)?/).exec(str.slice(i)); if (!m) throw bad();
+      i += m[0].length; return Number(m[0]);
+    }
+    if (c === 'Bool') { for (const w of ['True', 'False']) if (str.startsWith(w, i) && !/\w/.test(str[i + w.length] || '')) { i += w.length; return w === 'True'; } throw bad(); }
+    if (c === 'Char') { eat("'"); const ch = str[i] === '\\' ? esc() : str[i++]; if (ch === undefined) throw bad(); eat("'"); return ch; }
+    if (c === '[]' && prune(ty.args[0]).con === 'Char') { eat('"'); let out = ''; while (i < str.length && str[i] !== '"') out += str[i] === '\\' ? esc() : str[i++]; eat('"'); return out; }
+    if (c === '[]') { eat('['); const out = []; ws(); if (str[i] === ']') { i++; return out; } for (;;) { out.push(val(ty.args[0])); ws(); if (str[i] === ']') { i++; return out; } eat(','); } }
+    if (c === '(,)') { eat('('); const out = ty.args.map((a, j) => { if (j) eat(','); return val(a); }); eat(')'); return { tuple: out }; }
+    throw bad();
+  };
+  const v = val(top); ws(); if (i < str.length) throw bad();
+  return v;
 }
 // Functor / Applicative / Monad for the built-in types, falling back to the instances you write for your own types.
 // A bare { pureOf: x } is what pure/return make when the type isn't known yet; it fits into any of them.
@@ -634,7 +656,13 @@ def('and', 1, xs => toList(xs).every(x => x)); def('or', 1, xs => toList(xs).som
 def('putStrLn', 1, s => io(rt => { emit(rt, strOf(s) + '\n'); return UNIT; }));
 def('putStr', 1, s => io(rt => { emit(rt, strOf(s)); return UNIT; }));
 def('print', 1, v => io(rt => { emit(rt, show(v) + '\n'); return UNIT; }));
-PRELUDE.getLine = io(rt => { if (rt.pos >= rt.input.length) throw new HsError('getLine found no more input — the program asked for more lines than were typed in.'); return rt.input[rt.pos++]; });
+// Reading a line when none are left stops the run with kind 'input': runIO reports it as waiting, so the player can type the next line and run again.
+function nextLine(rt, who) {
+  if (rt.pos >= rt.input.length) { rt.waiting = true; throw new HsError(`${who} found no more input — the program asked for more lines than were typed in.`, 'input'); }
+  rt.reads.push(rt.size); return rt.input[rt.pos++];
+}
+PRELUDE.getLine = io(rt => nextLine(rt, 'getLine'));
+PRELUDE.readLn = io(rt => readT(nextLine(rt, 'readLn'), null));
 def('return', 1, x => PURE(x)); def('pure', 1, x => PURE(x)); def('fmap', 2, (f, m) => fmapG(f, m));
 def('compare', 2, (a, b) => { const c = cmp(a, b); return { con: c < 0 ? 'LT' : c > 0 ? 'GT' : 'EQ', args: [] }; });
 const asMaybe = m => (m = force(m), isPure(m)) ? { con: 'Just', args: [m.pureOf] } : m;
@@ -756,6 +784,7 @@ function directed(name, t) {
   if (name === 'show') return mkFn(v => showT(v, a), 'show');
   if (name === 'print') return mkFn(v => io(rt => { emit(rt, showT(v, a) + '\n'); return UNIT; }), 'print');
   if (name === 'toEnum') return prim(1, i => toEnumT(r, i), 'toEnum');
+  if (name === 'readLn') return io(rt => readT(nextLine(rt, 'readLn'), f.args[0]));
   return mkFn(s => readT(strOf(s), r), 'read');
 }
 function opFunction(op, env) { return BINOPS[op] || lookup(env, op); }

@@ -39,7 +39,7 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
   if (e.kind === 'class' && (!actWasVar || e.info.c === 'Read') && ['Show', 'Eq', 'Ord', 'Read'].includes(e.info.c) && prune(e.info.t).con !== '->') {
     const { c, t } = e.info; const T = pp(t, namer());
     if (prune(t).con === 'IO') return new HsError(`${L}${what} is an IO action, and IO actions can't be ${VERB[c]}. Run it inside a do block instead, like: x <- action`, 'type', ctx.line);
-    if (c === 'Read') return new HsError(`${L}\`read\` can turn text into an Int, a Double or a Bool, but here it would need to make ${article(T)}.`, 'type', ctx.line);
+    if (c === 'Read') return new HsError(`${L}\`read\` and \`readLn\` can turn text into an Int, a Double, a Bool, a Char or a String (and lists and tuples of those), but here it would need to make ${article(T)}.`, 'type', ctx.line);
     return new HsError(`${L}values of type \`${T}\` can't be ${VERB[c]}.`, 'type', ctx.line);
   }
   if (e.kind === 'class' && e.info.c === 'Enum') {
@@ -93,7 +93,7 @@ function conScheme(name, line) {
   if (!CONS0[name]) throw new HsError(`${line ? `Line ${line}: ` : ''}I don't know a constructor called \`${name}\`. (Names starting with a capital letter are types or constructors; function names start lowercase.)`, 'scope', line);
   return CONS0[name];
 }
-const TYPE_DIRECTED = ['show', 'print', 'read', 'minBound', 'maxBound', 'toEnum'];
+const TYPE_DIRECTED = ['show', 'print', 'read', 'readLn', 'minBound', 'maxBound', 'toEnum'];
 const litType = lt => lt === 'int' ? tvar(['Num']) : lt === 'float' ? tvar(['Fractional']) : lt === 'str' ? tString() : tChar;
 function arrowCount(t) { let n = 0; t = prune(t); while (!isVar(t) && t.con === '->') { n++; t = prune(t.args[1]); } return n; }
 

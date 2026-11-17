@@ -235,6 +235,11 @@ pre.code{margin:6px 0 0; background:var(--code-bg); color:var(--code-ink); font-
 pre.console{margin:4px 0 8px; background:#1f1c22; color:#e9f2e1; font-family:var(--mono); font-size:13.5px; line-height:1.5; padding:10px 12px; border-radius:9px; white-space:pre-wrap; max-height:260px; overflow:auto}
 pre.console.result{color:#f2cc8f; font-weight:600}
 .console .dim{color:#8a8290; font-style:italic}
+.console .typed{color:#f2cc8f}
+.console .stdin-live{font:inherit; color:#f2cc8f; background:transparent; border:0; border-bottom:1px dashed #8a8290; outline:none; padding:0; width:min(24ch, 60%); caret-color:#f2cc8f}
+.console .stdin-live:focus{border-bottom-color:#f2cc8f}
+.ws-wait{font-size:13px; color:var(--ink2); margin:0 0 8px}
+.dim-h{font-weight:400; color:var(--ink2); font-size:.85em}
 .ws-h{font-family:var(--mono); font-size:13px; font-weight:600; color:var(--ink2); margin:4px 0}
 .ws-type{font-size:13px; color:var(--ink2)} .ws-type code{background:none; font-weight:700; color:var(--ink)}
 .typeok.ws{margin-bottom:0}

@@ -380,6 +380,12 @@ async function checkErrand(): Promise<void> {
 const wsExpr = () => $<HTMLInputElement>('#wsExpr');
 const wsInput = () => $<HTMLTextAreaElement>('#wsInput');
 const WORKSHOP: WorkshopSession = { id: 'workshop', workshop: true };
+// Lines typed into the console while a program waits for input. They go after the lines typed ahead in the input box,
+// and a fresh run clears them. Each line runs the program again from the start with that line added (see RunOutput.waiting).
+let liveLines: string[] = [];
+const aheadLines = (): string[] => { const l = (wsInput()?.value ?? '').split('\n'); if (l[l.length - 1] === '') l.pop(); return l; };
+const allLines = (): string[] => [...aheadLines(), ...liveLines];
+const inputText = (): string => allLines().map(l => l + '\n').join('');
 function openWorkshop(): void {
   current = WORKSHOP; $('#modeNote').textContent = '';
   $('.nb').classList.remove('is-errand'); $('.nb').classList.add('is-workshop'); $('#runBtn').textContent = '▶ Check & run';
@@ -392,7 +398,7 @@ function openWorkshop(): void {
   $('#problem').querySelectorAll<HTMLElement>('.ex').forEach(b => b.onclick = () => loadExample(Number(b.dataset.i)));
   $('#assistant').innerHTML = `<h3 style="margin-top:0">Try an expression</h3>
     <div class="evalrow"><span class="prompt">λ&gt;</span><input id="wsExpr" spellcheck="false" autocomplete="off" placeholder="e.g. map area [Circle 1]"><button class="btn-soft" id="wsEval">Evaluate</button></div>
-    <h3>Input for getLine</h3><textarea id="wsInput" spellcheck="false" rows="3" placeholder="One line per getLine"></textarea>
+    <h3>Input typed ahead <span class="dim-h">(optional)</span></h3><textarea id="wsInput" spellcheck="false" rows="3" placeholder="One line per getLine or readLn. Or leave it empty: main waits for you to type each line."></textarea>
     <button class="btn-soft" id="wsMain" style="margin-top:8px">▶ Run main</button>
     <p class="no-penalty">Everything here is checked for types first, just like in the challenges.</p>`;
   const ex = wsExpr(), inp = wsInput();
@@ -420,23 +426,50 @@ function typesBlock(summary: ProgramSummary): string {
     ...names.map(n => `${/^[a-z_]/.test(n) ? n : '(' + n + ')'} :: ${summary.types[n]}`)];
   return lines.length ? `<div class="typeok ws"><span>✓ Types check out</span></div>${codeBlock(lines.join('\n'))}` : `<div class="typeok ws"><span>✓ Nothing to check yet</span></div>`;
 }
-function outputBlock(r: RunOutput): string {
-  return `<div class="ws-h">Output</div><pre class="console">${esc(r.out || '')}${r.out ? '' : '<span class="dim">(nothing printed)</span>'}</pre>${r.error ? noteCard('The program stopped', r.error.message) : ''}`;
+// What the program printed, with each line it read shown where it read it, as in a terminal.
+function transcript(r: RunOutput, lines: string[]): string {
+  let html = '', at = 0;
+  (r.reads || []).forEach((pos, i) => { html += esc(r.out.slice(at, pos)) + `<span class="typed">${esc(lines[i] ?? '')}</span>\n`; at = pos; });
+  return html + esc(r.out.slice(at));
 }
-async function doWorkshopRun(forceMain = false): Promise<void> {
-  const r = await runner.runMain(ed.value, document.querySelector<HTMLTextAreaElement>('#wsInput')?.value ?? '');
+// live: a waiting program gets a line to type into, instead of the "no more input" error.
+function outputBlock(r: RunOutput, lines: string[] = [], live = false): string {
+  const waiting = live && r.waiting, empty = !r.out && !r.reads?.length;
+  const end = waiting ? '<input class="stdin-live" spellcheck="false" autocomplete="off" aria-label="The next line for your program">' : empty ? '<span class="dim">(nothing printed)</span>' : '';
+  return `<div class="ws-h">Output</div><pre class="console">${transcript(r, lines)}${end}</pre>`
+    + (waiting ? `<p class="ws-wait">Your program is waiting for a line (<code>getLine</code> or <code>readLn</code>). Type it in the console and press Enter.</p>`
+      : r.error ? noteCard('The program stopped', r.error.message) : '');
+}
+// Hook up the console's input line, if the program is waiting: Enter runs it again with the line added.
+function wireStdin(again: () => Promise<void>): void {
+  const box = $('#results').querySelector<HTMLInputElement>('.stdin-live');
+  const con = box?.closest<HTMLElement>('pre.console'); if (con) con.scrollTop = con.scrollHeight;
+  if (!box) return;
+  box.focus();
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || box.disabled) return;
+    e.preventDefault(); liveLines.push(box.value); box.disabled = true; whileRunning(again);
+  });
+}
+async function doWorkshopRun(forceMain = false, more = false): Promise<void> {
+  if (!more) liveLines = [];
+  const lines = allLines();
+  const r = await runner.runMain(ed.value, inputText());
   if (current !== WORKSHOP) return;
   if (r.status === 'stopped') { $('#results').innerHTML = stoppedCard(r); return; }
   if (r.status === 'compile-error') { showCompileError(r.error); return; }
   markLine(null);
   let html = typesBlock(r.summary);
-  if (r.status === 'ran') html += outputBlock(r.output);
+  if (r.status === 'ran') html += outputBlock(r.output, lines, true);
   else if (forceMain) html += noteCard('No main yet', 'There is no `main` to run. Write one, like:  main = putStrLn "Hello!"');
   $('#results').innerHTML = html;
+  wireStdin(() => doWorkshopRun(forceMain, true));
 }
-async function doWorkshopEval(): Promise<void> {
+async function doWorkshopEval(more = false): Promise<void> {
   const expr = wsExpr().value.trim(); if (!expr) return doWorkshopRun();
-  const r = await runner.evaluate(ed.value, expr, wsInput().value);
+  if (!more) liveLines = [];
+  const lines = allLines();
+  const r = await runner.evaluate(ed.value, expr, inputText());
   if (current !== WORKSHOP) return;
   if (r.status === 'stopped') { $('#results').innerHTML = `<div class="ws-h">λ&gt; ${esc(expr)}</div>` + stoppedCard(r); return; }
   if (r.status === 'compile-error') { showCompileError(r.error); return; }
@@ -445,10 +478,11 @@ async function doWorkshopEval(): Promise<void> {
   let html = `<div class="ws-h">λ&gt; ${esc(expr)}</div>`;
   if (r.runtimeError) html += noteCard('It stopped while running', r.runtimeError.message);
   else {
-    html += r.output ? outputBlock(r.output) : `<pre class="console result">${esc(r.value)}</pre>`;
+    html += r.output ? outputBlock(r.output, lines, true) : `<pre class="console result">${esc(r.value)}</pre>`;
     html += `<div class="ws-type">it :: <code>${esc(r.type)}</code></div>`;
   }
   $('#results').innerHTML = html + `<details class="ws-defs"><summary>Types in your file</summary>${typesBlock(r.summary)}</details>`;
+  wireStdin(() => doWorkshopEval(true));
 }
 
 export function initNotebook(): void {
