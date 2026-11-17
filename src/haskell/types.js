@@ -4,6 +4,7 @@ import { BUILTIN_CLASSES, cx } from './context.js';
 import { HsError } from './errors.js';
 import { tokenize } from './lexer.js';
 import { FIX, TypeParser } from './parser.js';
+import { resolveNames } from './modules.js';
 
 const BUILTIN_ENUM = { Enum: ['Int', 'Double', 'Char', 'Bool', 'Ordering', '()'], Bounded: ['Int', 'Char', 'Bool', 'Ordering', '()'] };
 const BUILTIN_SUPERS = { Ord: ['Eq'], Fractional: ['Num'], Applicative: ['Functor'], Monad: ['Applicative'] };
@@ -56,7 +57,7 @@ function requireCls(c, t) {
     if (!ut.deriving.has(c) && !(c === 'Eq' && (ut.deriving.has('Ord') || (cx.classes.Ord && cx.classes.Ord.instances[k])))) throw new UFail('deriving', { c, t });
     t.args.forEach(a => requireCls(c, a)); return;
   }
-  if (['Int', 'Double', 'Bool', 'Char', '()', '[]', '(,)', 'Maybe', 'Either', 'Ordering'].includes(k)) { t.args.forEach(a => requireCls(c, a)); return; }
+  if (['Int', 'Double', 'Bool', 'Char', '()', '[]', '(,)', 'Maybe', 'Either', 'Ordering', 'Map', 'Set'].includes(k)) { t.args.forEach(a => requireCls(c, a)); return; }
   throw new UFail('class', { c, t });
 }
 function bindV(v, t) {
@@ -119,9 +120,10 @@ function ppScheme(s) {
 }
 
 // ---- type syntax ----
-const TYPE_ARITY = { Int: 0, Integer: 0, Double: 0, Float: 0, Bool: 0, Char: 0, String: 0, Maybe: 1, Either: 2, IO: 1, Ordering: 0 };
+const TYPE_ARITY = { Int: 0, Integer: 0, Double: 0, Float: 0, Bool: 0, Char: 0, String: 0, Maybe: 1, Either: 2, IO: 1, Ordering: 0, Map: 2, Set: 1 }; // Map and Set come from Data.Map and Data.Set
 const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read', 'Enum', 'Bounded'];
 function parseTypeToks(toks) {
+  resolveNames(toks, cx.aliases); // Map.Map k v, M.Map k v → Map k v (already done for the program's own signatures)
   const line = toks[0] ? toks[0].line : null;
   const fail = m => { throw new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line); };
   let i = 0; const is = (t, v) => toks[i] && toks[i].t === t && (v === undefined || toks[i].v === v);
@@ -160,7 +162,7 @@ function buildType(ast, getVar, line, depth = 0) {
     return TC(ast.name, ...args);
   }
   const ar = TYPE_ARITY[ast.name];
-  if (ar === undefined) throw new HsError(`${L}I don't know a type called \`${ast.name}\`. Types you can use: Int, Double, Bool, Char, String, lists like [Int], Maybe, Either, IO — or one you define yourself with \`data\`.`, 'type', line);
+  if (ar === undefined) throw new HsError(`${L}I don't know a type called \`${ast.name}\`. Types you can use: Int, Double, Bool, Char, String, lists like [Int], Maybe, Either, IO, Map, Set — or one you define yourself with \`data\`.`, 'type', line);
   if (args.length !== ar) throw new HsError(`${line ? `Line ${line}: ` : ''}\`${ast.name}\` ${ar ? `needs ${ar} type argument${ar > 1 ? 's' : ''}, like ${ast.name} Int` : 'takes no type arguments'}.`, 'type', line);
   if (ast.name === 'Integer') return tInt; if (ast.name === 'Float') return tDouble;
   if (ast.name === 'String') return tString();
@@ -248,6 +250,7 @@ const CLASS_DEFS = {
 for (const [name, d] of Object.entries(CLASS_DEFS)) {
   const sigs = {}; for (const [m, str] of Object.entries(d.sigs)) { const { ctx, ast } = parseTypeToks(tokenize(str)); sigs[m] = { ast, mctx: ctx }; }
   const instances = {}; if (d.hkt) ['Maybe', '[]', 'Either', 'IO'].forEach(k => { instances[k] = { key: k, builtin: true, methods: {}, ctx: [] }; });
+  if (name === 'Functor') instances.Map = { key: 'Map', builtin: true, methods: {}, ctx: [] }; // fmap changes a Map's values
   BUILTIN_CLASSES[name] = { name, param: d.param, hkt: !!d.hkt, user: false, supers: BUILTIN_SUPERS[name] || [], sigs, required: d.required, instances, defaults: {}, dispatch: {}, arity: {} };
 }
 for (const [n, d] of Object.entries(CLASS_DEFS)) if (d.hkt) for (const [m, str] of Object.entries(d.sigs)) { const sc = methodScheme(str, n, d.param); if (OP_TYPES[m] || FIX[m]) OPS0[m] = sc; else TENV0[m] = sc; }

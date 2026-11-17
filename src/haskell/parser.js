@@ -3,6 +3,7 @@
 import { cx } from './context.js';
 import { HsError } from './errors.js';
 import { tokenize } from './lexer.js';
+import { readImports, resolveNames } from './modules.js';
 
 const FIX = { '$': [0,'r'], '>>=': [1,'l'], '>>': [1,'l'], '<$>': [4,'l'], '<*>': [4,'l'], '<>': [6,'r'], '||': [2,'r'], '&&': [3,'r'], '==': [4,'n'], '/=': [4,'n'], '<': [4,'n'], '<=': [4,'n'], '>': [4,'n'], '>=': [4,'n'],
   ':': [5,'r'], '++': [5,'r'], '+': [6,'l'], '-': [6,'l'], '*': [7,'l'], '/': [7,'l'], '^': [8,'r'], '.': [9,'r'], '!!': [9,'l'] };
@@ -481,10 +482,12 @@ function parseProgram(src) {
       else if (o.t === 'id') cx.fixity[o.v] = [n.v, t.v === 'infixl' ? 'l' : t.v === 'infixr' ? 'r' : 'n'];
     }
   }
+  const { aliases, unqualified } = readImports(toks);
+  cx.aliases = aliases; resolveNames(toks, aliases); // M.insert → Map.insert
   const ranges = []; let s = 0;
   for (let i = 0; i < toks.length; i++) if (i > s && toks[i].bol && toks[i].col === 0) { ranges.push([s, i]); s = i; }
   if (toks.length > s) ranges.push([s, toks.length]);
-  return new Parser(toks).parseDecls(ranges, true);
+  return Object.assign(new Parser(toks).parseDecls(ranges, true), { aliases, imports: unqualified });
 }
 class TypeParser {
   constructor(toks, i = 0, end = toks.length) { this.toks = toks; this.i = i; this.end = end; this.line = toks[i] ? toks[i].line : (toks[0] ? toks[0].line : null); }
@@ -512,7 +515,7 @@ class TypeParser {
   }
 }
 function parseExprSrc(src) {
-  const p = new Parser(tokenize(src)); const e = p.parseExpr();
+  const p = new Parser(resolveNames(tokenize(src), cx.aliases)); const e = p.parseExpr();
   if (p.peek()) p.fail(`I didn't expect ${p.desc(p.peek())} here.`);
   return e;
 }

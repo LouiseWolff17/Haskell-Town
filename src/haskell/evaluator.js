@@ -2,7 +2,7 @@
 // Values of your own types are interpreted through the data context in cx (constructors, instances).
 import { BUILTIN_CLASSES, cx } from './context.js';
 import { HsError } from './errors.js';
-import { TC, buildType, isVar, prune, tDouble, tvar } from './types.js';
+import { TC, buildType, isVar, prune, tDouble, tList, tTup, tvar } from './types.js';
 
 // ================= Values & runtime =================
 const UNIT = { tuple: [] };
@@ -43,6 +43,14 @@ const prim = (arity, f, name, lazy) => {
   return go([]);
 };
 
+// ---- Data.Map and Data.Set (Glaschu's library and map room) ----
+// A Map keeps its keys sorted (compared like compare does, so your own Ord instances work), with the values
+// in a second array at the same positions. Keys are worked out; values may still be thunks. Neither array is
+// ever changed once made: every Map function builds new ones (src/haskell/containers.js).
+class HMap { constructor(ks, vs) { this.ks = ks; this.vs = vs; } }
+class HSet { constructor(ks) { this.ks = ks; } }
+const mapPairs = m => m.ks.map((k, i) => ({ tuple: [k, m.vs[i]] }));
+
 // the instance a user wrote for a value's type, if any (used for Show / Eq / Ord and Functor … on your own types)
 function userInst(cls, v) {
   if (!v || !v.con) return null; const info = cx.cons[v.con]; if (!info) return null;
@@ -61,6 +69,8 @@ function show(v) {
   if (typeof v === 'boolean') return v ? 'True' : 'False';
   if (isL(v)) return show(toList(v));
   if (Array.isArray(v)) return '[' + v.map(show).join(',') + ']';
+  if (v instanceof HMap) return 'fromList ' + show(mapPairs(v));
+  if (v instanceof HSet) return 'fromList ' + show(v.ks);
   if (v && v.tuple) return '(' + v.tuple.map(show).join(',') + ')';
   if (v && v.con) {
     const info = cx.cons[v.con];
@@ -87,6 +97,8 @@ function showT(v, t) {
     case '(,)': return '(' + v.tuple.map((x, i) => showT(x, t.args[i])).join(',') + ')';
     case 'Maybe': return v.con === 'Just' ? 'Just ' + paren(showT(v.args[0], t.args[0])) : 'Nothing';
     case 'Either': return v.con + ' ' + paren(showT(v.args[0], t.args[v.con === 'Left' ? 0 : 1]));
+    case 'Map': if (v instanceof HMap) return 'fromList ' + showT(mapPairs(v), tList(tTup([t.args[0], t.args[1]]))); break;
+    case 'Set': if (v instanceof HSet) return 'fromList ' + showT(v.ks, tList(t.args[0])); break; // fromList "abc", as GHC shows a Set Char
   }
   if (cx.types[t.con] && v && v.con && cx.cons[v.con]) {
     const info = cx.cons[v.con]; const m = {}; info.params.forEach((p, i) => { m[p] = t.args[i]; });
@@ -165,6 +177,8 @@ function deepEq(a, b) {
     if (ui) { if (instFn(ui, '==')) return apply(apply(instFn(ui, '=='), a), b); if (instFn(ui, '/=')) return !apply(apply(instFn(ui, '/='), a), b); }
   }
   if (typeof a === 'string' && typeof b === 'string') return a === b;
+  if ((a instanceof HMap && b instanceof HMap) || (a instanceof HSet && b instanceof HSet))
+    return a.ks.length === b.ks.length && a.ks.every((k, i) => deepEq(k, b.ks[i]) && (!a.vs || deepEq(a.vs[i], b.vs[i])));
   if (isListV(a) && isListV(b)) {
     const x = spine(a), y = spine(b); return x.length === y.length && x.every((e, i) => deepEq(e, y[i]));
   }
@@ -182,6 +196,8 @@ function cmp(a, b) {
   if (typeof a === 'number' && typeof b === 'number') return a < b ? -1 : a > b ? 1 : 0;
   if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
   if (typeof a === 'boolean' && typeof b === 'boolean') return (a ? 1 : 0) - (b ? 1 : 0);
+  if (a instanceof HMap && b instanceof HMap) return cmp(mapPairs(a), mapPairs(b)); // like comparing their toAscLists
+  if (a instanceof HSet && b instanceof HSet) return cmp(a.ks, b.ks);
   if (isListV(a) && isListV(b)) {
     const x = spine(a), y = spine(b);
     for (let i = 0; i < Math.min(x.length, y.length); i++) { const c = cmp(x[i], y[i]); if (c) return c; }
@@ -239,6 +255,7 @@ function fmapG(f, m) {
   if (isL(m)) return lazyGen(function* () { for (const x of iter(m)) yield apply(f, x); });
   if (isListy(m)) return fromLike(m, spine(m).map(x => apply(f, x)));
   if (m && m.io) return io(rt => apply(f, runAction(m, rt)));
+  if (m instanceof HMap) return new HMap(m.ks, m.vs.map(x => later(f, x)));
   if (m && m.con === 'Just') return Just(later(f, m.args[0])); if (m && m.con === 'Nothing') return m;
   if (m && m.con === 'Right') return Right(later(f, m.args[0])); if (m && m.con === 'Left') return m;
   return apply(apply(userHkt('Functor', m, 'fmap'), f), m);
@@ -299,11 +316,14 @@ function foldMapG(tKey, mT, f, c) {
   if (key === '[]') r = spine(c).reduceRight((acc, x) => sappend(apply(f, x), acc), MEMPTY);
   else if (key === 'Maybe') r = c.con === 'Just' ? apply(f, c.args[0]) : isPure(c) ? apply(f, c.pureOf) : MEMPTY;
   else if (key === 'Either') r = c.con === 'Right' ? apply(f, c.args[0]) : isPure(c) ? apply(f, c.pureOf) : MEMPTY;
+  else if (key === 'Map' || key === 'Set') r = toListG(key, c).reduceRight((acc, x) => sappend(apply(f, x), acc), MEMPTY);
   else if (key) r = apply(apply(implFor(ci, key, 'foldMap'), f), c);
   else throw new HsError(`\`foldMap\` doesn't know how to go through ${showShort(c)}${c && c.con && cx.cons[c.con] ? ` — there's no \`instance Foldable ${cx.cons[c.con].typeName}\`` : ''}.`);
   return r === MEMPTY && mT ? memptyT(mT) : r;
 }
 function toListG(tKey, c) {
+  c = force(c);
+  if (c instanceof HMap) return c.vs; if (c instanceof HSet) return c.ks; // a Map's items are its values, as in GHC
   const key = tKey || valueKey(c, cx.classes.Foldable);
   if (key === '[]' || c === MEMPTY) return toList(c);
   if (key === 'Maybe') return c.con === 'Just' ? [c.args[0]] : [];
@@ -330,14 +350,15 @@ function toListG(tKey, c) {
   both('Max', (a, b) => cmp(f0(a), f0(b)) >= 0 ? a : b, undefined, [['Ord', 0]], [], { libType: true });
   both('Any', (a, b) => nt('Any', f0(a) || f0(b)), nt('Any', false), [], [], { libType: true });
   both('All', (a, b) => nt('All', f0(a) && f0(b)), nt('All', true), [], [], { libType: true });
-  F['[]'] = inst('[]', {}); F.Maybe = inst('Maybe', {}); F.Either = inst('Either', {});
-  const T = BUILTIN_CLASSES.Traversable.instances; T['[]'] = inst('[]', {}); T.Maybe = inst('Maybe', {}); T.Either = inst('Either', {});
+  F['[]'] = inst('[]', {}); F.Maybe = inst('Maybe', {}); F.Either = inst('Either', {}); F.Map = inst('Map', {}); F.Set = inst('Set', {});
+  const T = BUILTIN_CLASSES.Traversable.instances; T['[]'] = inst('[]', {}); T.Maybe = inst('Maybe', {}); T.Either = inst('Either', {}); T.Map = inst('Map', {});
 }
 // is v the mempty of its type? (used when comparing with the MEMPTY placeholder)
 function isEmptyish(v) {
   v = force(v);
   if (v === MEMPTY) return true;
   if (isListV(v)) return takeN(v, 1).length === 0;
+  if (v instanceof HMap || v instanceof HSet) return v.ks.length === 0;
   if (v && v.tuple) return v.tuple.every(isEmptyish);
   if (v && v.con) {
     if (v.con === 'Nothing' || v.con === 'EQ') return true;
@@ -378,6 +399,7 @@ function traverseT(tKey, fKey, f, c, name) {
   const key = tKey || (isListV(c) || c === MEMPTY ? '[]' : valueKey(c, cx.classes.Traversable));
   if (key === '[]') return traverseG(fKey, f, c);
   if (isPure(c)) return fmapG(mkFn(y => PURE(y)), apply(f, c.pureOf)); // pure x, container not known yet
+  if (c instanceof HMap) return fmapG(mkFn(vs => new HMap(c.ks, [...toList(vs)])), traverseG(fKey, f, c.vs)); // the values, keys kept
   if (key === 'Maybe' || key === 'Either') {
     if (c.con === 'Nothing' || c.con === 'Left') return pureG(fKey, c); // nothing inside: traverse f Nothing is pure Nothing
     return fmapG(mkFn(y => ({ con: c.con, args: [y] })), apply(f, c.args[0]));
@@ -438,6 +460,7 @@ function valueKey(v, ci) {
   else if (typeof v === 'string') { if (v.length === 1) c.push('Char'); c.push('[]'); }
   else if (Array.isArray(v) || isL(v)) c.push('[]');
   else if (v && v.tuple) c.push(v.tuple.length ? '(,)' : '()');
+  else if (v instanceof HMap) c.push('Map'); else if (v instanceof HSet) c.push('Set');
   else if (v && v.con) c.push(cx.cons[v.con] ? cx.cons[v.con].typeName : ({ Nothing: 'Maybe', Just: 'Maybe', Left: 'Either', Right: 'Either', LT: 'Ordering', EQ: 'Ordering', GT: 'Ordering' }[v.con]));
   else if (v && v.io) c.push('IO');
   return c.find(k => ci.instances[k]) || null;
@@ -677,6 +700,7 @@ for (const k in LIBFN) PRELUDE[k] = LIBFN[k](null);
 function foldArg(v, name) {
   v = force(v);
   if (isListV(v) || v === MEMPTY) return v;
+  if (v instanceof HMap) return v.vs; if (v instanceof HSet) return v.ks;
   if (isPure(v)) return [v.pureOf];
   if (v && v.con && valueKey(v, cx.classes.Foldable)) return toListG(null, v);
   throw new HsError(`${name} expects a list, but was given ${showShort(v)}.`);
@@ -923,4 +947,4 @@ function evalRest(n, env) {
   throw new HsError('Something unexpected happened while running your code.');
 }
 
-export { PRELUDE, bindGroup, deepEq, evalE, lookup, makeFunction, prim, runAction, show, showT };
+export { HMap, HSet, PRELUDE, apply, bindGroup, cmp, deepEq, evalE, force, isPure, lookup, makeFunction, mkFn, prim, runAction, show, showShort, showT, toList };

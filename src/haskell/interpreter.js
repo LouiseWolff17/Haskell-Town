@@ -10,6 +10,8 @@ import { parseExprSrc, parseProgram } from './parser.js';
 import { CONS0, LIB_CLASSES, LIB_DATA_SRC, TC, TENV0, TYPE_ARITY, UFail, buildType, instantiate, methodSchemeAst, parseTypeToks, ppScheme, skolemize, tFun, tvar, unify } from './types.js';
 import { freeVars, infer, inferBinds, inferEquations } from './typecheck.js';
 import { PRELUDE, bindGroup, deepEq, evalE, lookup, makeFunction, prim, runAction, show, showT } from './evaluator.js';
+import './containers.js'; // Data.Map and Data.Set
+import { DEFAULT_ALIASES, MODULE_TYPE } from './modules.js';
 
 let LIB_DATAS = null; // the library newtypes (Sum, Product, …), parsed once
 const hide = (o, k, v) => Object.defineProperty(o, k, { value: v, enumerable: false, configurable: true });
@@ -24,12 +26,13 @@ function guard(f) {
     throw e;
   }
 }
+const fromLib = n => MODULE_TYPE[n] ? ` (the one from Data.${n})` : '';
 // Parse + type-check + prepare to run. Throws HsError (kind 'parse' | 'scope' | 'type') like a compiler would.
 function buildDataCtx(datas, syns) {
   const ctx = { types: {}, syn: {}, cons: {}, fields: {} }; setCtx(ctx);
   const builtin = n => TYPE_ARITY[n] !== undefined;
   for (const s of syns) {
-    if (builtin(s.name) || ctx.syn[s.name]) throw new HsError(`Line ${s.line}: there's already a type called \`${s.name}\`.`, 'type', s.line);
+    if (builtin(s.name) || ctx.syn[s.name]) throw new HsError(`Line ${s.line}: there's already a type called \`${s.name}\`${fromLib(s.name)}.`, 'type', s.line);
     ctx.syn[s.name] = s;
   }
   // the library's newtypes (Sum, Product, …) — skipped if your own program uses the same type, constructor or field names
@@ -38,7 +41,7 @@ function buildDataCtx(datas, syns) {
   syns.forEach(s => mine.add(s.name));
   const libs = LIB_DATAS.filter(d => !mine.has(d.name) && !d.cons.some(c => mine.has(c.name) || (c.fieldNames || []).some(f => mine.has(f))));
   for (const d of [...libs, ...datas]) {
-    if (builtin(d.name) || ctx.types[d.name] || ctx.syn[d.name]) throw new HsError(`Line ${d.line}: there's already a type called \`${d.name}\`. Pick a different name.`, 'type', d.line);
+    if (builtin(d.name) || ctx.types[d.name] || ctx.syn[d.name]) throw new HsError(`Line ${d.line}: there's already a type called \`${d.name}\`${fromLib(d.name)}. Pick a different name.`, 'type', d.line);
     ctx.types[d.name] = { params: d.params, deriving: new Set(d.deriving), line: d.line, lib: libs.includes(d), cons: d.cons.map(c => c.name) };
     for (const c of ['Enum', 'Bounded']) if (d.deriving.includes(c)) { // Glaschu's bakehouse: only plain lists of names, like data Day = Mon | Tue | …
       const big = d.cons.find(k => k.fields.length);
@@ -166,6 +169,7 @@ function compile(src) {
     cx.level = 0; setCtx(EMPTY_CTX);
     const prog = parseProgram(src);
     const ctx = buildDataCtx(prog.datas, prog.syns);
+    ctx.aliases = cx.aliases = prog.aliases; // so expressions run against this program read M.insert the same way
     buildClassCtx(prog.classes, prog.instances, ctx);
     const base = Object.create(TENV0); const baseEnv = Object.create(PRELUDE);
     for (const ci of Object.values(ctx.classes)) if (ci.user && !ci.lib) for (const m in ci.schemes) {
@@ -176,6 +180,13 @@ function compile(src) {
       if (ctx.fields[f].lib && prog.defs[f]) continue; // your own getSum wins over the library's
       if (prog.defs[f]) throw new HsError(`Line ${prog.defs[f][0].line}: \`${f}\` is already the name of a record field, so it can't also be a function.`, 'type', prog.defs[f][0].line);
       base[f] = ctx.fields[f].scheme; baseEnv[f] = accessor(f);
+    }
+    // import Data.Map (Map, fromList, (!)): those names can be used without Map. in front
+    for (const { mod, prefix, names, line } of prog.imports) for (const n of names) {
+      if (MODULE_TYPE[prefix] === n) continue; // the type itself is always there
+      const full = `${prefix}.${n}`;
+      if (!(full in TENV0)) throw new HsError(`Line ${line}: ${mod} doesn't have anything called \`${n}\`.`, 'scope', line);
+      base[n] = TENV0[full]; baseEnv[n] = PRELUDE[full];
     }
     const tenv = inferBinds(prog.defs, prog.sigs, base);
     checkClassBodies(ctx, tenv);
@@ -192,11 +203,11 @@ function compile(src) {
     return { env, baseEnv, tenv, types, sigs: prog.sigs, defs: prog.defs, datas: prog.datas, ctx, uses, recursive, classes, instances };
   });
 }
-function typeOf(tenv, src) { return guard(() => { cx.level = 0; if (tenv && tenv.__ctx) setCtx(tenv.__ctx); return infer(parseExprSrc(src), tenv || TENV0); }); }
+function typeOf(tenv, src) { return guard(() => { cx.level = 0; if (tenv && tenv.__ctx) setCtx(tenv.__ctx); else cx.aliases = DEFAULT_ALIASES; return infer(parseExprSrc(src), tenv || TENV0); }); }
 // Evaluate an expression. It is type-checked first (so show/print/read know their types).
 function evalIn(env, src) {
   return guard(() => {
-    if (env.__ctx) setCtx(env.__ctx);
+    if (env.__ctx) setCtx(env.__ctx); else cx.aliases = DEFAULT_ALIASES;
     const e = parseExprSrc(src);
     const tenv = env === PRELUDE ? TENV0 : env.__tenv;
     if (tenv) { cx.level = 0; infer(e, tenv); }

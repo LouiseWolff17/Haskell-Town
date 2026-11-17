@@ -46,6 +46,21 @@ function tokenize(src) {
     if (/[A-Za-z_]/.test(c)) {
       while (/[A-Za-z0-9_']/.test(src[i] || '')) i++;
       const w = src.slice(s, i);
+      // a qualified name, with no spaces around the dot: Map.lookup, Data.Map.Map, Map.! (but not [Mon..Fri])
+      if (/[A-Z]/.test(w[0]) && src[i] === '.') {
+        const quals = []; let last = w;
+        while (/[A-Z]/.test(last[0]) && src[i] === '.') {
+          const n = src[i + 1] || ''; let j = i + 1;
+          if (/[A-Za-z_]/.test(n)) while (/[A-Za-z0-9_']/.test(src[j] || '')) j++;
+          else if (OPCHARS.includes(n) && n !== '.') while (j < src.length && OPCHARS.includes(src[j])) j++;
+          else break;
+          quals.push(last); last = src.slice(i + 1, j); i = j;
+        }
+        if (quals.length) {
+          const t = /[A-Z]/.test(last[0]) ? 'con' : /[a-z_]/.test(last[0]) ? 'id' : 'op';
+          push(t, src.slice(s, i), s, { q: quals.join('.'), base: last }); continue;
+        }
+      }
       push(KW.has(w) ? 'kw' : /[A-Z]/.test(w[0]) ? 'con' : 'id', w, s); continue;
     }
     if ('()[],`;{}'.includes(c)) { i++; push('p', c, s); continue; }

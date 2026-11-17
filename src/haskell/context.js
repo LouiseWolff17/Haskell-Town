@@ -2,6 +2,8 @@
 // Everything that used to be a module-level `let` lives here, so the stages can be separate modules.
 // The fields are only ever written by the stages below — nothing outside src/haskell touches them.
 
+import { DEFAULT_ALIASES } from './modules.js';
+
 // Built-in classes (Eq, Ord, Show, Functor …, and the Market's Semigroup / Monoid / Foldable).
 // types.js fills in their method types, evaluator.js their built-in instances.
 export const BUILTIN_CLASSES = {};
@@ -22,7 +24,8 @@ export const cx = {
   cons: {},                 // constructors: name → { scheme, arity, index, fieldNames, typeName, … }
   fields: {},               // record fields
   classes: BUILTIN_CLASSES, // classes and their instances
+  aliases: DEFAULT_ALIASES, // module names and aliases (Map, M …) → the prefix their names get (see modules.js)
 };
 
 // Switch to a program's data context (made by compile, kept on prog.ctx / env.__ctx).
-export function setCtx(c) { cx.types = c.types; cx.syn = c.syn; cx.cons = c.cons; cx.fields = c.fields; cx.classes = c.classes || BUILTIN_CLASSES; }
+export function setCtx(c) { cx.types = c.types; cx.syn = c.syn; cx.cons = c.cons; cx.fields = c.fields; cx.classes = c.classes || BUILTIN_CLASSES; cx.aliases = c.aliases || DEFAULT_ALIASES; }
