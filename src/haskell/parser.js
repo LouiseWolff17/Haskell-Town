@@ -259,10 +259,11 @@ class Parser {
     if (k.t === 'char') return { k: 'lit', v: k.v, lt: 'char', line };
     let node;
     if (k.t === 'id') node = k.v === '___' ? { k: 'hole', line } : { k: 'var', name: k.v, line };
-    else if (k.t === 'con') return this.is('p', '{') ? this.parseRecordBody({ k: 'rec', con: k.v, line }) : { k: 'con', name: k.v, line };
+    else if (k.t === 'con') { if (!this.is('p', '{')) return { k: 'con', name: k.v, line }; node = this.parseRecordBody({ k: 'rec', con: k.v, line }); }
     else if (k.v === '[') return Object.assign(this.parseListTail(), { line });
     else node = Object.assign(this.parseParenTail(line), { line });
-    return this.is('p', '{') ? this.parseRecordBody({ k: 'upd', e: node, line }) : node;
+    while (this.is('p', '{')) node = this.parseRecordBody({ k: 'upd', e: node, line }); // r { a = 1 } { b = 2 }
+    return node;
   }
   parseRecordBody(node) {
     this.next(); node.fields = [];
@@ -428,7 +429,7 @@ class Parser {
     if (k.t === 'num') return { p: 'lit', v: k.v, lt: k.float ? 'float' : 'int' };
     if (k.t === 'str') return { p: 'lit', v: k.v, lt: 'str' };
     if (k.t === 'char') return { p: 'lit', v: k.v, lt: 'char' };
-    if (k.t === 'con') return { p: 'con', name: k.v, args: [] };
+    if (k.t === 'con') return this.is('p', '{') ? this.parseRecordPat(k.v) : { p: 'con', name: k.v, args: [] };
     if (k.v === '[') {
       if (this.is('p', ']')) { this.next(); return { p: 'list', items: [] }; }
       const items = [this.parsePat()]; while (this.is('p', ',')) { this.next(); items.push(this.parsePat()); }
@@ -442,9 +443,23 @@ class Parser {
     }
     this.pos--; this.fail(`I expected a pattern here, but found ${this.desc(k)}.`);
   }
+  // Letter { to = t, stamp = s }, Letter { to } (a pun: to = to), or Letter {} (any Letter at all)
+  parseRecordPat(name) {
+    this.next(); const fields = [];
+    while (!this.is('p', '}')) {
+      if (this.is('op', '..')) this.fail(`{..} (RecordWildCards) isn't supported. Name the fields you need instead, like ${name} { field = x }.`);
+      const f = this.expect('id', undefined, `Inside a pattern's { … }, write field = pattern, like name = n. I found ${this.desc(this.peek())}.`);
+      if (this.is('op', '=')) { this.next(); fields.push([f.v, this.parsePat(), f.line]); }
+      else fields.push([f.v, { p: 'var', name: f.v }, f.line]);
+      if (this.is('p', ',')) this.next(); else break;
+    }
+    this.expect('p', '}', `I expected a , or a closing } in this pattern, but found ${this.desc(this.peek())}.`);
+    return { p: 'rec', name, fields };
+  }
   parsePat() {
     let left;
-    if (this.is('con')) { const c = this.next(); const args = []; while (this.canPatAtom()) args.push(this.parsePatAtom()); left = { p: 'con', name: c.v, args }; }
+    if (this.is('con') && this.is('p', '{', 1)) left = this.parsePatAtom();
+    else if (this.is('con')) { const c = this.next(); const args = []; while (this.canPatAtom()) args.push(this.parsePatAtom()); left = { p: 'con', name: c.v, args }; }
     else if (this.is('op', '-') && this.is('num', undefined, 1)) { this.next(); const n = this.next(); left = { p: 'lit', v: -n.v, lt: n.float ? 'float' : 'int' }; }
     else left = this.parsePatAtom();
     if (this.is('op', ':')) { this.next(); return { p: 'cons', h: left, t: this.parsePat() }; }

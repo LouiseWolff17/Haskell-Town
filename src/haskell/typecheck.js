@@ -108,6 +108,21 @@ function inferPat(p, binds, line) {
       for (const a of p.args) { t = prune(t); unifyAt(t.args[0], inferPat(a, binds, line), { line, what: `this ${p.name} pattern` }); t = t.args[1]; }
       return t;
     }
+    case 'rec': { // Letter { to = t }: only the named fields are looked at, in any order
+      const L = line ? `Line ${line}: ` : '';
+      let t = instantiate(conScheme(p.name, line)); const info = cx.cons[p.name];
+      if (p.fields.length && !(info && info.fieldNames)) throw new HsError(`${L}\`${p.name}\` wasn't defined with named fields, so its pattern can't use { … }. Match its values in order instead, like (${p.name} x y).`, 'type', line);
+      const fts = []; t = prune(t);
+      while (!isVar(t) && t.con === '->') { fts.push(t.args[0]); t = prune(t.args[1]); }
+      const seen = new Set();
+      for (const [f, q, fl] of p.fields) {
+        const at = fl || line, i = info.fieldNames.indexOf(f);
+        if (i < 0) throw new HsError(`${at ? `Line ${at}: ` : ''}\`${p.name}\` has no field called \`${f}\`. Its fields are: ${info.fieldNames.join(', ')}.`, 'type', at);
+        if (seen.has(f)) throw new HsError(`${at ? `Line ${at}: ` : ''}the field \`${f}\` appears twice in this pattern.`, 'type', at);
+        seen.add(f); unifyAt(fts[i], inferPat(q, binds, at), { line: at, what: `the field \`${f}\` in this ${p.name} pattern` });
+      }
+      return t;
+    }
     case 'tuple': return p.items.length ? tTup(p.items.map(x => inferPat(x, binds, line))) : tUnit;
     case 'list': { const el = tvar(); p.items.forEach(x => unifyAt(el, inferPat(x, binds, line), { line, what: 'this list pattern — every item must have the same type' })); return tList(el); }
     case 'cons': { const h = inferPat(p.h, binds, line); const t = inferPat(p.t, binds, line); unifyAt(tList(h), t, { line, what: 'the tail of this (x:xs) pattern' }); return t; }
@@ -180,14 +195,29 @@ function infer(n, env) {
       return t;
     }
     case 'upd': {
-      const st = infer(n.e, env);
+      const st = infer(n.e, env); const seen = [];
+      const fieldsOf = tn => Object.values(cx.cons).filter(c => c.typeName === tn).flatMap(c => c.fieldNames || []);
       for (const [f, e, line] of n.fields) {
         const fi = cx.fields[f];
         if (!fi) throw new HsError(`Line ${line}: I don't know a record field called \`${f}\`.`, 'scope', line);
+        if (seen.includes(f)) throw new HsError(`Line ${line}: the field \`${f}\` is given twice in this update.`, 'type', line);
+        const first = seen.length && cx.fields[seen[0]];
+        if (first && first.typeName !== fi.typeName) throw new HsError(`Line ${line}: \`${seen[0]}\` is a field of ${first.typeName} but \`${f}\` is a field of ${fi.typeName}, so they can't be changed in the same { … }.`, 'type', line);
+        seen.push(f);
+        const have = prune(st);
+        if (!isVar(have) && have.con !== fi.typeName && cx.types[have.con]) {
+          const own = [...new Set(fieldsOf(have.con))];
+          const a = /^[AEIOU]/.test(have.con) ? 'an' : 'a';
+          throw new HsError(`Line ${line}: ${a} ${have.con} has no field called \`${f}\` (that's a field of ${fi.typeName}).${own.length ? ` ${a === 'an' ? 'An' : 'A'} ${have.con}'s fields are: ${own.join(', ')}.` : ''}`, 'type', line);
+        }
         const at = prune(instantiate(fi.scheme));
         unifyAt(at.args[0], st, { line, what: 'the record being updated' });
         unifyAt(at.args[1], infer(e, env), { line, what: `the field \`${f}\`` });
       }
+      // Shape = Circle { radius } | Rect { w, h }: r { radius = 1, w = 2 } could never work
+      const tn = cx.fields[seen[0]].typeName;
+      if (seen.length > 1 && !Object.values(cx.cons).some(c => c.typeName === tn && seen.every(f => (c.fieldNames || []).includes(f))))
+        throw new HsError(`Line ${n.line}: no constructor of ${tn} has all of the fields ${seen.map(f => '`' + f + '`').join(', ')}, so this update could never work.`, 'type', n.line);
       return st;
     }
     case 'comp': {

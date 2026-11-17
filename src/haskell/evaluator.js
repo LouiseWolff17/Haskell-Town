@@ -733,11 +733,13 @@ function match(p, v, b) {
   v = force(v);
   switch (p.p) {
     case 'lit': return p.lt === 'str' && isListV(v) && typeof v !== 'string' ? (takeN(v, p.v.length + 1).map(force).join('') === p.v) : v === p.v;
-    case 'con':
+    case 'con': case 'rec':
       if (p.name === 'True') return v === true; if (p.name === 'False') return v === false;
       if (v === MEMPTY) return p.name === 'Nothing' || p.name === 'EQ';
       if (isPure(v) && (p.name === 'Just' || p.name === 'Right')) v = { con: p.name, args: [v.pureOf] };
-      return !!v && v.con === p.name && p.args.every((q, i) => match(q, v.args[i], b));
+      if (!v || v.con !== p.name) return false;
+      if (p.p === 'con') return p.args.every((q, i) => match(q, v.args[i], b));
+      return p.fields.every(([f, q]) => match(q, v.args[cx.cons[p.name].fieldNames.indexOf(f)], b)); // Letter { to = t }
     case 'tuple': return p.items.length === 0 || p.items.every((q, i) => match(q, v.tuple[i], b));
     case 'list': { const l = isL(v) ? takeN(v, p.items.length + 1) : toList(v); return l.length === p.items.length && p.items.every((q, i) => match(q, l[i], b)); }
     case 'cons': {

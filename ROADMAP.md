@@ -9,14 +9,13 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 3. **Parts of Foldable and Traversable**: `sum`, `length`, `elem`, `maximum`, `foldr` etc. take any Foldable, but there's no Foldable for tuples. Foldable instances must define `foldMap`. `traverse`, `sequenceA`, `mapM` and `sequence` take any Traversable (lists, `Maybe`, `Either e`, your own instances), but there's no Traversable for tuples, and `for` isn't there. No Monoid for functions. `Min`/`Max` are Semigroups only.
 4. **Choosing an instance from the result type alone in polymorphic code**, e.g. a user method `empty :: f a` inside a `Container f =>` function. `pure`/`return`/`mempty` do work.
 5. **Ambiguous runtime picks**: inside fully polymorphic code, a user class with instances for both `Int` and `Double` may pick the wrong one. `1 <> 2` with no type is a runtime error rather than a type error.
-6. **Record patterns** like `f (Student { name = n })`.
-7. **Full laziness**: function arguments, constructor fields, tuples and list items are lazy, and `foldr` stops early, but the results of `map`, `zipWith` and friends on a finite list are worked out straight away (`length (map undefined [1])` fails).
-8. **Modules & imports**: `import` lines are ignored, and there's no `Data.Map`.
-9. **Most of IO**: no files, `interact`, `getContents`, `readLn`.
-10. **Big numbers**: no arbitrary-precision `Integer` (exact up to 2^53). `Float` = `Double`.
-11. **Very deep recursion** can hit the browser's stack limit.
-12. **Advanced type features**: GADTs, type families, `forall`, kind signatures, `$!`, strictness annotations (`seq` works).
-13. **Display details**: unsigned polymorphic expressions show `Num a => [a]` instead of `[Integer]`, and there are extra parentheses around custom `show` inside constructors.
+6. **Full laziness**: function arguments, constructor fields, tuples and list items are lazy, and `foldr` stops early, but the results of `map`, `zipWith` and friends on a finite list are worked out straight away (`length (map undefined [1])` fails).
+7. **Modules & imports**: `import` lines are ignored, and there's no `Data.Map`.
+8. **Most of IO**: no files, `interact`, `getContents`, `readLn`.
+9. **Big numbers**: no arbitrary-precision `Integer` (exact up to 2^53). `Float` = `Double`.
+10. **Very deep recursion** can hit the browser's stack limit.
+11. **Advanced type features**: GADTs, type families, `forall`, kind signatures, `$!`, strictness annotations (`seq` works).
+12. **Display details**: unsigned polymorphic expressions show `Num a => [a]` instead of `[Integer]`, and there are extra parentheses around custom `show` inside constructors.
 
 ## Next steps
 
@@ -34,7 +33,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Foldable-generic `sum`, `length`, `elem`, `maximum`, `foldr`, `null`, `any`, `concatMap`, `mapM_` … (lists, `Maybe`, `Either e`, your own instances), keeping the friendly list error messages: `length 'a'` still says `Expected: [a]` with the list tip (`tests/foldable.test.ts`).
 - [x] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15): `instance Traversable Bridge` with `traverse` or `sequenceA` (it needs Functor and Foldable instances, as in GHC), and `traverse`, `sequenceA`, `mapM`, `forM`, `sequence` over lists, `Maybe`, `Either e` and your own instances, with any Applicative (`tests/traversable.test.ts`).
 - [x] `deriving (Enum, Bounded)`, with `succ`/`pred`/`minBound`/`maxBound`/`fromEnum`/`toEnum` (Glaschu's bakehouse): `[minBound .. maxBound] :: [Day]`, `[Sat ..]`, `[Mon, Wed ..]`, also for `Bool`, `Ordering`, `()` and `Char`; only for types whose constructors hold nothing. `minBound`/`maxBound`/`toEnum` need a known type, not a function for any `(Bounded a, Enum a)` (`tests/enum-bounded.test.ts`).
-- [ ] Record update syntax `p { street = s }` and record patterns (Glaschu's post office).
+- [x] Record update syntax `p { street = s }` and record patterns (Glaschu's post office): updates can be chained (`r { a = 1 } { b = 2 }`), and patterns can be nested, use only some fields, use puns (`Letter { from }`) or match any constructor (`Circle {}`). Friendly errors for a field given twice, a field of another type, or fields no one constructor has. Not yet: `{..}`, and updates that change a type parameter (`(Box 1 "x") { item = True }`) (`tests/records.test.ts`).
 - [ ] `Data.Map` and `Data.Set`, with `import qualified … as Map` (Glaschu's library and map room).
 - [ ] `unfoldr` (Glaschu's dairy).
 - [ ] `readLn` / `read`, and an IO loop that waits for input each time (Glaschu's Town House).
