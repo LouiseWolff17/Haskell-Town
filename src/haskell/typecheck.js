@@ -18,7 +18,7 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
   if (e.kind === 'occurs') return new HsError(`${L}${what} would need an infinite type. That usually means a list and one of its items got mixed up — for example writing xs : xs instead of x : xs.`, 'type', ctx.line);
   if (e.kind === 'rigidcls') {
     const { c, t } = e.info;
-    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show', Foldable: 'list functions (like sum, length or foldr)' }[c];
+    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show', Foldable: 'list functions (like sum, length or foldr)', Traversable: 'traverse (or mapM, sequenceA)' }[c];
     return new HsError(`${L}${what} uses ${verb} on values of type \`${t.con}\`, but the type signature doesn't promise that \`${t.con}\` supports it. Add \`${c} ${t.con} =>\` to the start of the signature, like: f :: ${c} ${t.con} => …`, 'type', ctx.line);
   }
   const VERB = { Show: 'shown (with show or print)', Eq: 'compared with ==', Ord: 'put in order (with <, max, sort …)', Read: 'read from text' };

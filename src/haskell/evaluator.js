@@ -331,6 +331,7 @@ function toListG(tKey, c) {
   both('Any', (a, b) => nt('Any', f0(a) || f0(b)), nt('Any', false), [], [], { libType: true });
   both('All', (a, b) => nt('All', f0(a) && f0(b)), nt('All', true), [], [], { libType: true });
   F['[]'] = inst('[]', {}); F.Maybe = inst('Maybe', {}); F.Either = inst('Either', {});
+  const T = BUILTIN_CLASSES.Traversable.instances; T['[]'] = inst('[]', {}); T.Maybe = inst('Maybe', {}); T.Either = inst('Either', {});
 }
 // is v the mempty of its type? (used when comparing with the MEMPTY placeholder)
 function isEmptyish(v) {
@@ -369,6 +370,25 @@ function traverseG(key, f, xs, keep = true) {
   for (let i = l.length - 1; i >= 0; i--) acc = apG(fmapG(cons, i ? apply(f, l[i]) : first), acc);
   return acc;
 }
+// traverse / sequenceA / mapM / sequence over any Traversable. tKey is the container (from the type checker, or
+// else from the value), fKey the Applicative. Lists use the list code above; Maybe and Either hold at most one
+// item; your own types use your traverse, or your sequenceA after an fmap.
+function traverseT(tKey, fKey, f, c, name) {
+  c = force(c);
+  const key = tKey || (isListV(c) || c === MEMPTY ? '[]' : valueKey(c, cx.classes.Traversable));
+  if (key === '[]') return traverseG(fKey, f, c);
+  if (isPure(c)) return fmapG(mkFn(y => PURE(y)), apply(f, c.pureOf)); // pure x, container not known yet
+  if (key === 'Maybe' || key === 'Either') {
+    if (c.con === 'Nothing' || c.con === 'Left') return pureG(fKey, c); // nothing inside: traverse f Nothing is pure Nothing
+    return fmapG(mkFn(y => ({ con: c.con, args: [y] })), apply(f, c.args[0]));
+  }
+  const ti = key && cx.classes.Traversable.instances[key];
+  if (!ti) throw new HsError(`\`${name}\` doesn't know how to go through ${showShort(c)}${c && c.con && cx.cons[c.con] ? ` — there's no \`instance Traversable ${cx.cons[c.con].typeName}\`` : ''}.`);
+  const own = instFn(ti, 'traverse'), seqA = instFn(ti, 'sequenceA');
+  const r = own ? apply(apply(own, f), c) : apply(seqA, fmapG(f, c));
+  return fKey && isPure(r) ? pureG(fKey, r.pureOf) : r; // pure End inside your instance becomes Just End once we know it's Maybe
+}
+const idFn = mkFn(x => x);
 const LIBFN = {
   '<>': () => prim(2, sappend, '<>'),
   mappend: t => prim(2, (a, b) => { const own = libMethodOf('Monoid', keyOfT(t), 'mappend'); return own ? apply(apply(own, a), b) : sappend(a, b); }, 'mappend'),
@@ -376,10 +396,11 @@ const LIBFN = {
   mconcat: t => prim(1, xs => { const own = libMethodOf('Monoid', keyOfT(t), 'mconcat'); return own ? apply(own, xs) : mconcatT(t, xs); }, 'mconcat'),
   foldMap: (t, ex) => prim(2, (f, c) => foldMapG(keyOfT(t), ex && ex.m, f, c), 'foldMap'),
   toList: t => prim(1, c => toListG(keyOfT(t), c), 'toList'),
-  traverse: t => prim(2, (f, xs) => traverseG(keyOfT(t), f, xs), 'traverse'),
-  mapM: t => prim(2, (f, xs) => traverseG(keyOfT(t), f, xs), 'mapM'),
-  forM: t => prim(2, (xs, f) => traverseG(keyOfT(t), f, xs), 'forM'),
-  sequence: t => prim(1, xs => traverseG(keyOfT(t), mkFn(x => x), xs), 'sequence'),
+  traverse: (t, ex) => prim(2, (f, c) => traverseT(keyOfT(t), keyOfT(ex && ex.f), f, c, 'traverse'), 'traverse'),
+  sequenceA: (t, ex) => prim(1, c => traverseT(keyOfT(t), keyOfT(ex && ex.f), idFn, c, 'sequenceA'), 'sequenceA'),
+  mapM: (t, ex) => prim(2, (f, c) => traverseT(keyOfT(t), keyOfT(ex && ex.m), f, c, 'mapM'), 'mapM'),
+  forM: (t, ex) => prim(2, (c, f) => traverseT(keyOfT(t), keyOfT(ex && ex.m), f, c, 'forM'), 'forM'),
+  sequence: (t, ex) => prim(1, c => traverseT(keyOfT(t), keyOfT(ex && ex.m), idFn, c, 'sequence'), 'sequence'),
   traverse_: t => prim(2, (f, xs) => traverseG(keyOfT(t), f, xs, false), 'traverse_'),
   mapM_: t => prim(2, (f, xs) => traverseG(keyOfT(t), f, xs, false), 'mapM_'),
   forM_: t => prim(2, (xs, f) => traverseG(keyOfT(t), f, xs, false), 'forM_'),

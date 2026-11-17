@@ -65,7 +65,7 @@ function buildClassCtx(classes, instances, ctx) {
   const err = (line, m) => new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line);
   ctx.methodOwner = {}; cx.pendingClasses = new Set(classes.map(c => c.name));
   for (const c of classes) {
-    if (LIB_CLASSES.includes(c.name)) throw err(c.line, `\`${c.name}\` is built into Haskell Town now (it opened with the Market), so you don't need to define it. Delete this class declaration and keep your instances.`);
+    if (LIB_CLASSES.includes(c.name)) throw err(c.line, `\`${c.name}\` is built into Haskell Town now (it opened with ${c.name === 'Traversable' ? "Alder's mountain bridge" : 'the Market'}), so you don't need to define it. Delete this class declaration and keep your instances.`);
     if (ctx.classes[c.name] || NOT_YOURS.includes(c.name)) throw err(c.line, `there's already a class called \`${c.name}\`. Pick a different name.`);
     for (const sup of c.supers) if (!ctx.classes[sup] && !classes.some(x => x.name === sup) && !NOT_YOURS.includes(sup)) throw err(c.line, `I don't know a class called \`${sup}\`.`);
     const ci = { name: c.name, param: c.param, supers: c.supers, user: true, hkt: false, sigs: {}, schemes: {}, defaults: c.defaults, instances: {}, dispatch: {}, arity: {}, line: c.line, required: [] };

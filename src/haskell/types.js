@@ -29,13 +29,13 @@ function requireCls(c, t) {
   const k = t.con;
   if (k === '@') {
     const h = prune(t.args[0]);
-    if (isVar(h)) { if (h.cls.has('Foldable') && ['Num', 'Fractional', 'Enum'].includes(c)) throw new UFail('class', { c, t }); return; } // a container is never a number
+    if (isVar(h)) { if (isContainerVar(h) && ['Num', 'Fractional', 'Enum'].includes(c)) throw new UFail('class', { c, t }); return; } // a container is never a number
     throw new UFail('class', { c, t });
   }
   const ci = cx.classes[c];
   if (ci && (ci.user || ci.hkt)) { // your own classes, and Functor / Applicative / Monad
     const inst = ci.instances[k];
-    if (!inst && c === 'Foldable' && !cx.types[k]) throw new UFail('mismatch'); // sum 5, length getLine: reported like a list mismatch
+    if (!inst && (c === 'Foldable' || c === 'Traversable') && !cx.types[k]) throw new UFail('mismatch'); // sum 5, length getLine, mapM print 5: reported like a list mismatch
     if (!inst) throw new UFail('noinst', { c, t });
     (inst.ctx || []).forEach(([c2, i]) => { if (t.args[i]) requireCls(c2, t.args[i]); });
     return;
@@ -88,12 +88,12 @@ function pp(t, nm, prec = 0, friendly = false) {
     if (friendly && t.cls.has('Fractional')) return 'a fractional number';
     if (friendly && t.cls.has('Num')) return 'a number';
     if (friendly && (t.cls.has('Monad') || t.cls.has('Applicative') || t.cls.has('Functor')) && !nm.has(t)) return nm(t, t.cls.has('Monad') ? 'm' : 'f');
-    if (t.cls.has('Foldable') && !nm.has(t)) return nm(t, 't');
+    if (isContainerVar(t) && !nm.has(t)) return nm(t, 't');
     return nm(t);
   }
   if (t.rigid) return t.con;
   const f = friendly;
-  if (t.con === '@' && friendly && isFoldableVar(t.args[0])) return '[' + pp(t.args[1], nm, 0, f) + ']'; // length 5: "Expected: [a]"
+  if (t.con === '@' && friendly && isContainerVar(t.args[0])) return '[' + pp(t.args[1], nm, 0, f) + ']'; // length 5: "Expected: [a]"
   if (t.con === '@') { const s = pp(t.args[0], nm, 2, f) + ' ' + pp(t.args[1], nm, 2, f); return prec > 1 ? '(' + s + ')' : s; }
   if (t.con === '[]' && !t.args.length) return '[]';
   if (t.con === '[]') { const e = prune(t.args[0]); return !isVar(e) && e.con === 'Char' ? 'String' : '[' + pp(e, nm, 0, f) + ']'; }
@@ -102,9 +102,10 @@ function pp(t, nm, prec = 0, friendly = false) {
   if (!t.args.length) return t.con;
   const s = t.con + ' ' + t.args.map(a => pp(a, nm, 2, f)).join(' '); return prec > 1 ? '(' + s + ')' : s;
 }
-const isFoldableVar = h => { h = prune(h); return isVar(h) && h.cls.has('Foldable'); };
-// a Foldable `t a` seen as the list [a], for error messages (beginners meet these functions on lists first)
-const listView = t => { t = prune(t); return t.con === '@' && isFoldableVar(t.args[0]) ? tList(t.args[1]) : t; };
+// a type variable standing for a container: Foldable t, or Traversable t (which builds on Foldable)
+const isContainerVar = h => { h = prune(h); return isVar(h) && (h.cls.has('Foldable') || h.cls.has('Traversable')); };
+// a Foldable (or Traversable) `t a` seen as the list [a], for error messages (beginners meet these functions on lists first)
+const listView = t => { t = prune(t); return t.con === '@' && isContainerVar(t.args[0]) ? tList(t.args[1]) : t; };
 function ppScheme(s) {
   const nm = namer(); const body = pp(s.type, nm); const cs = [];
   const seen = new Set(); const walk = t => { t = prune(t); if (isVar(t)) { if (!seen.has(t)) { seen.add(t); [...t.cls].forEach(c => { if (!(c === 'Eq' && t.cls.has('Ord')) && !(c === 'Num' && t.cls.has('Fractional'))) cs.push(`${c} ${nm(t)}`); }); } } else t.args.forEach(walk); };
@@ -262,6 +263,8 @@ const LIB_CLASS_DEFS = {
   Semigroup: { param: 'a', supers: [], sigs: { '<>': 'a -> a -> a' }, required: [['<>']] },
   Monoid: { param: 'a', supers: ['Semigroup'], sigs: { mempty: 'a', mappend: 'a -> a -> a', mconcat: '[a] -> a' }, required: [['mempty']] },
   Foldable: { param: 't', hkt: true, supers: [], sigs: { foldMap: 'Monoid m => (a -> m) -> t a -> m', toList: 't a -> [a]' }, required: [['foldMap']], extra: { foldMap: ['m'] } },
+  // Glaschu's mountain bridge. The extra f is the Applicative, so the runtime knows which pure to use.
+  Traversable: { param: 't', hkt: true, supers: ['Functor', 'Foldable'], sigs: { traverse: 'Applicative f => (a -> f b) -> t a -> f (t b)', sequenceA: 'Applicative f => t (f a) -> f (t a)' }, required: [['traverse', 'sequenceA']], extra: { traverse: ['f'], sequenceA: ['f'] } },
 };
 const LIB_CLASSES = Object.keys(LIB_CLASS_DEFS);
 for (const [name, d] of Object.entries(LIB_CLASS_DEFS)) {
@@ -285,12 +288,15 @@ const FOLDABLE_TYPES = {
 for (const [m, str] of Object.entries(FOLDABLE_TYPES)) { const [c, body] = str.includes('=>') ? str.split(' => ') : [null, str]; TENV0[m] = typeFromString(`${c ? `(Foldable t, ${c})` : 'Foldable t'} => ${body}`); }
 // Prelude helpers that now work for any monad (or applicative), not only IO
 const LIB_MONAD_TYPES = {
-  mapM_: ['Monad', 'Foldable t => (a -> m b) -> t a -> m ()'], forM_: ['Monad', 'Foldable t => t a -> (a -> m b) -> m ()'], mapM: ['Monad', '(a -> m b) -> [a] -> m [b]'], forM: ['Monad', '[a] -> (a -> m b) -> m [b]'],
-  sequence: ['Monad', '[m a] -> m [a]'], sequence_: ['Monad', 'Foldable t => t (m a) -> m ()'], traverse: ['Applicative', '(a -> m b) -> [a] -> m [b]'], traverse_: ['Applicative', 'Foldable t => (a -> m b) -> t a -> m ()'],
+  mapM_: ['Monad', 'Foldable t => (a -> m b) -> t a -> m ()'], forM_: ['Monad', 'Foldable t => t a -> (a -> m b) -> m ()'], 
+  sequence_: ['Monad', 'Foldable t => t (m a) -> m ()'], traverse_: ['Applicative', 'Foldable t => (a -> m b) -> t a -> m ()'],
   when: ['Applicative', 'Bool -> m () -> m ()'], unless: ['Applicative', 'Bool -> m () -> m ()'], replicateM: ['Applicative', 'Int -> m a -> m [a]'], replicateM_: ['Applicative', 'Int -> m a -> m ()'],
   foldM: ['Monad', '(b -> a -> m b) -> b -> [a] -> m b'],
 };
 for (const [m, [cls, str]] of Object.entries(LIB_MONAD_TYPES)) TENV0[m] = libScheme(str, cls, 'm');
+// the Monad versions of traverse and sequenceA go through any Traversable too (m is the monad, as f is for traverse)
+const TRAVERSABLE_TYPES = { mapM: 'Monad m => (a -> m b) -> t a -> m (t b)', forM: 'Monad m => t a -> (a -> m b) -> m (t b)', sequence: 'Monad m => t (m a) -> m (t a)' };
+for (const [m, str] of Object.entries(TRAVERSABLE_TYPES)) TENV0[m] = libScheme(str, 'Traversable', 't', ['m']);
 // newtypes that pick one way of combining: Sum 3 <> Sum 4 is Sum 7, Product 3 <> Product 4 is Product 12
 const LIB_DATA_SRC = ['Sum', 'Product', 'Min', 'Max', 'Any', 'All'].map(n => `newtype ${n}${['Any', 'All'].includes(n) ? '' : ' a'} = ${n} { get${n} :: ${['Any', 'All'].includes(n) ? 'Bool' : 'a'} } deriving (Show, Eq, Ord)`).join('\n');
 

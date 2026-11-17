@@ -6,7 +6,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 
 1. **Some type class features**: multi-parameter classes, default method signatures, `deriving` beyond Show/Eq/Ord (no `deriving Functor`), instances for tuples or type synonyms like `String` (FlexibleInstances).
 2. **Your own Num / Fractional / Read instances.**
-3. **Parts of Foldable and Traversable**: `sum`, `length`, `elem`, `maximum`, `foldr` etc. take any Foldable, but there's no Foldable for tuples. Foldable instances must define `foldMap`. `traverse`/`mapM`/`sequence` only work over lists (`mapM_`/`traverse_` take any Foldable) (there's no `Traversable` class). No Monoid for functions. `Min`/`Max` are Semigroups only.
+3. **Parts of Foldable and Traversable**: `sum`, `length`, `elem`, `maximum`, `foldr` etc. take any Foldable, but there's no Foldable for tuples. Foldable instances must define `foldMap`. `traverse`, `sequenceA`, `mapM` and `sequence` take any Traversable (lists, `Maybe`, `Either e`, your own instances), but there's no Traversable for tuples, and `for` isn't there. No Monoid for functions. `Min`/`Max` are Semigroups only.
 4. **Choosing an instance from the result type alone in polymorphic code**, e.g. a user method `empty :: f a` inside a `Container f =>` function. `pure`/`return`/`mempty` do work.
 5. **Ambiguous runtime picks**: inside fully polymorphic code, a user class with instances for both `Int` and `Double` may pick the wrong one. `1 <> 2` with no type is a runtime error rather than a type error.
 6. **Record patterns** like `f (Student { name = n })`.
@@ -32,7 +32,7 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 - [x] Lazy list items and a lazy `foldr` (`length [undefined]`, `foldr (\x _ -> x) 0 [1..]`). A `foldr` that needs the whole list and overflows the stack is redone from the right end, so `foldr (+) 0 [1..100000]` still works.
 - [x] `Enum` for `Char` ranges (`['a'..'z']`, `['a', 'c' ..]`); ranges of anything else (`[True ..]`, `["a".."z"]`) are friendly type errors (`tests/ranges.test.ts`).
 - [x] Foldable-generic `sum`, `length`, `elem`, `maximum`, `foldr`, `null`, `any`, `concatMap`, `mapM_` … (lists, `Maybe`, `Either e`, your own instances), keeping the friendly list error messages: `length 'a'` still says `Expected: [a]` with the list tip (`tests/foldable.test.ts`).
-- [ ] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15).
+- [x] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15): `instance Traversable Bridge` with `traverse` or `sequenceA` (it needs Functor and Foldable instances, as in GHC), and `traverse`, `sequenceA`, `mapM`, `forM`, `sequence` over lists, `Maybe`, `Either e` and your own instances, with any Applicative (`tests/traversable.test.ts`).
 - [ ] `deriving (Enum, Bounded)`, with `succ`/`pred`/`minBound`/`maxBound` (Glaschu's bakehouse).
 - [ ] Record update syntax `p { street = s }` and record patterns (Glaschu's post office).
 - [ ] `Data.Map` and `Data.Set`, with `import qualified … as Map` (Glaschu's library and map room).
