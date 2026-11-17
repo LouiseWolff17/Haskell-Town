@@ -39,7 +39,11 @@ function buildDataCtx(datas, syns) {
   const libs = LIB_DATAS.filter(d => !mine.has(d.name) && !d.cons.some(c => mine.has(c.name) || (c.fieldNames || []).some(f => mine.has(f))));
   for (const d of [...libs, ...datas]) {
     if (builtin(d.name) || ctx.types[d.name] || ctx.syn[d.name]) throw new HsError(`Line ${d.line}: there's already a type called \`${d.name}\`. Pick a different name.`, 'type', d.line);
-    ctx.types[d.name] = { params: d.params, deriving: new Set(d.deriving), line: d.line, lib: libs.includes(d) };
+    ctx.types[d.name] = { params: d.params, deriving: new Set(d.deriving), line: d.line, lib: libs.includes(d), cons: d.cons.map(c => c.name) };
+    for (const c of ['Enum', 'Bounded']) if (d.deriving.includes(c)) { // Glaschu's bakehouse: only plain lists of names, like data Day = Mon | Tue | …
+      const big = d.cons.find(k => k.fields.length);
+      if (big) throw new HsError(`Line ${d.line}: \`${d.name}\` can't derive ${c}, because \`${big.name}\` holds ${big.fields.length > 1 ? 'values' : 'a value'}. Only types whose constructors are plain names can, like: data Day = Mon | Tue | Wed deriving (${c})`, 'type', d.line);
+    }
   }
   for (const d of [...libs, ...datas]) d.cons.forEach((c, idx) => {
     if (ctx.cons[c.name] || CONS0[c.name]) throw new HsError(`Line ${c.line}: there's already a constructor called \`${c.name}\`. Each constructor needs its own name.`, 'type', c.line);
@@ -61,7 +65,7 @@ function buildClassCtx(classes, instances, ctx) {
   for (const [n, b] of Object.entries(BUILTIN_CLASSES)) ctx.classes[n] = Object.assign({}, b, { instances: Object.assign({}, b.instances) });
   for (const ci of Object.values(ctx.classes)) for (const [k, inst] of Object.entries(ci.instances)) if (inst.libType && !(ctx.types[k] && ctx.types[k].lib)) delete ci.instances[k];
   setCtx(ctx);
-  const NOT_YOURS = ['Num', 'Fractional', 'Read', 'Integral', 'Enum'];
+  const NOT_YOURS = ['Num', 'Fractional', 'Read', 'Integral', 'Enum', 'Bounded'];
   const err = (line, m) => new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line);
   ctx.methodOwner = {}; cx.pendingClasses = new Set(classes.map(c => c.name));
   for (const c of classes) {

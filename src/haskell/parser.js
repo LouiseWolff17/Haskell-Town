@@ -178,7 +178,7 @@ class Parser {
     const deriving = [];
     if (this.is('kw', 'deriving')) {
       this.next();
-      const add = t => { if (!['Show', 'Eq', 'Ord'].includes(t.v)) this.fail(`Haskell Town can derive Show, Eq and Ord — not \`${t.v}\` yet.`); deriving.push(t.v); };
+      const add = t => { if (!['Show', 'Eq', 'Ord', 'Enum', 'Bounded'].includes(t.v)) this.fail(`Haskell Town can derive Show, Eq, Ord, Enum and Bounded — not \`${t.v}\` yet.`); deriving.push(t.v); };
       if (this.is('p', '(')) { this.next(); while (!this.is('p', ')')) { add(this.expect('con', undefined, 'Write class names inside deriving ( … ), like deriving (Show, Eq).')); if (this.is('p', ',')) this.next(); else break; } this.expect('p', ')'); }
       else add(this.expect('con', undefined, 'After deriving, write a class name like Show, or a list like (Show, Eq).'));
     }

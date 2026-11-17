@@ -18,10 +18,10 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
   if (e.kind === 'occurs') return new HsError(`${L}${what} would need an infinite type. That usually means a list and one of its items got mixed up — for example writing xs : xs instead of x : xs.`, 'type', ctx.line);
   if (e.kind === 'rigidcls') {
     const { c, t } = e.info;
-    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show', Foldable: 'list functions (like sum, length or foldr)', Traversable: 'traverse (or mapM, sequenceA)' }[c];
+    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show', Foldable: 'list functions (like sum, length or foldr)', Traversable: 'traverse (or mapM, sequenceA)', Enum: 'counting (succ, pred or a range like [x ..])', Bounded: 'minBound or maxBound' }[c];
     return new HsError(`${L}${what} uses ${verb} on values of type \`${t.con}\`, but the type signature doesn't promise that \`${t.con}\` supports it. Add \`${c} ${t.con} =>\` to the start of the signature, like: f :: ${c} ${t.con} => …`, 'type', ctx.line);
   }
-  const VERB = { Show: 'shown (with show or print)', Eq: 'compared with ==', Ord: 'put in order (with <, max, sort …)', Read: 'read from text' };
+  const VERB = { Show: 'shown (with show or print)', Eq: 'compared with ==', Ord: 'put in order (with <, max, sort …)', Read: 'read from text', Enum: 'counted through (with succ, pred or a range like [x ..])', Bounded: 'given a smallest and a largest value (minBound and maxBound)' };
   if (e.kind === 'noinst') {
     const { c, t } = e.info; const k = prune(t).con; const ci = cx.classes[c];
     const ut = cx.types[k]; const params = ut ? ut.params : [];
@@ -43,8 +43,13 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
     return new HsError(`${L}values of type \`${T}\` can't be ${VERB[c]}.`, 'type', ctx.line);
   }
   if (e.kind === 'class' && e.info.c === 'Enum') {
+    const T = pp(e.info.t, namer()); const quotes = T === 'String' ? ` 'a' (single quotes) is a Char; "a" (double quotes) is a String.` : '';
+    if (ctx.what === 'this range') return new HsError(`${L}A range like [a..b] counts through numbers or characters (['a'..'z']), or your own types with deriving (Enum), but ${what} is made of ${article(T)}.${quotes}`, 'type', ctx.line);
+    return new HsError(`${L}${what} needs something that can be counted (Enum): a number, a character, a Bool, or your own type with deriving (Enum). But it is ${article(T)}.${quotes}`, 'type', ctx.line);
+  }
+  if (e.kind === 'class' && e.info.c === 'Bounded') {
     const T = pp(e.info.t, namer());
-    return new HsError(`${L}A range like [a..b] counts through numbers or characters (['a'..'z']), but ${what} is made of ${article(T)}.${T === 'String' ? ` 'a' (single quotes) is a Char; "a" (double quotes) is a String.` : ''}`, 'type', ctx.line);
+    return new HsError(`${L}${what} needs a type with a smallest and a largest value (Bounded), like Int, Char, Bool or your own type with deriving (Bounded). \`${T}\` doesn't have them.`, 'type', ctx.line);
   }
   if (e.kind === 'class' && !actWasVar && (ctx.op || e.info.c === 'Fractional' || e.info.c === 'Show' || e.info.c === 'Eq' || e.info.c === 'Ord')) {
     const { c, t } = e.info; const T = pp(t, namer());
@@ -88,7 +93,7 @@ function conScheme(name, line) {
   if (!CONS0[name]) throw new HsError(`${line ? `Line ${line}: ` : ''}I don't know a constructor called \`${name}\`. (Names starting with a capital letter are types or constructors; function names start lowercase.)`, 'scope', line);
   return CONS0[name];
 }
-const TYPE_DIRECTED = ['show', 'print', 'read'];
+const TYPE_DIRECTED = ['show', 'print', 'read', 'minBound', 'maxBound', 'toEnum'];
 const litType = lt => lt === 'int' ? tvar(['Num']) : lt === 'float' ? tvar(['Fractional']) : lt === 'str' ? tString() : tChar;
 function arrowCount(t) { let n = 0; t = prune(t); while (!isVar(t) && t.con === '->') { n++; t = prune(t.args[1]); } return n; }
 

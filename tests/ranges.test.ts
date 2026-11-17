@@ -59,9 +59,9 @@ describe('character ranges', () => {
     assert.equal(r.type, 'String');
   });
 
-  test('strings, booleans and mixed ranges are type errors', async () => {
+  test('strings, Maybes and mixed ranges are type errors', async () => {
     assert.match(await typeError('["a".."z"]'), /single quotes/);
-    assert.match(await typeError('[True ..]'), /numbers or characters/);
+    assert.match(await typeError('[Just 1 ..]'), /numbers or characters/);
     assert.match(await typeError("['a'..5]"), /Type mismatch/);
   });
 });

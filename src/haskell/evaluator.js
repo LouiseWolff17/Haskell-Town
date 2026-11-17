@@ -81,7 +81,7 @@ function showT(v, t) {
   if (isVar(t) || t.rigid) return show(v);
   { const ui = userInst('Show', v); if (ui && instFn(ui, 'show')) return strOf(apply(instFn(ui, 'show'), v)); }
   switch (t.con) {
-    case 'Char': return "'" + (v === "'" ? "\\'" : v === '\n' ? '\\n' : v) + "'";
+    case 'Char': return "'" + (v === "'" ? "\\'" : v === '\n' ? '\\n' : v === '\0' ? '\\NUL' : v) + "'";
     case 'Double': return Number.isInteger(v) ? v + '.0' : show(v);
     case '[]': { const e = prune(t.args[0]); if (!isVar(e) && e.con === 'Char') return JSON.stringify(typeof v === 'string' ? v : toList(v).join('')); return '[' + toList(v).map(x => showT(x, e)).join(',') + ']'; }
     case '(,)': return '(' + v.tuple.map((x, i) => showT(x, t.args[i])).join(',') + ')';
@@ -512,7 +512,91 @@ def('fst', 1, t => tup(t)[0]); def('snd', 1, t => tup(t)[1]);
 def('id', 1, x => x); def('const', 2, (a, _b) => a, [1]); def('flip', 3, (f, a, b) => apply(apply(f, b), a), [1, 2]);
 def('seq', 2, (_a, b) => b, [1]); // seq forces its first argument (as every built-in does) and hands back the second
 def('abs', 1, n => Math.abs(n)); def('negate', 1, n => -n); def('subtract', 2, (a, b) => b - a);
-def('succ', 1, n => n + 1); def('pred', 1, n => n - 1);
+// ---- Enum and Bounded (Glaschu's bakehouse) ----
+// Numbers count by 1; everything else (Char, Bool, Ordering, (), your own data Day = Mon | Tue | … deriving (Enum, Bounded))
+// is turned into its position (fromEnum), counted, and turned back (toEnum). minBound, maxBound and toEnum pick their
+// type from what the type checker found, like read does.
+const ORDERING = ['LT', 'EQ', 'GT'];
+const INT_MAX = Number.MAX_SAFE_INTEGER, INT_MIN = Number.MIN_SAFE_INTEGER;
+function enumKey(v) { // which Enum type a (non-number) value belongs to
+  if (typeof v === 'string' && v.length && v.length === String.fromCodePoint(v.codePointAt(0)).length) return 'Char'; // one character, even past \uFFFF
+  if (typeof v === 'boolean') return 'Bool';
+  if (v && v.tuple && !v.tuple.length) return '()';
+  if (v && v.con) return ORDERING.includes(v.con) ? 'Ordering' : cx.cons[v.con] && cx.cons[v.con].typeName;
+  return null;
+}
+const enumNames = key => key === 'Ordering' ? ORDERING : cx.types[key] && cx.types[key].cons;
+const enumLast = key => key === 'Char' ? 0x10FFFF : key === 'Bool' ? 1 : key === '()' ? 0 : enumNames(key).length - 1;
+function fromEnumV(v) {
+  v = force(v);
+  if (typeof v === 'number') return Math.trunc(v);
+  const key = enumKey(v);
+  if (key === 'Char') return v.codePointAt(0);
+  if (key === 'Bool') return v ? 1 : 0;
+  if (key === '()') return 0;
+  if (key && enumNames(key)) return enumNames(key).indexOf(v.con);
+  throw new HsError(`${showShort(v)} can't be counted — only numbers, characters, Bools and types with deriving (Enum) can.`);
+}
+function toEnumKey(key, i, who = 'toEnum') {
+  if (key === 'Int' || key === 'Double') return i;
+  if (!Number.isInteger(i) || i < 0 || i > enumLast(key)) {
+    if (key === 'Char') throw new HsError(`${who} ${i}: there's no character with that number.`);
+    throw new HsError(`${who} ${i}: \`${key}\` only has ${enumLast(key) + 1} value${enumLast(key) ? 's' : ''}, numbered 0 to ${enumLast(key)}.`);
+  }
+  if (key === 'Char') return String.fromCodePoint(i);
+  if (key === 'Bool') return i === 1;
+  if (key === '()') return UNIT;
+  return { con: enumNames(key)[i], args: [] };
+}
+function succPred(v, by) {
+  v = force(v);
+  if (typeof v === 'number') return v + by;
+  const key = enumKey(v), i = fromEnumV(v) + by;
+  if (i < 0 || i > enumLast(key)) {
+    const s = key === 'Char' ? showT(v, TC('Char')) : show(v);
+    throw new HsError(by > 0 ? `succ ${s}: ${s} is the last ${key}, so there's nothing after it.` : `pred ${s}: ${s} is the first ${key}, so there's nothing before it.`);
+  }
+  return toEnumKey(key, i);
+}
+def('succ', 1, v => succPred(v, 1)); def('pred', 1, v => succPred(v, -1));
+def('fromEnum', 1, fromEnumV);
+// [a ..], [a, b ..], [a .. z] and [a, b .. z]. Number ranges without an end go on forever; the others stop at the last value.
+function enumRange(first, then, to) {
+  first = force(first);
+  const key = typeof first === 'number' ? null : enumKey(first);
+  const num = v => key ? fromEnumV(v) : force(v), item = x => key ? toEnumKey(key, x) : x;
+  const a = num(first), step = then !== undefined ? num(then) - a : 1;
+  if (to === undefined) {
+    if (!key || step === 0) { const go = x => new LCons(item(x), () => go(x + step)); return go(a); } // [1..] and [1, 3 ..] go on forever
+    to = item(step > 0 ? enumLast(key) : 0); // [Mon ..] stops at the last day, [Sun, Fri ..] at the first
+  }
+  const z = num(to);
+  if (step === 0) throw new HsError('That range never moves forward, so it would go on forever.');
+  if (key) { // a finite range of characters or constructors, built lazily
+    const go = x => (step > 0 ? x <= z : x >= z) ? new LCons(item(x), () => go(x + step)) : [];
+    return go(a);
+  }
+  const out = [];
+  for (let x = a; step > 0 ? x <= z : x >= z; x += step) { out.push(x); if (out.length > 100000) throw new HsError('That range is too big for this little town (over 100,000 items).'); }
+  return out;
+}
+def('enumFrom', 1, a => enumRange(a));
+def('enumFromThen', 2, (a, b) => enumRange(a, b));
+def('enumFromTo', 2, (a, z) => enumRange(a, undefined, z));
+def('enumFromThenTo', 3, (a, b, z) => enumRange(a, b, z));
+const cantTell = name => new HsError(`Haskell Town can't tell which type's \`${name}\` you mean here. Add a type annotation, like (${name}${name === 'toEnum' ? ' 3' : ''} :: Day).`);
+function boundOf(t, which) {
+  t = prune(t);
+  if (isVar(t) || t.rigid) throw cantTell(which);
+  if (t.con === '(,)') return { tuple: t.args.map(a => boundOf(a, which)) };
+  if (t.con === 'Int') return which === 'minBound' ? INT_MIN : INT_MAX;
+  return toEnumKey(t.con, which === 'minBound' ? 0 : enumLast(t.con));
+}
+function toEnumT(t, i) {
+  t = prune(t);
+  if (isVar(t) || t.rigid) throw cantTell('toEnum');
+  return toEnumKey(t.con, i);
+}
 const dz = b => { if (b === 0) throw new HsError('Division by zero!'); return b; };
 def('div', 2, (a, b) => Math.floor(a / dz(b)));
 def('mod', 2, (a, b) => { b = dz(b); return ((a % b) + b) % b; });
@@ -633,9 +717,11 @@ function lookup(env, name) {
   return force(v);
 }
 function directed(name, t) {
+  if (name === 'minBound' || name === 'maxBound') return boundOf(t, name);
   const f = prune(t), a = f.args[0], r = f.args[1];
   if (name === 'show') return mkFn(v => showT(v, a), 'show');
   if (name === 'print') return mkFn(v => io(rt => { emit(rt, showT(v, a) + '\n'); return UNIT; }), 'print');
+  if (name === 'toEnum') return prim(1, i => toEnumT(r, i), 'toEnum');
   return mkFn(s => readT(strOf(s), r), 'read');
 }
 function opFunction(op, env) { return BINOPS[op] || lookup(env, op); }
@@ -745,7 +831,7 @@ function cheap(e, env) {
       const args = []; let h = e; while (h.k === 'app') { args.unshift(h.a); h = h.f; } while (h.k === 'paren') h = h.e;
       // a safe built-in like max x m, on known plain values
       if (h.k === 'var' && !h.mref && !h.st && SAFE_FNS.has(h.name) && env[h.name] === PRELUDE[h.name] && args.length === PRELUDE_ARITY[h.name]) {
-        const vs = []; for (const a of args) { const v = cheap(a, env); if (!known(v) || !isPrimV(v)) return NOT_CHEAP; vs.push(v); }
+        const vs = []; for (const a of args) { const v = cheap(a, env); if (!known(v) || !isPrimV(v) || ((h.name === 'succ' || h.name === 'pred') && typeof v !== 'number')) return NOT_CHEAP; vs.push(v); }
         return vs.reduce((f, v) => apply(f, v), PRELUDE[h.name]);
       }
       // a constructor given all its fields: build it, with each field delayed
@@ -822,18 +908,8 @@ function evalRest(n, env) {
     case 'list': return n.items.map(i => delay(i, env));
     case 'tuple': return n.items.length ? { tuple: n.items.map(i => delay(i, env)) } : UNIT;
     case 'range': {
-      const first = evalE(n.from, env), isChar = typeof first === 'string'; // ['a'..'z'] counts through character codes
-      const num = v => isChar ? v.codePointAt(0) : v, item = x => isChar ? String.fromCodePoint(x) : x;
-      const a = num(first), step = n.then ? num(evalE(n.then, env)) - a : 1;
-      if (!n.to) { // [1..] and [1, 3 ..] go on forever; ['a'..] stops after the last character
-        const go = x => isChar && (x < 0 || x > 0x10FFFF) ? [] : new LCons(item(x), () => go(x + step));
-        return go(a);
-      }
-      const z = num(evalE(n.to, env));
-      if (step === 0) throw new HsError('That range never moves forward, so it would go on forever.');
-      const out = [];
-      for (let x = a; step > 0 ? x <= z : x >= z; x += step) { out.push(item(x)); if (out.length > 100000) throw new HsError('That range is too big for this little town (over 100,000 items).'); }
-      return out;
+      const first = evalE(n.from, env);
+      return enumRange(first, n.then ? evalE(n.then, env) : undefined, n.to ? evalE(n.to, env) : undefined);
     }
     case 'neg': return -evalE(n.e, env);
     case 'opfn': return n.mref ? methodValue(n.mref) : opFunction(n.op, env);

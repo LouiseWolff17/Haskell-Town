@@ -30,10 +30,10 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 ### Haskell features
 - [x] Fuller laziness: lazy function arguments and data fields (`const 1 undefined`, lazy trees), and `seq`. Cheap, safe arguments (`acc + x`, `acc ++ [x]`, `max x m`) are still worked out straight away, so accumulators don't pile up thunks (`tests/laziness.test.ts`).
 - [x] Lazy list items and a lazy `foldr` (`length [undefined]`, `foldr (\x _ -> x) 0 [1..]`). A `foldr` that needs the whole list and overflows the stack is redone from the right end, so `foldr (+) 0 [1..100000]` still works.
-- [x] `Enum` for `Char` ranges (`['a'..'z']`, `['a', 'c' ..]`); ranges of anything else (`[True ..]`, `["a".."z"]`) are friendly type errors (`tests/ranges.test.ts`).
+- [x] `Enum` for `Char` ranges (`['a'..'z']`, `['a', 'c' ..]`); ranges of anything else (`[Just 1 ..]`, `["a".."z"]`) are friendly type errors (`tests/ranges.test.ts`).
 - [x] Foldable-generic `sum`, `length`, `elem`, `maximum`, `foldr`, `null`, `any`, `concatMap`, `mapM_` … (lists, `Maybe`, `Either e`, your own instances), keeping the friendly list error messages: `length 'a'` still says `Expected: [a]` with the list tip (`tests/foldable.test.ts`).
 - [x] A `Traversable` class and `sequenceA` (Glaschu's mountain bridge, challenges 14–15): `instance Traversable Bridge` with `traverse` or `sequenceA` (it needs Functor and Foldable instances, as in GHC), and `traverse`, `sequenceA`, `mapM`, `forM`, `sequence` over lists, `Maybe`, `Either e` and your own instances, with any Applicative (`tests/traversable.test.ts`).
-- [ ] `deriving (Enum, Bounded)`, with `succ`/`pred`/`minBound`/`maxBound` (Glaschu's bakehouse).
+- [x] `deriving (Enum, Bounded)`, with `succ`/`pred`/`minBound`/`maxBound`/`fromEnum`/`toEnum` (Glaschu's bakehouse): `[minBound .. maxBound] :: [Day]`, `[Sat ..]`, `[Mon, Wed ..]`, also for `Bool`, `Ordering`, `()` and `Char`; only for types whose constructors hold nothing. `minBound`/`maxBound`/`toEnum` need a known type, not a function for any `(Bounded a, Enum a)` (`tests/enum-bounded.test.ts`).
 - [ ] Record update syntax `p { street = s }` and record patterns (Glaschu's post office).
 - [ ] `Data.Map` and `Data.Set`, with `import qualified … as Map` (Glaschu's library and map room).
 - [ ] `unfoldr` (Glaschu's dairy).

@@ -5,6 +5,7 @@ import { HsError } from './errors.js';
 import { tokenize } from './lexer.js';
 import { FIX, TypeParser } from './parser.js';
 
+const BUILTIN_ENUM = { Enum: ['Int', 'Double', 'Char', 'Bool', 'Ordering', '()'], Bounded: ['Int', 'Char', 'Bool', 'Ordering', '()'] };
 const BUILTIN_SUPERS = { Ord: ['Eq'], Fractional: ['Num'], Applicative: ['Functor'], Monad: ['Applicative'] };
 const supersOf = c => (cx.classes[c] && cx.classes[c].supers) || BUILTIN_SUPERS[c] || [];
 function superClosure(c) { const out = []; const go = x => supersOf(x).forEach(y => { if (!out.includes(y)) { out.push(y); go(y); } }); go(c); return out; }
@@ -42,7 +43,11 @@ function requireCls(c, t) {
   }
   if (c === 'Num') { if (k === 'Int' || k === 'Double') return; throw new UFail('class', { c, t }); }
   if (c === 'Fractional') { if (k === 'Double') return; throw new UFail('class', { c, t }); }
-  if (c === 'Enum') { if (k === 'Int' || k === 'Double' || k === 'Char') return; throw new UFail('class', { c, t }); }
+  if (c === 'Enum' || c === 'Bounded') { // the built-in ones; your own types need deriving (Enum, Bounded)
+    if (BUILTIN_ENUM[c].includes(k)) return;
+    if (c === 'Bounded' && k === '(,)') { t.args.forEach(a => requireCls(c, a)); return; }
+    if (!cx.types[k]) throw new UFail('class', { c, t });
+  }
   if (c === 'Read') { if (['Int', 'Double', 'Bool'].includes(k)) return; throw new UFail('class', { c, t }); }
   const ut = cx.types[k];
   if (ut) {
@@ -115,7 +120,7 @@ function ppScheme(s) {
 
 // ---- type syntax ----
 const TYPE_ARITY = { Int: 0, Integer: 0, Double: 0, Float: 0, Bool: 0, Char: 0, String: 0, Maybe: 1, Either: 2, IO: 1, Ordering: 0 };
-const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read', 'Enum'];
+const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read', 'Enum', 'Bounded'];
 function parseTypeToks(toks) {
   const line = toks[0] ? toks[0].line : null;
   const fail = m => { throw new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line); };
@@ -207,7 +212,9 @@ const PRELUDE_TYPES = {
   even: 'Int -> Bool', odd: 'Int -> Bool', not: 'Bool -> Bool', show: 'Show a => a -> String', 
   zip: '[a] -> [b] -> [(a, b)]', zipWith: '(a -> b -> c) -> [a] -> [b] -> [c]', replicate: 'Int -> a -> [a]', fst: '(a, b) -> a', snd: '(a, b) -> b',
   id: 'a -> a', const: 'a -> b -> a', seq: 'a -> b -> b', flip: '(a -> b -> c) -> b -> a -> c', abs: 'Num a => a -> a', negate: 'Num a => a -> a', subtract: 'Num a => a -> a -> a',
-  succ: 'Int -> Int', pred: 'Int -> Int', div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
+  succ: 'Enum a => a -> a', pred: 'Enum a => a -> a', fromEnum: 'Enum a => a -> Int', toEnum: 'Enum a => Int -> a', minBound: 'Bounded a => a', maxBound: 'Bounded a => a',
+  enumFrom: 'Enum a => a -> [a]', enumFromThen: 'Enum a => a -> a -> [a]', enumFromTo: 'Enum a => a -> a -> [a]', enumFromThenTo: 'Enum a => a -> a -> a -> [a]',
+  div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
   fromIntegral: 'Num b => Int -> b', error: 'String -> a', words: 'String -> [String]', unwords: '[String] -> String', lines: 'String -> [String]', unlines: '[String] -> String',
   otherwise: 'Bool', undefined: 'a',
   putStrLn: 'String -> IO ()', putStr: 'String -> IO ()', print: 'Show a => a -> IO ()', getLine: 'IO String', return: 'a -> IO a', pure: 'a -> IO a',
