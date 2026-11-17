@@ -4,7 +4,9 @@ import { BUILTIN_CLASSES, cx } from './context.js';
 import { HsError } from './errors.js';
 import { tokenize } from './lexer.js';
 import { FIX, TypeParser } from './parser.js';
+import { resolveNames } from './modules.js';
 
+const BUILTIN_ENUM = { Enum: ['Int', 'Double', 'Char', 'Bool', 'Ordering', '()'], Bounded: ['Int', 'Char', 'Bool', 'Ordering', '()'] };
 const BUILTIN_SUPERS = { Ord: ['Eq'], Fractional: ['Num'], Applicative: ['Functor'], Monad: ['Applicative'] };
 const supersOf = c => (cx.classes[c] && cx.classes[c].supers) || BUILTIN_SUPERS[c] || [];
 function superClosure(c) { const out = []; const go = x => supersOf(x).forEach(y => { if (!out.includes(y)) { out.push(y); go(y); } }); go(c); return out; }
@@ -27,17 +29,27 @@ function requireCls(c, t) {
   if (isVar(t)) { t.cls.add(c); return; }
   if (t.rigid) { if (entails(t.cls, c)) return; throw new UFail('rigidcls', { c, t }); }
   const k = t.con;
-  if (k === '@') { if (isVar(prune(t.args[0]))) return; throw new UFail('class', { c, t }); }
+  if (k === '@') {
+    const h = prune(t.args[0]);
+    if (isVar(h)) { if (isContainerVar(h) && ['Num', 'Fractional', 'Enum'].includes(c)) throw new UFail('class', { c, t }); return; } // a container is never a number
+    throw new UFail('class', { c, t });
+  }
   const ci = cx.classes[c];
   if (ci && (ci.user || ci.hkt)) { // your own classes, and Functor / Applicative / Monad
     const inst = ci.instances[k];
+    if (!inst && (c === 'Foldable' || c === 'Traversable') && !cx.types[k]) throw new UFail('mismatch'); // sum 5, length getLine, mapM print 5: reported like a list mismatch
     if (!inst) throw new UFail('noinst', { c, t });
     (inst.ctx || []).forEach(([c2, i]) => { if (t.args[i]) requireCls(c2, t.args[i]); });
     return;
   }
   if (c === 'Num') { if (k === 'Int' || k === 'Double') return; throw new UFail('class', { c, t }); }
   if (c === 'Fractional') { if (k === 'Double') return; throw new UFail('class', { c, t }); }
-  if (c === 'Read') { if (['Int', 'Double', 'Bool'].includes(k)) return; throw new UFail('class', { c, t }); }
+  if (c === 'Enum' || c === 'Bounded') { // the built-in ones; your own types need deriving (Enum, Bounded)
+    if (BUILTIN_ENUM[c].includes(k)) return;
+    if (c === 'Bounded' && k === '(,)') { t.args.forEach(a => requireCls(c, a)); return; }
+    if (!cx.types[k]) throw new UFail('class', { c, t });
+  }
+  if (c === 'Read') { if (['Int', 'Double', 'Bool', 'Char'].includes(k)) return; if (k === '[]' || k === '(,)') { t.args.forEach(a => requireCls(c, a)); return; } throw new UFail('class', { c, t }); }
   const ut = cx.types[k];
   if (ut) {
     const ui = ci && ci.instances[k];
@@ -45,7 +57,7 @@ function requireCls(c, t) {
     if (!ut.deriving.has(c) && !(c === 'Eq' && (ut.deriving.has('Ord') || (cx.classes.Ord && cx.classes.Ord.instances[k])))) throw new UFail('deriving', { c, t });
     t.args.forEach(a => requireCls(c, a)); return;
   }
-  if (['Int', 'Double', 'Bool', 'Char', '()', '[]', '(,)', 'Maybe', 'Either', 'Ordering'].includes(k)) { t.args.forEach(a => requireCls(c, a)); return; }
+  if (['Int', 'Double', 'Bool', 'Char', '()', '[]', '(,)', 'Maybe', 'Either', 'Ordering', 'Map', 'Set'].includes(k)) { t.args.forEach(a => requireCls(c, a)); return; }
   throw new UFail('class', { c, t });
 }
 function bindV(v, t) {
@@ -82,10 +94,12 @@ function pp(t, nm, prec = 0, friendly = false) {
     if (friendly && t.cls.has('Fractional')) return 'a fractional number';
     if (friendly && t.cls.has('Num')) return 'a number';
     if (friendly && (t.cls.has('Monad') || t.cls.has('Applicative') || t.cls.has('Functor')) && !nm.has(t)) return nm(t, t.cls.has('Monad') ? 'm' : 'f');
+    if (isContainerVar(t) && !nm.has(t)) return nm(t, 't');
     return nm(t);
   }
   if (t.rigid) return t.con;
   const f = friendly;
+  if (t.con === '@' && friendly && isContainerVar(t.args[0])) return '[' + pp(t.args[1], nm, 0, f) + ']'; // length 5: "Expected: [a]"
   if (t.con === '@') { const s = pp(t.args[0], nm, 2, f) + ' ' + pp(t.args[1], nm, 2, f); return prec > 1 ? '(' + s + ')' : s; }
   if (t.con === '[]' && !t.args.length) return '[]';
   if (t.con === '[]') { const e = prune(t.args[0]); return !isVar(e) && e.con === 'Char' ? 'String' : '[' + pp(e, nm, 0, f) + ']'; }
@@ -94,6 +108,10 @@ function pp(t, nm, prec = 0, friendly = false) {
   if (!t.args.length) return t.con;
   const s = t.con + ' ' + t.args.map(a => pp(a, nm, 2, f)).join(' '); return prec > 1 ? '(' + s + ')' : s;
 }
+// a type variable standing for a container: Foldable t, or Traversable t (which builds on Foldable)
+const isContainerVar = h => { h = prune(h); return isVar(h) && (h.cls.has('Foldable') || h.cls.has('Traversable')); };
+// a Foldable (or Traversable) `t a` seen as the list [a], for error messages (beginners meet these functions on lists first)
+const listView = t => { t = prune(t); return t.con === '@' && isContainerVar(t.args[0]) ? tList(t.args[1]) : t; };
 function ppScheme(s) {
   const nm = namer(); const body = pp(s.type, nm); const cs = [];
   const seen = new Set(); const walk = t => { t = prune(t); if (isVar(t)) { if (!seen.has(t)) { seen.add(t); [...t.cls].forEach(c => { if (!(c === 'Eq' && t.cls.has('Ord')) && !(c === 'Num' && t.cls.has('Fractional'))) cs.push(`${c} ${nm(t)}`); }); } } else t.args.forEach(walk); };
@@ -102,9 +120,10 @@ function ppScheme(s) {
 }
 
 // ---- type syntax ----
-const TYPE_ARITY = { Int: 0, Integer: 0, Double: 0, Float: 0, Bool: 0, Char: 0, String: 0, Maybe: 1, Either: 2, IO: 1, Ordering: 0 };
-const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read'];
+const TYPE_ARITY = { Int: 0, Integer: 0, Double: 0, Float: 0, Bool: 0, Char: 0, String: 0, Maybe: 1, Either: 2, IO: 1, Ordering: 0, Map: 2, Set: 1 }; // Map and Set come from Data.Map and Data.Set
+const KNOWN_CLASSES = ['Num', 'Fractional', 'Eq', 'Ord', 'Show', 'Integral', 'Read', 'Enum', 'Bounded'];
 function parseTypeToks(toks) {
+  resolveNames(toks, cx.aliases); // Map.Map k v, M.Map k v → Map k v (already done for the program's own signatures)
   const line = toks[0] ? toks[0].line : null;
   const fail = m => { throw new HsError(`${line ? `Line ${line}: ` : ''}${m}`, 'type', line); };
   let i = 0; const is = (t, v) => toks[i] && toks[i].t === t && (v === undefined || toks[i].v === v);
@@ -143,7 +162,7 @@ function buildType(ast, getVar, line, depth = 0) {
     return TC(ast.name, ...args);
   }
   const ar = TYPE_ARITY[ast.name];
-  if (ar === undefined) throw new HsError(`${L}I don't know a type called \`${ast.name}\`. Types you can use: Int, Double, Bool, Char, String, lists like [Int], Maybe, Either, IO — or one you define yourself with \`data\`.`, 'type', line);
+  if (ar === undefined) throw new HsError(`${L}I don't know a type called \`${ast.name}\`. Types you can use: Int, Double, Bool, Char, String, lists like [Int], Maybe, Either, IO, Map, Set — or one you define yourself with \`data\`.`, 'type', line);
   if (args.length !== ar) throw new HsError(`${line ? `Line ${line}: ` : ''}\`${ast.name}\` ${ar ? `needs ${ar} type argument${ar > 1 ? 's' : ''}, like ${ast.name} Int` : 'takes no type arguments'}.`, 'type', line);
   if (ast.name === 'Integer') return tInt; if (ast.name === 'Float') return tDouble;
   if (ast.name === 'String') return tString();
@@ -188,23 +207,25 @@ function generalize(t) {
 }
 
 const PRELUDE_TYPES = {
-  length: '[a] -> Int', sum: 'Num a => [a] -> a', product: 'Num a => [a] -> a', map: '(a -> b) -> [a] -> [b]', filter: '(a -> Bool) -> [a] -> [a]',
-  foldr: '(a -> b -> b) -> b -> [a] -> b', foldl: '(b -> a -> b) -> b -> [a] -> b', null: '[a] -> Bool', head: '[a] -> a', last: '[a] -> a',
-  tail: '[a] -> [a]', init: '[a] -> [a]', reverse: '[a] -> [a]', elem: 'Eq a => a -> [a] -> Bool', notElem: 'Eq a => a -> [a] -> Bool',
-  take: 'Int -> [a] -> [a]', drop: 'Int -> [a] -> [a]', maximum: 'Ord a => [a] -> a', minimum: 'Ord a => [a] -> a', max: 'Ord a => a -> a -> a', min: 'Ord a => a -> a -> a',
-  even: 'Int -> Bool', odd: 'Int -> Bool', not: 'Bool -> Bool', show: 'Show a => a -> String', concat: '[[a]] -> [a]', concatMap: '(a -> [b]) -> [a] -> [b]',
+  map: '(a -> b) -> [a] -> [b]', filter: '(a -> Bool) -> [a] -> [a]',
+  head: '[a] -> a', last: '[a] -> a',
+  tail: '[a] -> [a]', init: '[a] -> [a]', reverse: '[a] -> [a]', 
+  take: 'Int -> [a] -> [a]', drop: 'Int -> [a] -> [a]', max: 'Ord a => a -> a -> a', min: 'Ord a => a -> a -> a',
+  even: 'Int -> Bool', odd: 'Int -> Bool', not: 'Bool -> Bool', show: 'Show a => a -> String', 
   zip: '[a] -> [b] -> [(a, b)]', zipWith: '(a -> b -> c) -> [a] -> [b] -> [c]', replicate: 'Int -> a -> [a]', fst: '(a, b) -> a', snd: '(a, b) -> b',
-  id: 'a -> a', const: 'a -> b -> a', flip: '(a -> b -> c) -> b -> a -> c', abs: 'Num a => a -> a', negate: 'Num a => a -> a', subtract: 'Num a => a -> a -> a',
-  succ: 'Int -> Int', pred: 'Int -> Int', div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
+  id: 'a -> a', const: 'a -> b -> a', seq: 'a -> b -> b', flip: '(a -> b -> c) -> b -> a -> c', abs: 'Num a => a -> a', negate: 'Num a => a -> a', subtract: 'Num a => a -> a -> a',
+  succ: 'Enum a => a -> a', pred: 'Enum a => a -> a', fromEnum: 'Enum a => a -> Int', toEnum: 'Enum a => Int -> a', minBound: 'Bounded a => a', maxBound: 'Bounded a => a',
+  enumFrom: 'Enum a => a -> [a]', enumFromThen: 'Enum a => a -> a -> [a]', enumFromTo: 'Enum a => a -> a -> [a]', enumFromThenTo: 'Enum a => a -> a -> a -> [a]',
+  div: 'Int -> Int -> Int', mod: 'Int -> Int -> Int', quot: 'Int -> Int -> Int', rem: 'Int -> Int -> Int',
   fromIntegral: 'Num b => Int -> b', error: 'String -> a', words: 'String -> [String]', unwords: '[String] -> String', lines: 'String -> [String]', unlines: '[String] -> String',
-  all: '(a -> Bool) -> [a] -> Bool', any: '(a -> Bool) -> [a] -> Bool', and: '[Bool] -> Bool', or: '[Bool] -> Bool', otherwise: 'Bool', undefined: 'a',
-  putStrLn: 'String -> IO ()', putStr: 'String -> IO ()', print: 'Show a => a -> IO ()', getLine: 'IO String', return: 'a -> IO a', pure: 'a -> IO a',
+  otherwise: 'Bool', undefined: 'a',
+  putStrLn: 'String -> IO ()', putStr: 'String -> IO ()', print: 'Show a => a -> IO ()', getLine: 'IO String', readLn: 'Read a => IO a', return: 'a -> IO a', pure: 'a -> IO a',
   mapM_: '(a -> IO b) -> [a] -> IO ()', forM_: '[a] -> (a -> IO b) -> IO ()', mapM: '(a -> IO b) -> [a] -> IO [b]', when: 'Bool -> IO () -> IO ()',
   read: 'Read a => String -> a', compare: 'Ord a => a -> a -> Ordering',
   fromMaybe: 'a -> Maybe a -> a', catMaybes: '[Maybe a] -> [a]', mapMaybe: '(a -> Maybe b) -> [a] -> [b]', isJust: 'Maybe a -> Bool', isNothing: 'Maybe a -> Bool', either: '(a -> c) -> (b -> c) -> Either a b -> c', lookup: 'Eq a => a -> [(a, b)] -> Maybe b', maybe: 'b -> (a -> b) -> Maybe a -> b', sortOn: 'Ord b => (a -> b) -> [a] -> [a]', sort: 'Ord a => [a] -> [a]',
   toUpper: 'Char -> Char', toLower: 'Char -> Char', isDigit: 'Char -> Bool', isAlpha: 'Char -> Bool', isUpper: 'Char -> Bool', isLower: 'Char -> Bool', isSpace: 'Char -> Bool',
   ord: 'Char -> Int', chr: 'Int -> Char', digitToInt: 'Char -> Int', replicateM_: 'Int -> IO a -> IO ()',
-  repeat: 'a -> [a]', cycle: '[a] -> [a]', iterate: '(a -> a) -> a -> [a]', scanl: '(b -> a -> b) -> b -> [a] -> [b]', scanl1: '(a -> a -> a) -> [a] -> [a]',
+  repeat: 'a -> [a]', cycle: '[a] -> [a]', iterate: '(a -> a) -> a -> [a]', unfoldr: '(b -> Maybe (a, b)) -> b -> [a]', scanl: '(b -> a -> b) -> b -> [a] -> [b]', scanl1: '(a -> a -> a) -> [a] -> [a]',
   takeWhile: '(a -> Bool) -> [a] -> [a]', dropWhile: '(a -> Bool) -> [a] -> [a]', splitAt: 'Int -> [a] -> ([a], [a])',
 };
 const OP_TYPES = {
@@ -229,6 +250,7 @@ const CLASS_DEFS = {
 for (const [name, d] of Object.entries(CLASS_DEFS)) {
   const sigs = {}; for (const [m, str] of Object.entries(d.sigs)) { const { ctx, ast } = parseTypeToks(tokenize(str)); sigs[m] = { ast, mctx: ctx }; }
   const instances = {}; if (d.hkt) ['Maybe', '[]', 'Either', 'IO'].forEach(k => { instances[k] = { key: k, builtin: true, methods: {}, ctx: [] }; });
+  if (name === 'Functor') instances.Map = { key: 'Map', builtin: true, methods: {}, ctx: [] }; // fmap changes a Map's values
   BUILTIN_CLASSES[name] = { name, param: d.param, hkt: !!d.hkt, user: false, supers: BUILTIN_SUPERS[name] || [], sigs, required: d.required, instances, defaults: {}, dispatch: {}, arity: {} };
 }
 for (const [n, d] of Object.entries(CLASS_DEFS)) if (d.hkt) for (const [m, str] of Object.entries(d.sigs)) { const sc = methodScheme(str, n, d.param); if (OP_TYPES[m] || FIX[m]) OPS0[m] = sc; else TENV0[m] = sc; }
@@ -251,6 +273,8 @@ const LIB_CLASS_DEFS = {
   Semigroup: { param: 'a', supers: [], sigs: { '<>': 'a -> a -> a' }, required: [['<>']] },
   Monoid: { param: 'a', supers: ['Semigroup'], sigs: { mempty: 'a', mappend: 'a -> a -> a', mconcat: '[a] -> a' }, required: [['mempty']] },
   Foldable: { param: 't', hkt: true, supers: [], sigs: { foldMap: 'Monoid m => (a -> m) -> t a -> m', toList: 't a -> [a]' }, required: [['foldMap']], extra: { foldMap: ['m'] } },
+  // Glaschu's mountain bridge. The extra f is the Applicative, so the runtime knows which pure to use.
+  Traversable: { param: 't', hkt: true, supers: ['Functor', 'Foldable'], sigs: { traverse: 'Applicative f => (a -> f b) -> t a -> f (t b)', sequenceA: 'Applicative f => t (f a) -> f (t a)' }, required: [['traverse', 'sequenceA']], extra: { traverse: ['f'], sequenceA: ['f'] } },
 };
 const LIB_CLASSES = Object.keys(LIB_CLASS_DEFS);
 for (const [name, d] of Object.entries(LIB_CLASS_DEFS)) {
@@ -264,16 +288,27 @@ for (const [name, d] of Object.entries(LIB_CLASS_DEFS)) {
     ci.schemes[m] = TENV0[m] = libScheme(str, name, d.param, (d.extra || {})[m]);
   }
 }
+// Prelude functions that go through any Foldable (lists, Maybe, Either e, your own instances), not only lists
+const FOLDABLE_TYPES = {
+  length: 't a -> Int', null: 't a -> Bool', sum: 'Num a => t a -> a', product: 'Num a => t a -> a',
+  elem: 'Eq a => a -> t a -> Bool', notElem: 'Eq a => a -> t a -> Bool', maximum: 'Ord a => t a -> a', minimum: 'Ord a => t a -> a',
+  foldr: '(a -> b -> b) -> b -> t a -> b', foldl: '(b -> a -> b) -> b -> t a -> b', concat: 't [a] -> [a]', concatMap: '(a -> [b]) -> t a -> [b]',
+  all: '(a -> Bool) -> t a -> Bool', any: '(a -> Bool) -> t a -> Bool', and: 't Bool -> Bool', or: 't Bool -> Bool',
+};
+for (const [m, str] of Object.entries(FOLDABLE_TYPES)) { const [c, body] = str.includes('=>') ? str.split(' => ') : [null, str]; TENV0[m] = typeFromString(`${c ? `(Foldable t, ${c})` : 'Foldable t'} => ${body}`); }
 // Prelude helpers that now work for any monad (or applicative), not only IO
 const LIB_MONAD_TYPES = {
-  mapM_: ['Monad', '(a -> m b) -> [a] -> m ()'], forM_: ['Monad', '[a] -> (a -> m b) -> m ()'], mapM: ['Monad', '(a -> m b) -> [a] -> m [b]'], forM: ['Monad', '[a] -> (a -> m b) -> m [b]'],
-  sequence: ['Monad', '[m a] -> m [a]'], sequence_: ['Monad', '[m a] -> m ()'], traverse: ['Applicative', '(a -> m b) -> [a] -> m [b]'], traverse_: ['Applicative', '(a -> m b) -> [a] -> m ()'],
+  mapM_: ['Monad', 'Foldable t => (a -> m b) -> t a -> m ()'], forM_: ['Monad', 'Foldable t => t a -> (a -> m b) -> m ()'], 
+  sequence_: ['Monad', 'Foldable t => t (m a) -> m ()'], traverse_: ['Applicative', 'Foldable t => (a -> m b) -> t a -> m ()'],
   when: ['Applicative', 'Bool -> m () -> m ()'], unless: ['Applicative', 'Bool -> m () -> m ()'], replicateM: ['Applicative', 'Int -> m a -> m [a]'], replicateM_: ['Applicative', 'Int -> m a -> m ()'],
   foldM: ['Monad', '(b -> a -> m b) -> b -> [a] -> m b'],
 };
 for (const [m, [cls, str]] of Object.entries(LIB_MONAD_TYPES)) TENV0[m] = libScheme(str, cls, 'm');
+// the Monad versions of traverse and sequenceA go through any Traversable too (m is the monad, as f is for traverse)
+const TRAVERSABLE_TYPES = { mapM: 'Monad m => (a -> m b) -> t a -> m (t b)', forM: 'Monad m => t a -> (a -> m b) -> m (t b)', sequence: 'Monad m => t (m a) -> m (t a)' };
+for (const [m, str] of Object.entries(TRAVERSABLE_TYPES)) TENV0[m] = libScheme(str, 'Traversable', 't', ['m']);
 // newtypes that pick one way of combining: Sum 3 <> Sum 4 is Sum 7, Product 3 <> Product 4 is Product 12
 const LIB_DATA_SRC = ['Sum', 'Product', 'Min', 'Max', 'Any', 'All'].map(n => `newtype ${n}${['Any', 'All'].includes(n) ? '' : ' a'} = ${n} { get${n} :: ${['Any', 'All'].includes(n) ? 'Bool' : 'a'} } deriving (Show, Eq, Ord)`).join('\n');
 
 
-export { CONS0, LIB_CLASSES, LIB_DATA_SRC, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, methodSchemeAst, namer, parseTypeToks, pp, ppScheme, prune, sigScheme, skolemize, tBool, tChar, tDouble, tFun, tList, tString, tTup, tUnit, tvar, unify };
+export { CONS0, LIB_CLASSES, listView, LIB_DATA_SRC, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, methodSchemeAst, namer, parseTypeToks, pp, ppScheme, prune, sigScheme, skolemize, tBool, tChar, tDouble, tFun, tList, tString, tTup, tUnit, tvar, unify };

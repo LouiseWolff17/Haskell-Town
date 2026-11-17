@@ -45,6 +45,30 @@ test('main reads getLine from the input box', async ({ page }) => {
   await expect(out).not.toContainText('Building house #2');
 });
 
+test('main waits in the console for each line it reads', async ({ page }) => {
+  await page.locator('.ex', { hasText: 'IO loop: the town meeting' }).click();
+  const out = page.locator('#results pre.console'), line = page.locator('#results .stdin-live');
+  await expect(out).toContainText('votes> ');
+  await expect(page.locator('#results .ws-wait')).toBeVisible();
+  await expect(line).toBeFocused();
+  await line.fill('3');
+  await line.press('Enter');
+  await expect(out).toContainText('Total so far: 3');
+  await line.fill('12');
+  await line.press('Enter');
+  await expect(out).toContainText("That's a lot of hands!");
+  await line.fill('goodbye');
+  await line.press('Enter');
+  await expect(out).toContainText('Meeting closed with 15 votes.');
+  await expect(out.locator('.typed')).toHaveText(['3', '12', 'goodbye']);
+  await expect(line).toHaveCount(0);
+
+  // a fresh run starts the meeting again
+  await page.locator('#wsMain').click();
+  await expect(out).not.toContainText('Total so far');
+  await expect(line).toBeVisible();
+});
+
 test('Run main without a main says so', async ({ page }) => {
   await setCode(page, 'x :: Int\nx = 1\n');
   await page.locator('#wsMain').click();

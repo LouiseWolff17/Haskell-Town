@@ -17,6 +17,10 @@ Every result type can also be `{ status: 'stopped', reason: 'timeout' | 'cancell
 
 Every method is async, and every result is plain JSON. A runner can therefore live in the page, in a Web Worker, or behind an HTTP API without the game changing.
 
+## Input that's typed while the program runs
+
+`runMain` and `evaluate` take all of stdin up front. When the program asks for a line (`getLine`, `readLn`) after the last one, the run stops and its `RunOutput` has `waiting: true`, together with an `error` saying there was no more input. `reads[i]` is how long `out` was when line `i` was read. The Workshop uses this to make programs look interactive: it shows an input line in the console, and when the player types a line it calls `runMain` again with that line added to the input, then shows the typed lines in place. This works because a program does the same things each time it gets the same input. A GHC runner gives the same results by running the program with the input piped to stdin and reporting EOF on stdin as `waiting`.
+
 ## Runners
 
 | Runner | Status | Notes |
@@ -37,7 +41,7 @@ Every method is async, and every result is plain JSON. A runner can therefore li
 4. **`signature-mismatch`**: the function's type doesn't unify with `challenge.sig`. Type variables in `sig` must stay polymorphic.
 5. **`tested`**: the tests ran.
    - Expression tests `[expr, expected]`: evaluate both and compare with `==`. Report `want`/`got` using `show`, or `error` if evaluation failed.
-   - IO tests `{ input, out }`: run `main` with `input` as stdin and compare stdout exactly.
+   - IO tests `{ input, out }`: run `main` with `input` as stdin and compare stdout exactly. A program that asks for more lines than `input` has fails the test with a "no more input" error.
    - If every test passes, the rules are checked: `forbid` (none of these Prelude names may be used) and `recursive` (some function must call itself). A broken rule gives `ruleBreak` and `passed: false`.
 
 Error messages are shown to beginners. Raw GHC output should be translated into the same friendly style before it's returned. Lines starting with `Expected:` / `Found:` and `Tip:` are formatted specially by the UI.

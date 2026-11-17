@@ -8,7 +8,7 @@ export type TypeEnv = Record<string, unknown>;
 export type Env = Record<string, unknown>;
 
 export declare class HsError extends Error {
-  kind: 'parse' | 'scope' | 'type' | 'runtime' | 'loop' | 'internal';
+  kind: 'parse' | 'scope' | 'type' | 'runtime' | 'loop' | 'internal' | 'input';
   line: number | null;
   constructor(msg: string, kind?: string, line?: number | null);
 }
@@ -37,13 +37,16 @@ export interface Program {
   instances: string[];
 }
 
+/** What running an IO action printed. `waiting`: it wanted another input line (error says so too). */
+export interface IOResult { out: string; reads?: number[]; error?: HsError; waiting?: boolean }
+
 export declare const HS: {
   compile(src: string): Program;
   evalIn(env: Env, src: string): Value;
   typeOf(tenv: TypeEnv, src: string): Type;
   fitsSignature(tenv: TypeEnv, name: string, sig: string): string | null;
-  runMain(prog: Program, input: string): { out: string; error?: HsError };
-  runIO(action: Value, input: string, ctx?: Program['ctx']): { out: string; error?: HsError };
+  runMain(prog: Program, input: string): IOResult;
+  runIO(action: Value, input: string, ctx?: Program['ctx']): IOResult;
   isIO(v: Value): boolean;
   ppType(t: Type): string;
   show(v: Value): string;

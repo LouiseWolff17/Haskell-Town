@@ -1,7 +1,7 @@
 // Type checking: Hindley–Milner inference with type classes, and the friendly type error messages.
 import { cx } from './context.js';
 import { HsError } from './errors.js';
-import { CONS0, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, namer, parseTypeToks, pp, prune, sigScheme, skolemize, tBool, tChar, tFun, tList, tString, tTup, tUnit, tvar, unify } from './types.js';
+import { CONS0, OPS0, OP_TYPES, TC, TENV0, TYPE_ARITY, UFail, buildType, generalize, instantiate, instantiateWith, isVar, namer, parseTypeToks, pp, prune, sigScheme, skolemize, tBool, tChar, tFun, tList, tString, tTup, tUnit, tvar, unify, listView } from './types.js';
 
 const ord = n => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
 const article = s => /^(a |an )/.test(s) ? s : (/^[AEIOU]/.test(s) ? 'an ' : 'a ') + '`' + s + '`';
@@ -18,10 +18,10 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
   if (e.kind === 'occurs') return new HsError(`${L}${what} would need an infinite type. That usually means a list and one of its items got mixed up — for example writing xs : xs instead of x : xs.`, 'type', ctx.line);
   if (e.kind === 'rigidcls') {
     const { c, t } = e.info;
-    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show' }[c];
+    const verb = { Num: 'arithmetic (like + or *)', Fractional: 'division with /', Eq: 'comparison with ==', Ord: 'ordering (like < or max)', Show: 'show', Foldable: 'list functions (like sum, length or foldr)', Traversable: 'traverse (or mapM, sequenceA)', Enum: 'counting (succ, pred or a range like [x ..])', Bounded: 'minBound or maxBound' }[c];
     return new HsError(`${L}${what} uses ${verb} on values of type \`${t.con}\`, but the type signature doesn't promise that \`${t.con}\` supports it. Add \`${c} ${t.con} =>\` to the start of the signature, like: f :: ${c} ${t.con} => …`, 'type', ctx.line);
   }
-  const VERB = { Show: 'shown (with show or print)', Eq: 'compared with ==', Ord: 'put in order (with <, max, sort …)', Read: 'read from text' };
+  const VERB = { Show: 'shown (with show or print)', Eq: 'compared with ==', Ord: 'put in order (with <, max, sort …)', Read: 'read from text', Enum: 'counted through (with succ, pred or a range like [x ..])', Bounded: 'given a smallest and a largest value (minBound and maxBound)' };
   if (e.kind === 'noinst') {
     const { c, t } = e.info; const k = prune(t).con; const ci = cx.classes[c];
     const ut = cx.types[k]; const params = ut ? ut.params : [];
@@ -39,8 +39,17 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
   if (e.kind === 'class' && (!actWasVar || e.info.c === 'Read') && ['Show', 'Eq', 'Ord', 'Read'].includes(e.info.c) && prune(e.info.t).con !== '->') {
     const { c, t } = e.info; const T = pp(t, namer());
     if (prune(t).con === 'IO') return new HsError(`${L}${what} is an IO action, and IO actions can't be ${VERB[c]}. Run it inside a do block instead, like: x <- action`, 'type', ctx.line);
-    if (c === 'Read') return new HsError(`${L}\`read\` can turn text into an Int, a Double or a Bool, but here it would need to make ${article(T)}.`, 'type', ctx.line);
+    if (c === 'Read') return new HsError(`${L}\`read\` and \`readLn\` can turn text into an Int, a Double, a Bool, a Char or a String (and lists and tuples of those), but here it would need to make ${article(T)}.`, 'type', ctx.line);
     return new HsError(`${L}values of type \`${T}\` can't be ${VERB[c]}.`, 'type', ctx.line);
+  }
+  if (e.kind === 'class' && e.info.c === 'Enum') {
+    const T = pp(e.info.t, namer()); const quotes = T === 'String' ? ` 'a' (single quotes) is a Char; "a" (double quotes) is a String.` : '';
+    if (ctx.what === 'this range') return new HsError(`${L}A range like [a..b] counts through numbers or characters (['a'..'z']), or your own types with deriving (Enum), but ${what} is made of ${article(T)}.${quotes}`, 'type', ctx.line);
+    return new HsError(`${L}${what} needs something that can be counted (Enum): a number, a character, a Bool, or your own type with deriving (Enum). But it is ${article(T)}.${quotes}`, 'type', ctx.line);
+  }
+  if (e.kind === 'class' && e.info.c === 'Bounded') {
+    const T = pp(e.info.t, namer());
+    return new HsError(`${L}${what} needs a type with a smallest and a largest value (Bounded), like Int, Char, Bool or your own type with deriving (Bounded). \`${T}\` doesn't have them.`, 'type', ctx.line);
   }
   if (e.kind === 'class' && !actWasVar && (ctx.op || e.info.c === 'Fractional' || e.info.c === 'Show' || e.info.c === 'Eq' || e.info.c === 'Ord')) {
     const { c, t } = e.info; const T = pp(t, namer());
@@ -49,7 +58,7 @@ function typeError(e, ctx, ppE, ppA, actWasVar, exp, act) {
     return new HsError(`${L}${c === 'Show' ? "A function can't be shown" : "Functions can't be compared"} — ${what} is a function. Is it missing an argument?`, 'type', ctx.line);
   }
   let msg = `${L}Type mismatch in ${what}.\n  Expected: ${ppE}\n  Found:    ${ppA}`;
-  const E = prune(exp), A = prune(act);
+  const E = listView(exp), A = listView(act); // length 5 still gets the list tips
   const tips = [];
   if (!isVar(E) && !isVar(A)) {
     if (ctx.op && (E.con === 'IO') !== (A.con === 'IO')) tips.push(`A function call grabs its argument before \`${ctx.op}\` does, so putStrLn "a" ${ctx.op} b means (putStrLn "a") ${ctx.op} b. Put the whole thing in parentheses: putStrLn ("a" ${ctx.op} b).`);
@@ -84,7 +93,7 @@ function conScheme(name, line) {
   if (!CONS0[name]) throw new HsError(`${line ? `Line ${line}: ` : ''}I don't know a constructor called \`${name}\`. (Names starting with a capital letter are types or constructors; function names start lowercase.)`, 'scope', line);
   return CONS0[name];
 }
-const TYPE_DIRECTED = ['show', 'print', 'read'];
+const TYPE_DIRECTED = ['show', 'print', 'read', 'readLn', 'minBound', 'maxBound', 'toEnum'];
 const litType = lt => lt === 'int' ? tvar(['Num']) : lt === 'float' ? tvar(['Fractional']) : lt === 'str' ? tString() : tChar;
 function arrowCount(t) { let n = 0; t = prune(t); while (!isVar(t) && t.con === '->') { n++; t = prune(t.args[1]); } return n; }
 
@@ -97,6 +106,21 @@ function inferPat(p, binds, line) {
       let t = instantiate(conScheme(p.name, line)); const need = arrowCount(t);
       if (need !== p.args.length) throw new HsError(`${line ? `Line ${line}: ` : ''}In a pattern, \`${p.name}\` needs ${need} argument${need === 1 ? '' : 's'}${need ? `, like (${p.name} x)` : ''}.`, 'type', line);
       for (const a of p.args) { t = prune(t); unifyAt(t.args[0], inferPat(a, binds, line), { line, what: `this ${p.name} pattern` }); t = t.args[1]; }
+      return t;
+    }
+    case 'rec': { // Letter { to = t }: only the named fields are looked at, in any order
+      const L = line ? `Line ${line}: ` : '';
+      let t = instantiate(conScheme(p.name, line)); const info = cx.cons[p.name];
+      if (p.fields.length && !(info && info.fieldNames)) throw new HsError(`${L}\`${p.name}\` wasn't defined with named fields, so its pattern can't use { … }. Match its values in order instead, like (${p.name} x y).`, 'type', line);
+      const fts = []; t = prune(t);
+      while (!isVar(t) && t.con === '->') { fts.push(t.args[0]); t = prune(t.args[1]); }
+      const seen = new Set();
+      for (const [f, q, fl] of p.fields) {
+        const at = fl || line, i = info.fieldNames.indexOf(f);
+        if (i < 0) throw new HsError(`${at ? `Line ${at}: ` : ''}\`${p.name}\` has no field called \`${f}\`. Its fields are: ${info.fieldNames.join(', ')}.`, 'type', at);
+        if (seen.has(f)) throw new HsError(`${at ? `Line ${at}: ` : ''}the field \`${f}\` appears twice in this pattern.`, 'type', at);
+        seen.add(f); unifyAt(fts[i], inferPat(q, binds, at), { line: at, what: `the field \`${f}\` in this ${p.name} pattern` });
+      }
       return t;
     }
     case 'tuple': return p.items.length ? tTup(p.items.map(x => inferPat(x, binds, line))) : tUnit;
@@ -171,14 +195,29 @@ function infer(n, env) {
       return t;
     }
     case 'upd': {
-      const st = infer(n.e, env);
+      const st = infer(n.e, env); const seen = [];
+      const fieldsOf = tn => Object.values(cx.cons).filter(c => c.typeName === tn).flatMap(c => c.fieldNames || []);
       for (const [f, e, line] of n.fields) {
         const fi = cx.fields[f];
         if (!fi) throw new HsError(`Line ${line}: I don't know a record field called \`${f}\`.`, 'scope', line);
+        if (seen.includes(f)) throw new HsError(`Line ${line}: the field \`${f}\` is given twice in this update.`, 'type', line);
+        const first = seen.length && cx.fields[seen[0]];
+        if (first && first.typeName !== fi.typeName) throw new HsError(`Line ${line}: \`${seen[0]}\` is a field of ${first.typeName} but \`${f}\` is a field of ${fi.typeName}, so they can't be changed in the same { … }.`, 'type', line);
+        seen.push(f);
+        const have = prune(st);
+        if (!isVar(have) && have.con !== fi.typeName && cx.types[have.con]) {
+          const own = [...new Set(fieldsOf(have.con))];
+          const a = /^[AEIOU]/.test(have.con) ? 'an' : 'a';
+          throw new HsError(`Line ${line}: ${a} ${have.con} has no field called \`${f}\` (that's a field of ${fi.typeName}).${own.length ? ` ${a === 'an' ? 'An' : 'A'} ${have.con}'s fields are: ${own.join(', ')}.` : ''}`, 'type', line);
+        }
         const at = prune(instantiate(fi.scheme));
         unifyAt(at.args[0], st, { line, what: 'the record being updated' });
         unifyAt(at.args[1], infer(e, env), { line, what: `the field \`${f}\`` });
       }
+      // Shape = Circle { radius } | Rect { w, h }: r { radius = 1, w = 2 } could never work
+      const tn = cx.fields[seen[0]].typeName;
+      if (seen.length > 1 && !Object.values(cx.cons).some(c => c.typeName === tn && seen.every(f => (c.fieldNames || []).includes(f))))
+        throw new HsError(`Line ${n.line}: no constructor of ${tn} has all of the fields ${seen.map(f => '`' + f + '`').join(', ')}, so this update could never work.`, 'type', n.line);
       return st;
     }
     case 'comp': {
@@ -207,7 +246,7 @@ function infer(n, env) {
     case 'paren': return infer(n.e, env);
     case 'list': { const el = tvar(); n.items.forEach(it => unifyAt(el, infer(it, env), { line: lineOf(it) || n.line, what: 'this list — every item in a list must have the same type' })); return tList(el); }
     case 'tuple': return n.items.length ? tTup(n.items.map(it => infer(it, env))) : tUnit;
-    case 'range': { const el = tvar(['Num']); [n.from, n.then, n.to].filter(Boolean).forEach(x => unifyAt(el, infer(x, env), { line: n.line, what: 'this range' })); return tList(el); }
+    case 'range': { const el = tvar(['Enum']); [n.from, n.then, n.to].filter(Boolean).forEach(x => unifyAt(el, infer(x, env), { line: n.line, what: 'this range' })); return tList(el); }
     case 'app': {
       const args = []; let h = n; while (h.k === 'app') { args.unshift(h.a); h = h.f; }
       const name = headName(h);

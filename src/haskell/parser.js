@@ -3,6 +3,7 @@
 import { cx } from './context.js';
 import { HsError } from './errors.js';
 import { tokenize } from './lexer.js';
+import { readImports, resolveNames } from './modules.js';
 
 const FIX = { '$': [0,'r'], '>>=': [1,'l'], '>>': [1,'l'], '<$>': [4,'l'], '<*>': [4,'l'], '<>': [6,'r'], '||': [2,'r'], '&&': [3,'r'], '==': [4,'n'], '/=': [4,'n'], '<': [4,'n'], '<=': [4,'n'], '>': [4,'n'], '>=': [4,'n'],
   ':': [5,'r'], '++': [5,'r'], '+': [6,'l'], '-': [6,'l'], '*': [7,'l'], '/': [7,'l'], '^': [8,'r'], '.': [9,'r'], '!!': [9,'l'] };
@@ -178,7 +179,7 @@ class Parser {
     const deriving = [];
     if (this.is('kw', 'deriving')) {
       this.next();
-      const add = t => { if (!['Show', 'Eq', 'Ord'].includes(t.v)) this.fail(`Haskell Town can derive Show, Eq and Ord — not \`${t.v}\` yet.`); deriving.push(t.v); };
+      const add = t => { if (!['Show', 'Eq', 'Ord', 'Enum', 'Bounded'].includes(t.v)) this.fail(`Haskell Town can derive Show, Eq, Ord, Enum and Bounded — not \`${t.v}\` yet.`); deriving.push(t.v); };
       if (this.is('p', '(')) { this.next(); while (!this.is('p', ')')) { add(this.expect('con', undefined, 'Write class names inside deriving ( … ), like deriving (Show, Eq).')); if (this.is('p', ',')) this.next(); else break; } this.expect('p', ')'); }
       else add(this.expect('con', undefined, 'After deriving, write a class name like Show, or a list like (Show, Eq).'));
     }
@@ -259,10 +260,11 @@ class Parser {
     if (k.t === 'char') return { k: 'lit', v: k.v, lt: 'char', line };
     let node;
     if (k.t === 'id') node = k.v === '___' ? { k: 'hole', line } : { k: 'var', name: k.v, line };
-    else if (k.t === 'con') return this.is('p', '{') ? this.parseRecordBody({ k: 'rec', con: k.v, line }) : { k: 'con', name: k.v, line };
+    else if (k.t === 'con') { if (!this.is('p', '{')) return { k: 'con', name: k.v, line }; node = this.parseRecordBody({ k: 'rec', con: k.v, line }); }
     else if (k.v === '[') return Object.assign(this.parseListTail(), { line });
     else node = Object.assign(this.parseParenTail(line), { line });
-    return this.is('p', '{') ? this.parseRecordBody({ k: 'upd', e: node, line }) : node;
+    while (this.is('p', '{')) node = this.parseRecordBody({ k: 'upd', e: node, line }); // r { a = 1 } { b = 2 }
+    return node;
   }
   parseRecordBody(node) {
     this.next(); node.fields = [];
@@ -428,7 +430,7 @@ class Parser {
     if (k.t === 'num') return { p: 'lit', v: k.v, lt: k.float ? 'float' : 'int' };
     if (k.t === 'str') return { p: 'lit', v: k.v, lt: 'str' };
     if (k.t === 'char') return { p: 'lit', v: k.v, lt: 'char' };
-    if (k.t === 'con') return { p: 'con', name: k.v, args: [] };
+    if (k.t === 'con') return this.is('p', '{') ? this.parseRecordPat(k.v) : { p: 'con', name: k.v, args: [] };
     if (k.v === '[') {
       if (this.is('p', ']')) { this.next(); return { p: 'list', items: [] }; }
       const items = [this.parsePat()]; while (this.is('p', ',')) { this.next(); items.push(this.parsePat()); }
@@ -442,9 +444,23 @@ class Parser {
     }
     this.pos--; this.fail(`I expected a pattern here, but found ${this.desc(k)}.`);
   }
+  // Letter { to = t, stamp = s }, Letter { to } (a pun: to = to), or Letter {} (any Letter at all)
+  parseRecordPat(name) {
+    this.next(); const fields = [];
+    while (!this.is('p', '}')) {
+      if (this.is('op', '..')) this.fail(`{..} (RecordWildCards) isn't supported. Name the fields you need instead, like ${name} { field = x }.`);
+      const f = this.expect('id', undefined, `Inside a pattern's { … }, write field = pattern, like name = n. I found ${this.desc(this.peek())}.`);
+      if (this.is('op', '=')) { this.next(); fields.push([f.v, this.parsePat(), f.line]); }
+      else fields.push([f.v, { p: 'var', name: f.v }, f.line]);
+      if (this.is('p', ',')) this.next(); else break;
+    }
+    this.expect('p', '}', `I expected a , or a closing } in this pattern, but found ${this.desc(this.peek())}.`);
+    return { p: 'rec', name, fields };
+  }
   parsePat() {
     let left;
-    if (this.is('con')) { const c = this.next(); const args = []; while (this.canPatAtom()) args.push(this.parsePatAtom()); left = { p: 'con', name: c.v, args }; }
+    if (this.is('con') && this.is('p', '{', 1)) left = this.parsePatAtom();
+    else if (this.is('con')) { const c = this.next(); const args = []; while (this.canPatAtom()) args.push(this.parsePatAtom()); left = { p: 'con', name: c.v, args }; }
     else if (this.is('op', '-') && this.is('num', undefined, 1)) { this.next(); const n = this.next(); left = { p: 'lit', v: -n.v, lt: n.float ? 'float' : 'int' }; }
     else left = this.parsePatAtom();
     if (this.is('op', ':')) { this.next(); return { p: 'cons', h: left, t: this.parsePat() }; }
@@ -466,10 +482,12 @@ function parseProgram(src) {
       else if (o.t === 'id') cx.fixity[o.v] = [n.v, t.v === 'infixl' ? 'l' : t.v === 'infixr' ? 'r' : 'n'];
     }
   }
+  const { aliases, unqualified } = readImports(toks);
+  cx.aliases = aliases; resolveNames(toks, aliases); // M.insert → Map.insert
   const ranges = []; let s = 0;
   for (let i = 0; i < toks.length; i++) if (i > s && toks[i].bol && toks[i].col === 0) { ranges.push([s, i]); s = i; }
   if (toks.length > s) ranges.push([s, toks.length]);
-  return new Parser(toks).parseDecls(ranges, true);
+  return Object.assign(new Parser(toks).parseDecls(ranges, true), { aliases, imports: unqualified });
 }
 class TypeParser {
   constructor(toks, i = 0, end = toks.length) { this.toks = toks; this.i = i; this.end = end; this.line = toks[i] ? toks[i].line : (toks[0] ? toks[0].line : null); }
@@ -497,7 +515,7 @@ class TypeParser {
   }
 }
 function parseExprSrc(src) {
-  const p = new Parser(tokenize(src)); const e = p.parseExpr();
+  const p = new Parser(resolveNames(tokenize(src), cx.aliases)); const e = p.parseExpr();
   if (p.peek()) p.fail(`I didn't expect ${p.desc(p.peek())} here.`);
   return e;
 }

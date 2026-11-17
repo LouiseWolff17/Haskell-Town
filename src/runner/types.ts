@@ -34,6 +34,12 @@ export interface RunOutput {
   out: string;
   /** Output printed before the error is kept in `out`. */
   error?: Diagnostic;
+  /** The program asked for another line (getLine / readLn) after the last one in the input. `error` is set too, saying
+   *  so. A front end can let the player type that line and run again with it added: the program does the same
+   *  things each run, so it looks as if it waited. */
+  waiting?: true;
+  /** reads[i] is the length of `out` when input line i was read, so typed lines can be shown where they went in. */
+  reads?: number[];
 }
 
 /** The runner gave up before the code finished: it ran too long, or the player pressed Stop. */
@@ -124,7 +130,7 @@ export interface CodeRunner {
   check(challenge: Checkable, source: string): Promise<CheckResult>;
   /** Type-check a program and describe what it declares. */
   compile(source: string): Promise<CompileResult>;
-  /** Compile, then run `main` with the given stdin (one line per getLine). */
+  /** Compile, then run `main` with the given stdin (one line per getLine / readLn). */
   runMain(source: string, input: string): Promise<RunMainResult>;
   /** Compile, then evaluate an expression in the program (like GHCi's λ> prompt). IO actions are run. */
   evaluate(source: string, expr: string, input: string): Promise<EvalResult>;
