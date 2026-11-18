@@ -9,7 +9,8 @@ After the village is built, the **Notice Board** opens: residents pin up a few e
 - **23 challenges, 13 residents, 14 buildings.** Every building teaches one idea, and its upgrade practises it again.
 - **Real Haskell, checked like GHC.** Your code is type-checked before anything runs, and the error messages are written for beginners.
 - **Help without penalties.** There are three learning-assistance modes (Guided, Balanced, Independent) and four levels of hints, plus a full solution if you want it. The reward is the same however you get there.
-- **The Notice Board** brings each topic back over days and weeks: 26 errands on 13 topics, one topic per resident, solved from memory, with feedback after you try. Topics that keep slipping (an answer you had to see, or feeling sure and still needing a few tries) are suggested for a second look in the Library.
+- **The Notice Board** brings each topic back over days and weeks: 52 errands on 13 topics (some mixing two topics), one topic per resident, solved from memory, with feedback after you try. Topics that keep slipping (an answer you had to see, or feeling sure and still needing a few tries) are suggested for a second look in the Library.
+- **City Hall projects.** Once the village is built, Mayor Fern hands out bigger jobs, one after another: a vote counter, Pip's booking board and Hazel's order book. Each is a whole program in one file, built over five or six steps, each step using the functions before it and ending with a `main` you can talk to. Every run checks all the steps so far, so breaking an earlier function is caught straight away. Once it's finished the tests stay, so you can refactor safely. Each finished project hangs bunting on City Hall and gets a page in the Journal.
 - **The town keeps growing.** Solving errands opens new land south of the railway (a meadow, an orchard, a duck pond, a windmill), and the **Journal** keeps a page for every building with the code you wrote, plus a stamp for every errand.
 - **Walk around town.** You have a little character in a straw hat: walk with the arrow keys or WASD (or click where to go), and press **E** next to a resident with a **!** or **?** to help them. Clicking a request in the list sends the character walking there.
 - **Friends.** Each errand you solve for a resident earns a heart. Hearts bring a letter to Wren's mailbox, then a gift, then a lasting change to their building on the map. Friends have their own panel to the left of the map.
@@ -49,6 +50,7 @@ src/
     types.ts            Challenge, Resident, … (start here)
     challenges/         one file per building, e.g. 06-library.ts
     errands.ts          review topics and errands for the Notice Board
+    projects.ts         City Hall projects: bigger programs built a step at a time
     expansions.ts       land that opens as errands are solved
     friendship.ts       letters, gifts and building changes for each resident
     life.ts             the bit of life each errand topic brings to the map
@@ -69,11 +71,12 @@ src/
     sidebar.ts          request list, learning library
     errands.ts          the Notice Board tab
     schedule.ts         when errands come back (pure functions, tested)
+    projects.ts         City Hall projects in the Requests list; project-rules.ts has their rules (pure, tested)
     rewards.ts          map growth, Journal stamps, friendship hearts (pure functions, tested)
     journal.ts          the Journal tab and the printable booklet
     friends.ts          the Friends panel left of the map (hearts, letters, gifts)
     music.ts            market music (Web Audio, no sound files)
-    notebook.ts         challenge window and Workshop
+    notebook.ts         challenge window, errands, projects and the Workshop
     highlight.ts        syntax highlighting
 tests/
   content.test.ts          ids, unlock order, hints… all fit together
@@ -81,9 +84,11 @@ tests/
   worker-runner.test.ts    timeouts, Stop, crashes and queueing in WorkerRunner
   schedule.test.ts         Notice Board scheduling: boxes, gaps, retries, revisit suggestions
   rewards.test.ts          new land, Journal stamps and hearts
+  projects.test.ts         City Hall projects: every step's answer passes on top of the ones before; unlock order
 e2e/                     browser tests (Playwright), run against the production build
   challenge.spec.ts        welcome screen, running tests, hints, building, saved progress
   workshop.spec.ts         type-checking, expressions, main with getLine, Stop
+  projects.spec.ts         City Hall projects: steps, checkpoints, a broken earlier step, finishing
 docs/                   design notes and the runner API
 ```
 
@@ -98,7 +103,11 @@ The UI never calls the interpreter directly. Player code runs in a background We
 
 ## Adding an errand
 
-Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add a topic to `REVIEW_TOPICS`; each topic needs at least two errands, so reviews can vary). Give it a small `starter` that doesn't pass and a `solution` that does; `npm test` checks both. In dev mode (`npm run dev`, or the live site with `?dev` at the end of the address), the DEV panel's **+1 day** button moves the clock forward so you can try the schedule.
+Add it to `ERRANDS` in `src/content/errands.ts` under an existing topic (or add a topic to `REVIEW_TOPICS`; each topic needs at least three plain errands and one with `mix` set to a second topic, so reviews can vary). Give it a small `starter` that doesn't pass and a `solution` that does; `npm test` checks both. In dev mode (`npm run dev`, or the live site with `?dev` at the end of the address), the DEV panel's **+1 day** button moves the clock forward so you can try the schedule.
+
+## Adding a City Hall project
+
+Add a `Project` to `PROJECTS` in `src/content/projects.ts`: a `starter` with the types the steps share, then `steps`, each a `Checkable` with a `stub` (added to the bottom of the file when the step starts), three `hints` and its own `solution`. The steps' solutions, one after another under the starter, must make the whole program; `npm test` checks that each one passes with the steps before it, and that each stub compiles but doesn't pass. Projects open one after another, so a new one goes at the end. Its bunting colour is `BUNTING` in `src/game/town.ts`, its Journal stamp `PROJECT_STAMP` in `src/game/journal.ts`. The DEV panel's **Project step** and **Project** buttons pass steps with the model answers.
 
 ## Adding new land
 

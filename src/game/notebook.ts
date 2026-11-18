@@ -6,28 +6,33 @@ import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } 
 import { codeBlock, highlight } from './highlight.ts';
 import { buildAnim, portrait, showLand } from './town.ts';
 import { notSupportedHTML, renderSidebar } from './sidebar.ts';
-import { ERRANDS_BY_TOPIC, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, villageBuilt, whenText } from './errands.ts';
+import { RETRY_ERRANDS, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, topicLabel, villageBuilt, whenText } from './errands.ts';
 import { completeItem, isOpen, showAnswer } from './schedule.ts';
 import { newFriendRewards, newlyOpened, nextExpansion } from './rewards.ts';
+import { passStep, progressOf, projectById, projectKey, projectState } from './projects.ts';
+import { projectStarter, stepsToCheck } from './project-rules.ts';
 import type { FriendReward } from './rewards.ts';
-import type { AssistMode, Challenge, Errand, Expansion, IOTest, ExprTest, LifeTouch } from '../content/index.ts';
+import type { AssistMode, Challenge, Errand, Expansion, IOTest, ExprTest, LifeTouch, Project } from '../content/index.ts';
 import type { CheckResult, Diagnostic, MissingPart, ProgramSummary, RunOutput, Stopped } from '../runner/index.ts';
 import type { Confidence, Outcome } from './schedule.ts';
 
-/** What the notebook has open: a challenge, an errand from the Notice Board, or the Workshop. */
-type ChallengeSession = Challenge & { workshop?: never; errand?: never };
+/** What the notebook has open: a challenge, an errand from the Notice Board, a City Hall project, or the Workshop. */
+type ChallengeSession = Challenge & { workshop?: never; errand?: never; project?: never };
 interface ErrandSession extends Omit<Errand, 'id'> {
   /** The key for state.code: `errand:<errand id>`. */
   id: string;
   errandId: string;
   errand: true;
   workshop?: never;
+  project?: never;
   /** Where it is in the day's list, and which day, so a new day can be noticed. */
   index: number;
   date: number;
 }
-interface WorkshopSession { id: 'workshop'; workshop: true; errand?: never }
-type Session = ChallengeSession | ErrandSession | WorkshopSession;
+interface WorkshopSession { id: 'workshop'; workshop: true; errand?: never; project?: never }
+/** A City Hall project: one file, built a step at a time. `id` is its key in state.code (`project:<id>`). */
+interface ProjectSession { id: string; project: Project; workshop?: never; errand?: never }
+type Session = ChallengeSession | ErrandSession | WorkshopSession | ProjectSession;
 
 /** The one runner for the whole game (the interiors use it too). Calls are queued, one at a time. */
 export const runner = createRunner();
@@ -42,6 +47,7 @@ function syncEditor(): void {
 function starterFor(c: Challenge, mode: AssistMode = state.mode): string { return c.starter[mode]; }
 export function setMode(m: AssistMode): void {
   if (current && (current.workshop || current.errand)) { state.mode = m; save(); renderSidebar(); return; }
+  if (current?.project) { projectMode(current, m); return; }
   const prev = state.mode; state.mode = m; save(); renderSidebar();
   if (current) {
     const code = ed.value; const untouched = !code.trim() || Object.values(current.starter).includes(code);
@@ -52,7 +58,7 @@ export function setMode(m: AssistMode): void {
 }
 export function openChallenge(id: string): void {
   const c = byId(id); if (!c || status(c) === 'locked') return;
-  current = c; $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop', 'is-errand'); $('#runBtn').textContent = '▶ Run tests';
+  current = c; $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop', 'is-errand', 'is-project'); $('#runBtn').textContent = '▶ Run tests';
   $('#nbEyebrow').textContent = `Challenge ${String(c.num).padStart(2, '0')} · ${c.stage}`;
   $('#nbTitle').textContent = c.title;
   ed.value = state.code[id] != null ? state.code[id] : starterFor(c); syncEditor();
@@ -66,16 +72,19 @@ export function openChallenge(id: string): void {
 export function closeNotebook(): void { if (activeRun) runner.cancel?.(); $('#notebook').hidden = true; document.body.classList.remove('modal-open'); current = null; revealLand(); }
 
 // New land opened by an errand is revealed once the notebook closes, so the player sees the mist lift.
-let pendingLand: Expansion[] = [], pendingFriends: [rid: string, rewards: FriendReward[]][] = [], pendingLife: LifeTouch[] = [];
+let pendingLand: Expansion[] = [], pendingFriends: [rid: string, rewards: FriendReward[]][] = [], pendingLife: LifeTouch[] = [], pendingProjects: Project[] = [];
+/** A City Hall project just finished: its bunting goes up when the notebook closes. */
+export function queueProject(p: Project): void { pendingProjects.push(p); }
 /** A new bit of life on the map (src/content/life.ts), announced when the notebook closes. */
 export function queueLife(touches: LifeTouch[]): void { pendingLife.push(...touches); }
 export function queueLand(opened: Expansion[]): void { pendingLand.push(...opened); }
 /** After an errand: [resident, rewards just reached] for the friendship toast and the map change. */
 export function queueFriend(rid: string, rewards: FriendReward[]): void { if (rewards.length) pendingFriends.push([rid, rewards]); }
 export function revealLand(): void {
-  if (!pendingLand.length && !pendingFriends.length && !pendingLife.length) return;
-  const opened = pendingLand, friends = pendingFriends, life = pendingLife; pendingLand = []; pendingFriends = []; pendingLife = [];
+  if (!pendingLand.length && !pendingFriends.length && !pendingLife.length && !pendingProjects.length) return;
+  const opened = pendingLand, friends = pendingFriends, life = pendingLife, projects = pendingProjects; pendingLand = []; pendingFriends = []; pendingLife = []; pendingProjects = [];
   const t = performance.now(), msgs: string[] = [];
+  for (const p of projects) { buildAnim['project-' + p.id] = t + 300; msgs.push(`🏛 <b>${p.title} is finished!</b> ${p.reward} goes up.`); }
   opened.forEach(x => { buildAnim['exp-' + x.id] = t + 300; });
   if (opened.length) { const last = opened[opened.length - 1]; msgs.push(`<b>${last.title} has opened!</b> ${last.note}`); }
   for (const [rid, rewards] of friends) {
@@ -103,7 +112,7 @@ function landLine(opened: Expansion[], solved: number): string {
   return `<div class="land-line">🌫 ${left} more errand${left === 1 ? '' : 's'} until the mist lifts on new land.</div>`;
 }
 function renderProblem(): void {
-  const c = current; if (!c || c.workshop || c.errand) return;
+  const c = current; if (!c || c.workshop || c.errand || c.project) return;
   const r = RESIDENTS[c.resident];
   const p = $('#problem');
   p.innerHTML = `<div class="story"><div class="story-p"></div><div><div class="who">${r.name} <span>the ${r.role}</span></div><p>${c.story}</p></div></div>
@@ -113,7 +122,7 @@ function renderProblem(): void {
   p.querySelector('.story-p')!.appendChild(portrait(c.resident, 52));
 }
 function renderAssistant(): void {
-  const c = current; if (!c || c.workshop || c.errand) return;
+  const c = current; if (!c || c.workshop || c.errand || c.project) return;
   const n = state.hints[c.id] || 0;
   const a = $('#assistant');
   const primer = `<div class="primer"><div class="primer-h">Today's concept · ${c.concept}</div><p>${c.primer}</p>${codeBlock(c.primerCode)}</div>`;
@@ -181,6 +190,7 @@ async function checkNotebook(): Promise<void> {
   const c = current; if (!c) return;
   if (c.workshop) return doWorkshopRun();
   if (c.errand) return checkErrand();
+  if (c.project) return checkProject();
   state.attempts[c.id] = (state.attempts[c.id] || 0) + 1; save();
   const out = $('#results');
   const r = await runner.check(c, ed.value);
@@ -195,8 +205,10 @@ async function checkNotebook(): Promise<void> {
   out.innerHTML = html;
   const bb = $('#buildBtn'); if (bb) bb.onclick = () => build(c);
 }
+/** What checkHTML needs to know about what was checked: a challenge, an errand or a project step. */
+interface Checked { fn: string | null; resident: string; errand?: boolean; hints?: string[] }
 // Turn a CheckResult into HTML. `all` is true when every test passed and no rule was broken.
-function checkHTML(c: ChallengeSession | ErrandSession, r: CheckResult): { html: string; all: boolean } {
+function checkHTML(c: Checked, r: CheckResult): { html: string; all: boolean } {
   const early = (html: string) => ({ html, all: false });
   if (r.status === 'stopped') return early(stoppedCard(r));
   if (r.status === 'compile-error') {
@@ -259,7 +271,7 @@ export function build(c: Challenge): void {
   buildAnim[c.upgrade ? (c.plot ?? c.id) + '-deco' : (c.plot || c.id)] = performance.now();
   const noun = c.upgrade ? `${c.reward} — added!` : `${c.reward} ${['mailbox', 'garden'].includes(c.id) ? 'is ready' : 'has been built'}!`;
   toast(`<b>${noun}</b> ` + (next.length ? `New request from ${[...new Set(next.map(x => RESIDENTS[x.resident].name))].join(' & ')}.`
-    : villageBuilt() ? `The whole village is built! From now on, residents pin small errands to the <b>Notice Board</b> (the Errands tab) — a few each day.` : `You've finished every request in town so far. Try the Workshop meanwhile!`));
+    : villageBuilt() ? `The whole village is built! From now on, residents pin small errands to the <b>Notice Board</b> (the Errands tab), a few each day, and Mayor Fern has a bigger <b>project</b> waiting at City Hall.` : `You've finished every request in town so far. Try the Workshop meanwhile!`));
   if (villageBuilt()) document.querySelector<HTMLElement>('.tabs button[data-tab=errands]')?.click();
   $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -282,8 +294,8 @@ export function openErrand(index: number): void {
   const e = errandById(item.errand)!, t = topicById(item.topic)!;
   const session: ErrandSession = { ...e, id: 'errand:' + e.id, errandId: e.id, errand: true, index, date: rs.day.date };
   current = session;
-  $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop'); $('.nb').classList.add('is-errand'); $('#runBtn').textContent = '▶ Run tests';
-  $('#nbEyebrow').textContent = `Errand · ${t.title} · from memory`;
+  $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop', 'is-project'); $('.nb').classList.add('is-errand'); $('#runBtn').textContent = '▶ Run tests';
+  $('#nbEyebrow').textContent = `Errand · ${topicLabel(e)} · from memory`;
   $('#nbTitle').textContent = e.title;
   ed.value = state.code[session.id] != null ? state.code[session.id] : e.starter; syncEditor(); markLine(null);
   renderErrandProblem(); renderErrandAssistant();
@@ -302,8 +314,8 @@ function renderErrandProblem(): void {
 }
 function renderErrandAssistant(): void {
   const item = errandItem(), c = current; if (!item || !c?.errand) return;
-  const t = topicById(item.topic)!, a = $('#assistant');
-  let html = `<div class="primer recall"><div class="primer-h">From memory · ${t.title}</div><p>No hints up front this time. Give it a real try before looking anything up: struggling to remember is what makes it stick.</p></div>`;
+  const t = topicById(item.topic)!, a = $('#assistant'), e = errandById(item.errand)!, label = topicLabel(e);
+  let html = `<div class="primer recall"><div class="primer-h">From memory · ${label}</div>${e.mix ? `<p>This one needs two ideas together: ${label.replace(' + ', ' and ')}.</p>` : ''}<p>No hints up front this time. Give it a real try before looking anything up: struggling to remember is what makes it stick.</p></div>`;
   html += `<div class="hints-h"><span>How sure are you?</span></div>`;
   if (item.runs === 0 && isOpen(item)) {
     html += `<p class="conf-q">Before you run it: how sure are you that it will pass first time?</p><div class="conf-seg">${Object.entries(CONF).map(([k, l]) => `<button data-conf="${k}" class="${item.confidence === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
@@ -312,7 +324,7 @@ function renderErrandAssistant(): void {
   }
   if (isOpen(item)) {
     html += `<div class="hints-h"><span>Stuck?</span></div>`;
-    html += item.cue ? `<div class="cue">${cueHTML(item.topic)}</div>` : `<button class="btn-soft" id="cueBtn">Peek at the Library cards for ${t.title}</button>`;
+    html += item.cue ? `<div class="cue">${cueHTML(e)}</div>` : `<button class="btn-soft" id="cueBtn">Peek at the Library cards for ${label}</button>`;
     html += `<button class="btn-soft ghost" id="answerBtn">I can't remember — show me the answer</button>`;
     html += `<p class="no-penalty">Looking is fine. It only changes when this topic comes back: a peek keeps the gap the same, and after seeing the answer, a new errand on ${t.title} comes back later today.</p>`;
   } else if (item.sawAnswer) {
@@ -322,7 +334,7 @@ function renderErrandAssistant(): void {
   a.querySelectorAll<HTMLElement>('[data-conf]').forEach(b => b.onclick = () => { item.confidence = b.dataset.conf as Confidence; save(); renderErrandAssistant(); });
   const cb = $('#cueBtn'); if (cb) cb.onclick = () => { item.cue = true; save(); renderErrandAssistant(); };
   const ab = $('#answerBtn'); if (ab) ab.onclick = () => {
-    showAnswer(state.reviews!, item, ERRANDS_BY_TOPIC[item.topic]); save(); renderSidebar(); renderErrandAssistant();
+    showAnswer(state.reviews!, item, RETRY_ERRANDS[item.topic]); save(); renderSidebar(); renderErrandAssistant();
     $('#results').innerHTML = `<div class="res-empty">Read the answer through and make sense of it. Then close this: a <b>new errand on ${t.title}</b> is now at the end of today's list, to do from memory.</div>`;
   };
 }
@@ -375,6 +387,135 @@ async function checkErrand(): Promise<void> {
   const bb = $('#boardBtn'); if (bb) bb.onclick = () => { closeNotebook(); document.querySelector<HTMLElement>('.tabs button[data-tab=errands]')?.click(); };
 }
 
+// ---------- City Hall projects: a whole program, a step at a time ----------
+// One file grows step by step. Each run checks every step so far, in order, so the earlier steps'
+// tests keep guarding what's already there; once the project is finished they guard any refactoring.
+const stepWord = (n: number): string => `Step ${n + 1}`;
+const projectEyebrow = (p: Project): string => {
+  const pr = progressOf(p);
+  return pr.done != null ? `City Hall project · finished · ${p.concepts}` : `City Hall project · ${stepWord(pr.passed)} of ${p.steps.length} · ${p.concepts}`;
+};
+export function openProject(pid: string): void {
+  const p = projectById(pid); if (!p || projectState(p) === 'locked') return;
+  const pr = progressOf(p), key = projectKey(p);
+  current = { id: key, project: p };
+  $('#modeNote').textContent = ''; $('.nb').classList.remove('is-workshop', 'is-errand'); $('.nb').classList.add('is-project'); $('#runBtn').textContent = '▶ Run tests';
+  $('#nbEyebrow').textContent = projectEyebrow(p);
+  $('#nbTitle').textContent = p.title;
+  if (state.code[key] == null) { state.code[key] = projectStarter(p, state.mode); save(); }
+  ed.value = state.code[key]; syncEditor(); markLine(null);
+  renderProjectProblem(); renderProjectAssistant();
+  const step = p.steps[pr.passed];
+  $('#results').innerHTML = pr.done != null
+    ? `<div class="res-empty done-note">Finished! Change anything you like: <b>Run tests</b> still checks all ${p.steps.length} steps, so you'll know at once if something broke.</div>`
+    : `<div class="res-empty">${pr.passed ? `Steps 1–${pr.passed} are done. ` : ''}Write <b>${stepWord(pr.passed)}: ${step.title}</b> at the bottom of your file, then press <b>Run tests</b>. Each run checks every step so far.</div>`;
+  $('#notebook').hidden = false; document.body.classList.add('modal-open');
+  setTimeout(() => ed.focus(), 50);
+}
+function renderProjectProblem(): void {
+  const c = current; if (!c?.project) return;
+  const p = c.project, pr = progressOf(p), r = RESIDENTS[p.resident];
+  let html = `<div class="story"><div class="story-p"></div><div><div class="who">${r.name} <span>the ${r.role}</span></div><p>${p.story}</p></div></div>
+    <p class="proj-concepts">A whole program in one file, built a step at a time. It brings together: <b>${p.concepts}</b>.</p><h3>The plan</h3><ol class="proj-steps">`;
+  p.steps.forEach((s, i) => {
+    if (i < pr.passed) html += `<li class="done"><details><summary><span class="proj-tick">✓</span> ${stepWord(i)} · ${s.title}${s.fn ? ` <code>${s.fn}</code>` : ''}</summary><p>${s.task}</p></details></li>`;
+    else if (i === pr.passed) html += `<li class="now"><div class="proj-step-h">${stepWord(i)} · ${s.title}</div><p>${s.task}</p>${state.mode !== 'independent' && s.sig ? `<div class="sig-line">Type signature ${codeBlock(s.sig)}</div>` : ''}${examplesHTML(s)}</li>`;
+    else html += `<li class="later">${stepWord(i)} · ${s.title}</li>`;
+  });
+  html += `</ol>`;
+  $('#problem').innerHTML = html;
+  $('#problem').querySelector('.story-p')!.appendChild(portrait(p.resident, 52));
+}
+let copyArmed: ReturnType<typeof setTimeout> | null = null;
+function renderProjectAssistant(): void {
+  const c = current; if (!c?.project) return;
+  const p = c.project, pr = progressOf(p), a = $('#assistant');
+  if (pr.done != null) {
+    a.innerHTML = `<div class="primer"><div class="primer-h">Finished · ${p.reward}</div><p>${p.wrapUp}</p></div>
+      <div class="hints-h"><span>Make it yours</span></div>
+      <p class="proj-note">The project's tests stay with it. Change anything, press <b>Run tests</b>, and all ${p.steps.length} steps are checked again: that's what makes refactoring safe.</p>
+      <ul class="proj-ideas">${p.ideas.map(x => `<li>${x}</li>`).join('')}</ul>
+      <button class="btn-soft" id="toWorkshop">Copy this program to the Workshop</button>
+      <p class="no-penalty">The Workshop has no tests, so you can change what <code>main</code> prints and try it out freely. Copying replaces what's in the Workshop now.</p>`;
+    const tw = $('#toWorkshop');
+    tw.onclick = () => {
+      if (!copyArmed) { tw.textContent = 'Click again to replace the Workshop\'s code'; copyArmed = setTimeout(() => { copyArmed = null; if (tw.isConnected) tw.textContent = 'Copy this program to the Workshop'; }, 3000); return; }
+      clearTimeout(copyArmed); copyArmed = null;
+      state.code.workshop = ed.value; state.wsExpr = ''; state.wsInput = ''; save(); openWorkshop();
+    };
+    return;
+  }
+  const i = pr.passed, s = p.steps[i], n = Math.min(pr.hints[i] || 0, s.hints.length + 1);
+  let html = `<div class="primer"><div class="primer-h">${stepWord(i)} of ${p.steps.length} · ${s.title}</div><p>Write it at the bottom of your file. You can use every function from the steps before: that's what they're for.</p><p>Each run checks the earlier steps again too, so if a change breaks one, you'll know straight away.</p></div>`;
+  html += `<div class="hints-h"><span>Hints for this step</span><span class="hint-count">${Math.min(n, s.hints.length)} of ${s.hints.length} revealed</span></div><ol class="hints">`;
+  for (let k = 0; k < Math.min(n, s.hints.length); k++) html += `<li><div class="hint-lv">${k + 1} · ${HINT_LEVELS[k]}</div><div>${s.hints[k]}</div></li>`;
+  html += `</ol>`;
+  if (n < s.hints.length) html += `<button class="btn-soft" id="hintBtn">Reveal hint ${n + 1} · ${HINT_LEVELS[n]}</button>`;
+  else if (n === s.hints.length) html += `<button class="btn-soft" id="hintBtn">Show this step's code (optional)</button>`;
+  else html += `<div class="solution"><div class="hint-lv">${stepWord(i)}, one way to write it</div>${codeBlock(s.solution)}<p class="board-small">Copy what you need into the bottom of your file, in place of the step's starting lines.</p></div>`;
+  html += `<p class="no-penalty">Hints never cost anything: the project is finished the same way however you get there.</p>`;
+  a.innerHTML = html;
+  const hb = $('#hintBtn'); if (hb) hb.onclick = () => { pr.hints[i] = n + 1; save(); renderProjectAssistant(); };
+}
+function projectMode(c: ProjectSession, m: AssistMode): void {
+  const prev = state.mode; state.mode = m; save(); renderSidebar();
+  const p = c.project, pr = progressOf(p);
+  // a file nobody has touched yet starts again with the new mode's first step
+  if (pr.passed === 0 && prev !== m && ed.value === projectStarter(p, prev)) { ed.value = projectStarter(p, m); state.code[c.id] = ed.value; save(); syncEditor(); }
+  renderProjectProblem();
+}
+function resetProject(c: ProjectSession): void {
+  const p = c.project, pr = progressOf(p);
+  ed.value = pr.checkpoint ?? projectStarter(p, state.mode); state.code[c.id] = ed.value; save(); syncEditor(); markLine(null);
+  $('#modeNote').textContent = pr.passed ? `Back to how your file was when ${stepWord(pr.passed - 1).toLowerCase()} passed.` : '';
+  ed.focus();
+}
+async function checkProject(): Promise<void> {
+  const c = current; if (!c?.project) return;
+  const p = c.project, pr = progressOf(p), code = ed.value, finishedBefore = pr.done != null;
+  pr.runs++; save();
+  const steps = stepsToCheck(p, pr.passed);
+  let failed: { i: number; r: CheckResult } | null = null;
+  for (let i = 0; i < steps.length; i++) {
+    const r = await runner.check(steps[i], code);
+    if (current !== c) return; // the notebook was closed or switched while checking
+    if (r.status === 'stopped') { $('#results').innerHTML = stoppedCard(r); return; }
+    if (!(r.status === 'tested' && r.passed)) { failed = { i, r }; break; }
+  }
+  const passedList = (n: number): string => n ? `<ul class="proj-pass">${p.steps.slice(0, n).map((s, i) => `<li>✓ ${stepWord(i)} · ${s.title}</li>`).join('')}</ul>` : '';
+  if (failed) {
+    const { i, r } = failed, s = p.steps[i];
+    const { html } = checkHTML({ fn: s.fn, resident: p.resident, hints: s.hints }, r);
+    // a compile error isn't any one step's fault, so it isn't put on one
+    const head = r.status === 'compile-error' ? ''
+      : i < pr.passed ? noteCard(`${stepWord(i)} used to pass`, `${stepWord(i)} (${s.title}) passed before, but not with the file as it is now: a change since then has broken it. The tests below show where. Reset takes the file back to how it was when the last step passed.`)
+      : `${passedList(i)}<div class="proj-step-h">${stepWord(i)} · ${s.title}</div>`;
+    $('#results').innerHTML = head + html;
+    return;
+  }
+  markLine(null);
+  if (finishedBefore) {
+    $('#results').innerHTML = `<div class="res-head ok"><span>All ${p.steps.length} steps still pass!</span></div>${passedList(p.steps.length)}<p class="nudge">Whatever you changed, the program still does everything it did before.</p>`;
+    return;
+  }
+  const i = pr.passed, s = p.steps[i], { code: next, finished } = passStep(p, code);
+  ed.value = next; syncEditor();
+  let html = `<div class="res-head ok"><span>${stepWord(i)} passes${i ? `, and steps 1–${i} still do` : ''}!</span></div>${passedList(i + 1)}`;
+  if (finished) {
+    queueProject(p);
+    html += `<div class="win"><h3>${p.title}: finished!</h3><p>${s.explanation}</p><p style="margin-top:8px">${p.wrapUp}</p>
+      <div class="win-stats">${p.steps.length} steps · ${pr.runs} run${pr.runs === 1 ? '' : 's'}</div>
+      <div class="land-line opened">🏛 <b>${p.reward}.</b> Close the notebook to see it.</div></div>`;
+  } else {
+    const ns = p.steps[pr.passed];
+    html += `<div class="win"><h3>${stepWord(i)} done: ${s.title}</h3><p>${s.explanation}</p>
+      <div class="land-line">Next, <b>${stepWord(pr.passed)}: ${ns.title}</b>. ${state.mode === 'independent' ? 'A heading for it is' : 'Its starting lines are'} at the bottom of your file now.</div></div>`;
+  }
+  $('#results').innerHTML = html;
+  $('#nbEyebrow').textContent = projectEyebrow(p);
+  renderSidebar(); renderProjectProblem(); renderProjectAssistant();
+}
+
 // ---------- Workshop: free play with the whole language ----------
 // The expression and stdin boxes only exist while the Workshop is open.
 const wsExpr = () => $<HTMLInputElement>('#wsExpr');
@@ -388,7 +529,7 @@ const allLines = (): string[] => [...aheadLines(), ...liveLines];
 const inputText = (): string => allLines().map(l => l + '\n').join('');
 function openWorkshop(): void {
   current = WORKSHOP; $('#modeNote').textContent = '';
-  $('.nb').classList.remove('is-errand'); $('.nb').classList.add('is-workshop'); $('#runBtn').textContent = '▶ Check & run';
+  $('.nb').classList.remove('is-errand', 'is-project'); $('.nb').classList.add('is-workshop'); $('#runBtn').textContent = '▶ Check & run';
   $('#nbEyebrow').textContent = 'Free play · no tests, no pressure';
   $('#nbTitle').textContent = 'The Workshop';
   ed.value = state.code.workshop != null ? state.code.workshop : WORKSHOP_EXAMPLES[0].code; syncEditor();
@@ -495,7 +636,7 @@ export function initNotebook(): void {
   $('#nbClose').onclick = closeNotebook;
   $('#notebook').addEventListener('click', e => { if ((e.target as Element).id === 'notebook') closeNotebook(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#notebook').hidden) closeNotebook(); });
-  $('#resetBtn').onclick = () => { if (!current) return; if (current.workshop) { loadExample(0); return; } ed.value = current.errand ? current.starter : starterFor(current); state.code[current.id] = ed.value; save(); syncEditor(); $('#modeNote').textContent = ''; ed.focus(); };
+  $('#resetBtn').onclick = () => { if (!current) return; if (current.workshop) { loadExample(0); return; } if (current.project) { resetProject(current); return; } ed.value = current.errand ? current.starter : starterFor(current); state.code[current.id] = ed.value; save(); syncEditor(); $('#modeNote').textContent = ''; ed.focus(); };
   $('#runBtn').onclick = () => (activeRun ? runner.cancel?.() : runTests());
 
   // reset progress (two-step, no confirm dialog)

@@ -41,8 +41,8 @@ The game shows the same list in Library → "What Haskell Town can't do yet". Ke
 ### Learning
 - [x] Spaced retrieval practice after the village is built: the Notice Board (`src/game/schedule.ts`).
 - [x] Use the Notice Board's data (lapses, calibration) to suggest which topics to revisit in the Library (`revisitSuggestions` in `src/game/schedule.ts`).
-- [ ] More errands per topic, and errands that mix two topics.
-- [ ] Larger multi-function projects at City Hall (design doc stage 5: mastery and creativity).
+- [x] More errands per topic, and errands that mix two topics: 52 errands, three plain ones per topic and one that mixes in a second topic (`mix` in `src/content/errands.ts`, e.g. recursion + Maybe, IO + recursion). Mixed errands come last in each topic's turn (`errandTurns` in `src/game/schedule.ts`), show both topics on the Notice Board, and a peek shows both topics' Library cards. A retry after seeing an answer is always a plain errand not yet met that day. Every errand's model answer is now run against its tests (`tests/content.test.ts`).
+- [x] Larger multi-function projects at City Hall (design doc stage 5: mastery and creativity): once the village is built, Mayor Fern hands out three projects in turn, each a whole program in one file built over 5–6 steps, ending with an interactive `main` (the Tree Vote; Pip's Timetable Board; Hazel's Order Book). Every run checks all the steps so far (earlier steps act as regression tests), Reset goes back to the last step that passed, and a finished project stays open for refactoring, with ideas to extend it and a copy to the Workshop. Bunting on City Hall and a Journal page for each (`src/content/projects.ts`, `src/game/project-rules.ts`, `tests/projects.test.ts`, `e2e/projects.spec.ts`). Along the way, a parser fix: a multi-line `if`/`case` statement in a `do` block whose nested `do` has a `<-` is no longer read as a bind.
 
 ### Rewards (see the rewards design note)
 - [x] Map growth from errands: new land south of the railway (`src/content/expansions.ts`).
@@ -61,6 +61,7 @@ Ordered by the design's suggested build order.
 - [x] Rewrite the gift notes so each hints where it goes (Fern's key keeps its twist; Iris's bookmark, Sorrel's plasters and Marigold's honey say "For your travels").
 - [x] Five town interiors you walk into through the front door (the map becomes the room, the doormat leads back out): Wren's cottage, the bakery kitchen (croissant recipe), the library reading room (Moss's sunflower as a bookmark), the general store (Bram's 10% card), City Hall (Fern's key).
 - [x] Brine's little boat (Juniper's star) as a pixel-art scene too: go aboard from the shore below the pier, the gangplank leads back ashore; the star, the wheel and a line over the side. Talking to Brine plays a cut-scene that sails out to sea, and talking to him again sails home.
+- [ ] Give Brine's boat a paddle wheel on each side instead of a sail: on the map (his lasting change by the harbour), in the boat scene, and in the cut-scene out to sea, with the wheels turning while it moves (see the decisions in [docs/gift-items-design.md](docs/gift-items-design.md)).
 - [x] Given-away items stay in the Journal as a memory: Iris's bookmark, Sorrel's plasters and Marigold's honey know who they go to in Glaschu (`givenTo` in `src/content/items.ts`); once given (`giveAway` in `src/game/satchel.ts`, for now from the DEV panel) they leave the Satchel and get a "Given away" page in the Journal, a line on the gift in the Friends panel, and a section in the printed booklet.
 
 **2. Coins and the store**

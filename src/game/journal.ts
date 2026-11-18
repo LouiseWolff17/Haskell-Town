@@ -2,7 +2,7 @@
 // code that built it, a stamp for each errand solved, and the land that has opened. (Friends and
 // their letters live in their own panel left of the map: friends.ts.) No scores or
 // hint counts: the Journal shows what you made, not how much help you used.
-import { CHALLENGES, ERRANDS, EXPANSIONS, FRIENDSHIP, HEARTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, ERRANDS, EXPANSIONS, FRIENDSHIP, HEARTS, PROJECTS, REVIEW_TOPICS, RESIDENTS } from '../content/index.ts';
 import { $, dateOf, esc, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, villageBuilt } from './errands.ts';
@@ -11,6 +11,8 @@ import { giftNote, givenAway } from './satchel.ts';
 import type { Challenge } from '../content/index.ts';
 
 const STAMP: Record<string, string> = { house: '🏡', mailbox: '📬', bakery: '🥖', garden: '🌱', store: '🛒', library: '📚', school: '🎒', hall: '🏛️', clinic: '🩺', railway: '🚂', park: '🌳', harbour: '⚓', market: '🧺', observatory: '🔭' };
+/** City Hall projects: a stamp for each. */
+const PROJECT_STAMP: Record<string, string> = { vote: '🌳', timetable: '🚉', orders: '🥧' };
 const LAND: Record<string, string> = { meadow: '🐝', orchard: '🍎', pond: '🦆', windmill: '🌾' };
 const plotOf = (c: Challenge): string => c.plot || c.id;
 const topicStamp = (topicId: string): string => {
@@ -37,6 +39,17 @@ export function renderJournal(): void {
     const j = state.journal?.[c.id], code = j?.code || state.code[c.id] || '';
     html += page(STAMP[plotOf(c)] || '⭐', c.reward, `${c.title} · for ${r.name}${j ? ` · ${dateOf(j.day)}` : ''}`,
       `<p class="jconcept">${c.concept}</p>${code.trim() ? codeBlock(code) : '<p class="board-small">(The code from this build wasn\'t saved.)</p>'}`, true);
+  }
+
+  if (villageBuilt() || state.projects) {
+    const done = PROJECTS.filter(p => state.projects?.[p.id]?.done != null);
+    html += `<h4 class="board-h">City Hall projects · ${done.length} of ${PROJECTS.length}</h4>`;
+    for (const p of PROJECTS) {
+      const pr = state.projects?.[p.id];
+      if (pr?.done == null) { html += page('', p.title, pr?.passed ? `${pr.passed} of ${p.steps.length} steps done` : 'Not finished yet', '', false); continue; }
+      html += page(PROJECT_STAMP[p.id] || '🏛️', p.title, `for ${RESIDENTS[p.resident].name} · ${p.steps.length} steps · ${dateOf(pr.done)}`,
+        `<p class="jconcept">${p.concepts}</p>${codeBlock(pr.code || state.code['project:' + p.id] || '')}`, true);
+    }
   }
 
   html += `<h4 class="board-h">Errand stamps</h4>`;
@@ -86,7 +99,7 @@ export function printJournal(): void {
   const friends = FRIENDSHIP.filter(f => (h[f.resident] || 0) >= HEARTS.letter);
 
   let html = `<section class="pj-cover"><div class="pj-logo">λ</div><h1>My Haskell Town Journal</h1><p class="pj-span">${span ? `${span} ${year}` : ''}</p>
-    <ul class="pj-stats"><li><b>${doneC.length}</b> of ${CHALLENGES.length} buildings</li><li><b>${log.length}</b> errands solved</li><li><b>${friends.length}</b> letters from friends</li><li><b>${Object.keys(on).length}</b> pieces of new land</li></ul>
+    <ul class="pj-stats"><li><b>${doneC.length}</b> of ${CHALLENGES.length} buildings</li><li><b>${log.length}</b> errands solved</li><li><b>${friends.length}</b> letters from friends</li><li><b>${Object.keys(on).length}</b> pieces of new land</li>${PROJECTS.some(p => state.projects?.[p.id]?.done != null) ? `<li><b>${PROJECTS.filter(p => state.projects?.[p.id]?.done != null).length}</b> projects at City Hall</li>` : ''}</ul>
     <p class="pj-note">Everything here is real Haskell, written by me.</p></section>`;
 
   html += `<h2>What I learned</h2>`;
@@ -94,6 +107,16 @@ export function printJournal(): void {
     const j = state.journal?.[c.id], code = j?.code || state.code[c.id] || '';
     html += `<article class="pj-page"><div class="pj-h"><span class="pj-stamp">${STAMP[plotOf(c)] || '⭐'}</span><div><h3>${c.num}. ${c.title}</h3><p>${c.concept} · ${c.reward} · for ${RESIDENTS[c.resident].name}${j ? ` · ${dateOf(j.day)}` : ''}</p></div></div>
       <p class="pj-learn"><b>${c.learn.title}.</b> ${c.learn.body}</p>${code.trim() ? pre(code) : ''}</article>`;
+  }
+
+  const projects = PROJECTS.filter(p => state.projects?.[p.id]?.done != null);
+  if (projects.length) {
+    html += `<h2>Projects at City Hall</h2><p class="pj-intro">Whole programs, built a step at a time, each one using the ideas from the village together.</p>`;
+    for (const p of projects) {
+      const pr = state.projects![p.id];
+      html += `<article class="pj-page"><div class="pj-h"><span class="pj-stamp">${PROJECT_STAMP[p.id] || '🏛️'}</span><div><h3>${p.title}</h3><p>${p.concepts} · for ${RESIDENTS[p.resident].name} · ${dateOf(pr.done!)}</p></div></div>
+        <p class="pj-learn">${p.wrapUp}</p>${pre(pr.code || state.code['project:' + p.id] || '')}</article>`;
+    }
   }
 
   const solved = ERRANDS.filter(e => stamps[e.id]);

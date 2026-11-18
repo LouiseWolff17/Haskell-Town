@@ -8,11 +8,16 @@ import { portrait } from './town.ts';
 import { openErrand } from './notebook.ts';
 import type { Errand, ReviewTopic } from '../content/index.ts';
 import type { Confidence, DayItem, LogEntry, Outcome, ReviewState, Revisit } from './schedule.ts';
-import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, isOpen, nextDueDay, revisitSuggestions, startReviews, syncTopics } from './schedule.ts';
+import { DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, dayNumber, ensureDay, errandTurns, isOpen, nextDueDay, revisitSuggestions, startReviews, syncTopics } from './schedule.ts';
 
 export const errandById = (id: string): Errand | undefined => ERRANDS.find(e => e.id === id);
 export const topicById = (id: string): ReviewTopic | undefined => REVIEW_TOPICS.find(t => t.id === id);
-export const ERRANDS_BY_TOPIC: Record<string, string[]> = Object.fromEntries(REVIEW_TOPICS.map(t => [t.id, ERRANDS.filter(e => e.topic === t.id).map(e => e.id)]));
+/** Each topic's errands in the order they take turns (plain ones first, then mixed), and the plain ones a retry can be. */
+export const { turns: ERRANDS_BY_TOPIC, retries: RETRY_ERRANDS } = errandTurns(ERRANDS, REVIEW_TOPICS.map(t => t.id));
+/** The topics an errand is on: its own, and the one it mixes in. */
+export const topicsOf = (e: Errand): ReviewTopic[] => [e.topic, e.mix].filter((id): id is string => !!id).map(id => topicById(id)!);
+/** "Recursion", or "Recursion + Maybe & Either" for a mixed errand. */
+export const topicLabel = (e: Errand): string => topicsOf(e).map(t => t.title).join(' + ');
 
 /** Today's day number. The dev tools can move the clock forward with state.devDays. */
 export const today = (): number => dayNumber(new Date()) + (state.devDays || 0);
@@ -126,7 +131,7 @@ export function renderBoard(): void {
     <p><b>Retrieval practice.</b> Pulling an idea out of your memory strengthens it far more than reading it again. So errands come without hints, and the answer comes <i>after</i> you've tried.</p>
     <p><b>Spacing.</b> Practice spread over days beats the same practice crammed into one sitting. Each time you solve a topic first try, it comes back after a longer gap: ${INTERVALS.slice(1).join(', ')} days.</p>
     <p>Both feel harder than re-reading, and that's why people tend to avoid them: effort feels like not learning. It's the opposite. A struggle that ends in remembering is the useful kind.</p>
-    <p>A few more things it does: at most ${DAILY_LIMIT} errands a day, on mixed topics; a fresh problem each time, not the same one again; and if you see an answer, a new errand on that topic comes back later the same day, so you finish by recalling it yourself.</p>
+    <p>A few more things it does: at most ${DAILY_LIMIT} errands a day, on mixed topics; a fresh problem each time, not the same one again; later on, errands that need two topics at once, so you practise choosing the right idea as well as using it; and if you see an answer, a new errand on that topic comes back later the same day, so you finish by recalling it yourself.</p>
     <p class="board-small">Based on Carpenter, Pan &amp; Butler (2022), “The science of effective learning with spacing and retrieval practice”, <i>Nature Reviews Psychology</i> 1, 496–511.</p>
   </details>`;
   el.innerHTML = html;
@@ -134,18 +139,18 @@ export function renderBoard(): void {
 
   const list = el.querySelector('.errand-list')!;
   items.forEach((item, i) => {
-    const e = errandById(item.errand)!, t = topicById(item.topic)!, r = RESIDENTS[e.resident];
+    const e = errandById(item.errand)!, r = RESIDENTS[e.resident];
     const s = item.outcome ? 'done' : item.sawAnswer ? 'seen' : 'open';
     const chip = s === 'done' ? OUTCOME[item.outcome!].chip : s === 'seen' ? 'Answer seen' : item.retry ? 'Try again' : 'To do';
     const b = document.createElement('button'); b.className = `req req-${s === 'open' ? 'open' : 'done'}`;
-    b.innerHTML = `<div class="req-body"><div class="req-top"><span class="req-num">${esc(t.title)}</span><span class="chip chip-${s === 'open' ? 'open' : 'done'}">${chip}</span></div><div class="req-title">${e.title}</div><div class="req-meta">${r.name}${s === 'done' ? ` · ${OUTCOME[item.outcome!].note}` : s === 'seen' ? ' · a new one is below' : ''}</div></div>`;
+    b.innerHTML = `<div class="req-body"><div class="req-top"><span class="req-num">${esc(topicLabel(e))}</span><span class="chip chip-${s === 'open' ? 'open' : 'done'}">${chip}</span></div><div class="req-title">${e.title}</div><div class="req-meta">${r.name}${s === 'done' ? ` · ${OUTCOME[item.outcome!].note}` : s === 'seen' ? ' · a new one is below' : ''}</div></div>`;
     b.prepend(portrait(e.resident, 38));
     b.onclick = () => openErrand(i);
     list.appendChild(b);
   });
 }
 
-/** The Library cards that taught a topic: the cue a player can peek at. */
-export function cueHTML(topicId: string): string {
-  return (topicById(topicId)?.from ?? []).map(id => byId(id)!).map(c => `<div class="lib-card"><h4>${c.learn.title}</h4><p>${c.learn.body}</p>${codeBlock(c.learn.code)}</div>`).join('');
+/** The Library cards that taught an errand's topic (or both, for a mixed errand): the cue a player can peek at. */
+export function cueHTML(e: Errand): string {
+  return topicsOf(e).flatMap(t => t.from).map(id => byId(id)!).map(c =>`<div class="lib-card"><h4>${c.learn.title}</h4><p>${c.learn.body}</p>${codeBlock(c.learn.code)}</div>`).join('');
 }

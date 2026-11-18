@@ -78,6 +78,25 @@ test('every errand belongs to a topic, has a resident, examples, tests and a sol
     assert.ok(e.examples?.length || e.ioExamples?.length, `${e.id}: examples`);
     assert.ok(e.tests.length > 0 && e.solution.trim() && e.explanation.trim(), `${e.id}: tests, solution, explanation`);
     if (e.fn) assert.ok(e.sig?.startsWith(e.fn + ' ::'), `${e.id}: sig should start with "${e.fn} ::"`);
+    if (e.mix) assert.ok(e.mix !== e.topic && REVIEW_TOPICS.some(t => t.id === e.mix), `${e.id}: mix should be another topic`);
+  }
+});
+
+test('every topic has at least three plain errands and one that mixes it with another topic', () => {
+  for (const t of REVIEW_TOPICS) {
+    const mine = ERRANDS.filter(e => e.topic === t.id);
+    assert.ok(mine.filter(e => !e.mix).length >= 3, `${t.id}: needs three plain errands`);
+    assert.ok(mine.some(e => e.mix), `${t.id}: needs a mixed errand`);
+  }
+});
+
+test('every errand\'s model answer passes its own tests, and its starter does not', async () => {
+  const r = new BrowserRunner();
+  for (const e of ERRANDS) {
+    const ok = await r.check(e, e.solution);
+    assert.ok(ok.status === 'tested' && ok.passed && !ok.ruleBreak, `${e.id}: solution should pass, got ${JSON.stringify(ok).slice(0, 400)}`);
+    const starter = await r.check(e, e.starter);
+    assert.ok(!(starter.status === 'tested' && starter.passed), `${e.id}: the starter alone should not pass`);
   }
 });
 

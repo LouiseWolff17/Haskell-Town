@@ -1,8 +1,10 @@
 // Dev-only shortcuts for skipping through the game. Loaded from main.ts only under `npm run dev`.
 import { CHALLENGES, EXPANSIONS, HEARTS, LIFE } from '../content/index.ts';
 import { save, state, status } from './state.ts';
-import { build, queueFriend, queueLand, queueLife, revealLand } from './notebook.ts';
-import { ERRANDS_BY_TOPIC, errandById, hearts, practised, reviews, today } from './errands.ts';
+import { build, queueFriend, queueLand, queueLife, queueProject, revealLand } from './notebook.ts';
+import { passStep, pinnedProject, progressOf } from './projects.ts';
+import { solutionThrough } from './project-rules.ts';
+import { RETRY_ERRANDS, errandById, hearts, practised, reviews, today } from './errands.ts';
 import { completeItem, isOpen, nextDueDay, showAnswer } from './schedule.ts';
 import { nextExpansion, newFriendRewards, newlyOpened } from './rewards.ts';
 import { renderSidebar } from './sidebar.ts';
@@ -27,7 +29,7 @@ function solveErrand(rs: ReviewState, item: DayItem, how: Outcome | 'mixed'): vo
   const outcome = how === 'mixed' ? pick<Outcome>(['recalled', 'recalled', 'effortful', 'relearned']) : how;
   item.confidence = pick(CONFIDENCES); // so the calibration panel has something to show
   if (outcome === 'relearned') {
-    const retry = showAnswer(rs, item, ERRANDS_BY_TOPIC[item.topic]);
+    const retry = showAnswer(rs, item, RETRY_ERRANDS[item.topic]);
     if (!retry) return;
     item = retry;
     item.confidence = pick(CONFIDENCES);
@@ -45,7 +47,9 @@ export function initDevTools(): void {
     <div style="display:flex;gap:6px;align-items:center"><b>DEV</b>
       <button data-a="next">Solve next</button><button data-a="stage">Solve stage</button>
       <button data-a="village" title="Solve every request, so the Notice Board opens">Build village</button>
-      <button data-a="give" title="Give away the travel gifts in the Satchel, as Glaschu will (they stay in the Journal as a memory)">Give away</button></div>
+      <button data-a="give" title="Give away the travel gifts in the Satchel, as Glaschu will (they stay in the Journal as a memory)">Give away</button>
+      <button data-a="pstep" title="Pass the current step of the City Hall project with its model answer">Project step</button>
+      <button data-a="project" title="Finish the City Hall project pinned up now, with the model answers">Project</button></div>
     <div style="display:flex;gap:6px;align-items:center"><b>Errands</b>
       <select data-a="outcome" title="How dev-solved errands count">
         <option value="recalled">first try</option><option value="effortful">with effort</option>
@@ -67,6 +71,15 @@ export function initDevTools(): void {
     for (let c: Challenge | undefined = first; c && c.stage === first.stage; c = nextOpen()) solve(c);
   });
   on('village', () => { for (let c = nextOpen(); c; c = nextOpen()) solve(c); });
+  // City Hall projects: pass a step as if the model answer had been written and run
+  const projectStep = (): boolean => {
+    const p = pinnedProject(); if (!p) return false;
+    const { finished } = passStep(p, solutionThrough(p, progressOf(p).passed + 1));
+    if (finished) queueProject(p);
+    return finished;
+  };
+  on('pstep', () => { if (pinnedProject()) { projectStep(); renderSidebar(); revealLand(); } });
+  on('project', () => { if (!pinnedProject()) return; while (!projectStep()); renderSidebar(); revealLand(); });
   on('give', () => { for (const i of satchelItems()) if (i.givenTo) giveAway(i.resident); renderSidebar(); });
  
   // move the clock forward, so spaced errands can be tried without waiting for real days

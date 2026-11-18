@@ -2,13 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, completeItem, dayNumber, ensureDay, nextDueDay,
+  DAILY_LIMIT, INTERVALS, MAX_BOX, calibration, completeItem, dayNumber, ensureDay, errandTurns, nextDueDay,
   nextProgress, planDay, showAnswer, startReviews,
 } from '../src/game/schedule.ts';
 import { ERRANDS, REVIEW_TOPICS } from '../src/content/index.ts';
 
-const BY_TOPIC = Object.fromEntries(REVIEW_TOPICS.map(t => [t.id, ERRANDS.filter(e => e.topic === t.id).map(e => e.id)]));
 const TOPICS = REVIEW_TOPICS.map(t => t.id);
+const { turns: BY_TOPIC, retries: RETRIES } = errandTurns(ERRANDS, TOPICS);
 const fixed = () => 0.5;
 
 test('day numbers change at local midnight', () => {
@@ -59,6 +59,35 @@ test('seeing the answer adds a different errand on the same topic, to finish as 
   retry.runs = 1;
   assert.equal(completeItem(rs, retry, 100), 'relearned');
   assert.equal(rs.topics[item.topic].due, 101);
+});
+
+test('errands that mix two topics come after the plain ones, and are never a retry', () => {
+  const { turns, retries } = errandTurns([
+    { id: 'm1', topic: 'a', mix: 'b' }, { id: 'p1', topic: 'a' }, { id: 'p2', topic: 'a' }, { id: 'q', topic: 'b' },
+  ], ['a', 'b']);
+  assert.deepEqual(turns, { a: ['p1', 'p2', 'm1'], b: ['q'] });
+  assert.deepEqual(retries, { a: ['p1', 'p2'], b: ['q'] });
+  // the first turns of every real topic are plain errands, so a mix only comes once the topic is familiar
+  for (const t of TOPICS) assert.deepEqual(BY_TOPIC[t].slice(0, RETRIES[t].length), RETRIES[t]);
+});
+
+test('retries after seeing answers are plain errands not yet met that day', () => {
+  for (const t of TOPICS) {
+    for (let reviews = 0; reviews < BY_TOPIC[t].length * 2; reviews++) {
+      const rs = startReviews(TOPICS, 100);
+      rs.topics[t].reviews = reviews;
+      for (const o of TOPICS) if (o !== t) rs.topics[o].due = 200; // only t is due
+      ensureDay(rs, BY_TOPIC, 100, fixed);
+      let item = rs.day!.items[0];
+      for (let i = 0; i < RETRIES[t].length + 1; i++) {
+        const before = rs.day!.items.map(x => x.errand), fresh = RETRIES[t].filter(id => !before.includes(id));
+        const retry = showAnswer(rs, item, RETRIES[t])!;
+        if (fresh.length) assert.ok(fresh.includes(retry.errand), `${t}: retry ${retry.errand} should be one not met today (reviews ${reviews}, try ${i})`);
+        else assert.notEqual(retry.errand, item.errand, `${t}: once all have been met, at least not the same one again`);
+        item = retry;
+      }
+    }
+  }
 });
 
 test('reviews take turns through a topic\'s errands', () => {

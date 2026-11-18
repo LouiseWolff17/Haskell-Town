@@ -2,6 +2,7 @@
 import { CHALLENGES } from '../content/index.ts';
 import type { AssistMode, Challenge } from '../content/index.ts';
 import type { ReviewState } from './schedule.ts';
+import type { ProjectProgress } from './project-rules.ts';
 
 export const KEY = 'haskelltown-v1';
 export const MODES: Record<AssistMode, { label: string; desc: string }> = {
@@ -22,7 +23,7 @@ export const dateOf = (day: number): string => new Date(day * 86400000).toLocale
 export interface GameState {
   /** Solved challenges, by id. */
   done: Record<string, boolean>;
-  /** Editor contents, by challenge id, `errand:<id>`, or `workshop`. */
+  /** Editor contents, by challenge id, `errand:<id>`, `project:<id>`, or `workshop`. */
   code: Record<string, string>;
   /** Hints shown, by challenge id. */
   hints: Record<string, number>;
@@ -51,6 +52,8 @@ export interface GameState {
   used?: Record<string, number>;
   /** The town interiors: the day the croissants were first baked, the book the sunflower marks, the name the hall greets. */
   inside?: { baked?: number; bookmark?: string; name?: string; /** The hives you've been inside, and the day you first went in. */ hives?: Record<string, number>; /** The magical beach: the day you first went, and how many shells you've found there. */ beach?: number; shells?: number };
+  /** City Hall projects, by project id. Their code is in `code` under `project:<id>`. */
+  projects?: Record<string, ProjectProgress>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */
   devDays?: number;
   devHour?: number;

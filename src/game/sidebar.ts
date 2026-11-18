@@ -2,7 +2,8 @@
 import { CHALLENGES, RESIDENTS, COMING_SOON, NOT_SUPPORTED } from '../content/index.ts';
 import { $, MODES, esc, state, status } from './state.ts';
 import { codeBlock } from './highlight.ts';
-import { goToChallenge, portrait, renderNightBtn } from './town.ts';
+import { goToChallenge, goToProject, portrait, renderNightBtn } from './town.ts';
+import { renderProjectList } from './projects.ts';
 import { setMode } from './notebook.ts';
 import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from './errands.ts';
 import { renderJournal } from './journal.ts';
@@ -29,9 +30,10 @@ export function renderSidebar(): void {
     b.onclick = () => goToChallenge(c);
     list.appendChild(b);
   });
+  renderProjectList(list, goToProject);
   const soon = document.createElement('div'); soon.className = 'soon';
   soon.innerHTML = `<div class="soon-h">Coming next in town</div>` + (COMING_SOON.length ? COMING_SOON.map(s => `<div class="soon-i"><b>${s.title}</b> · ${s.concept}<br><span>${s.note}</span></div>`).join('')
-    : `<div class="soon-i"><span>Every building in the plan is open. Once they're all built, residents pin errands to the Notice Board (the Errands tab), and the Workshop is always there for your own experiments.</span></div>`);
+    : `<div class="soon-i"><span>Every building in the plan is open. Once they're all built, residents pin errands to the Notice Board (the Errands tab), Mayor Fern hands out bigger projects at City Hall, and the Workshop is always there for your own experiments.</span></div>`);
   list.appendChild(soon);
   const lib = $('#library'); lib.innerHTML = `<p class="lib-intro">Every concept you learn is kept here, so you can come back to it whenever you like.</p>`;
   const rv = revisits(), flagged = new Set(rv.flatMap(r => topicById(r.topic)?.from ?? []));

@@ -287,8 +287,15 @@ class Parser {
         if (p.peek()) p.fail(`I didn't expect ${p.desc(p.peek())} here. Is the indentation off?`);
         return { let: d, line };
       }
+      // A bind's pattern can't hold a do, case, if, let or lambda, so the scan for its <- stops at the first one:
+      // a statement like `if l == "" then return [] else do` followed by `rest <- go` on a deeper line isn't a bind.
       let depth = 0, arrow = -1;
-      for (let i = s; i < e; i++) { const t = this.toks[i]; if (t.t === 'p' && '(['.includes(t.v)) depth++; else if (t.t === 'p' && ')]'.includes(t.v)) depth--; else if (depth === 0 && t.t === 'op' && t.v === '<-') { arrow = i; break; } }
+      for (let i = s; i < e; i++) {
+        const t = this.toks[i];
+        if (t.t === 'p' && '(['.includes(t.v)) depth++; else if (t.t === 'p' && ')]'.includes(t.v)) depth--;
+        else if ((t.t === 'kw' && ['do', 'case', 'if', 'let'].includes(t.v)) || (t.t === 'op' && t.v === '\\')) break;
+        else if (depth === 0 && t.t === 'op' && t.v === '<-') { arrow = i; break; }
+      }
       if (arrow >= 0) {
         const pp = new Parser(this.toks, s, arrow); const pat = pp.parsePat(); if (pp.peek()) pp.fail('On the left of <- write a name (or pattern), like: name <- getLine');
         const ep = new Parser(this.toks, arrow + 1, e); if (!ep.peek()) ep.fail('After <-, write the IO action to run, like getLine.');
