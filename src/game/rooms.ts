@@ -116,8 +116,35 @@ function voyage(v: View, t: number): { k: number; p: number } {
   const p = clamp01((t - (Number(v.since) || -Infinity)) / SAIL_MS);
   return { p, k: v.out ? p : 1 - p };
 }
-/** How far the sea has scrolled past: it drifts gently at the pier and streams by under sail. */
+/** How far the sea has scrolled past: it drifts gently at the pier and streams by under way. */
 let seaX = 0, seaT = 0;
+/** The paddle wheels, one on each side, just ahead of the wheelhouse: where along the hull, and how wide. */
+const PADDLE_X = 56, PADDLE_W = 22;
+/** How far round the paddle wheels have turned (kept frame to frame, like the sea). */
+let paddleA = 0;
+/** One paddle wheel seen from above, sticking out past the rail on the top side (dir -1) or the bottom (dir 1): the paddle box,
+ *  the red boards turning past (the top of the wheel moves towards the bow), and white water churned up behind while it turns. */
+function paddleWheel(R: Rect, dir: -1 | 1, t: number, power: number): void {
+  const x = PADDLE_X, w = PADDLE_W, y = dir < 0 ? CY - 49 : CY + 39, outer = dir < 0 ? y : y + 9;
+  if (dir > 0) shadow(R, x, y + 10, w);
+  // churned water trailing off towards the stern, and spray thrown off the paddles
+  if (power > 0) for (let i = 0; i < 6; i++) {
+    const ph = (t / 380 + i / 6) % 1, a = (0.75 * (1 - ph) * power).toFixed(2);
+    R(x - 2 - ph * 18, outer + dir * (1 + (i % 3) + ph * 3), 2 + (i % 2), 1, `rgba(255,255,255,${a})`);
+    if (i % 2 === 0) R(x + 3 + ((i * 7) % (w - 6)), outer + dir * (1 + ph * 2), 1, 1, `rgba(255,255,255,${a})`);
+  }
+  // the paddle box: a wooden frame, open so you can see the wheel, with a white trim along its outer edge
+  R(x, y, w, 10, '#6b4429'); R(x + 2, y + 1, w - 4, 8, '#2f4a63');
+  R(x, outer, w, 1, '#fffaf0');
+  // the axle, then the rims, then the boards (brightest at the top of the wheel, in the middle of the box)
+  R(x + 2, y + 4, w - 4, 2, '#4e3020');
+  R(x + 2, y + 1, w - 4, 1, '#8a5a3b'); R(x + 2, y + 8, w - 4, 1, '#8a5a3b');
+  const span = w - 6, mid = x + 2 + span / 2;
+  for (let i = 0; i < span; i += 4) {
+    const bx = x + 2 + ((((i + paddleA) % span) + span) % span);
+    R(bx, y + 1, 2, 8, Math.abs(bx + 1 - mid) < 5 ? '#e0604f' : '#a8382c'); R(bx, y + 1, 2, 1, '#f08a7a');
+  }
+}
 
 // ---------- Inside the beehives (Rowan's tulip): honeycomb walls, warm light, bees as big as you ----------
 const WAX = '#c88a2c', WAX2 = '#e0a840', DEEP = '#8a5418', HONEY = '#f0a21c', GLINT = '#ffd35a', CAP = '#f4d27e', BROOD = '#f6e8c4';
@@ -534,8 +561,8 @@ export const ROOMS: Record<string, Room> = {
       }
     },
   },
-  // Brine's little boat, moored at the pier: the wheelhouse at the stern, the wheel, the mast with its sail
-  // furled, a lobster pot, Brine coiling rope at the bow, a line out over the side, and Juniper's gold star on the rail.
+  // Brine's little boat, moored at the pier: the wheelhouse at the stern, the wheel, a paddle wheel on each side,
+  // the funnel amidships, a lobster pot, Brine coiling rope at the bow, a line out over the side, and Juniper's gold star on the rail.
   juniper: {
     who: 'brine',
     away: {
@@ -549,25 +576,28 @@ export const ROOMS: Record<string, Room> = {
     scene: (v, t) => { const { p } = voyage(v, t); return p < 1 ? p : null; },
     gone: (id, v) => id === 'leave' && voyage(v, performance.now()).k > 0,
     resident: [130, 80],
-    solids: [{ x: 22, y: 50, w: 32, h: 50 }, { x: 60, y: 68, w: 8, h: 8 }, { x: 72, y: 71, w: 31, h: 8 }, { x: 142, y: 86, w: 12, h: 10 }, { x: 100, y: 96, w: 20, h: 10 }],
+    solids: [{ x: 22, y: 50, w: 32, h: 50 }, { x: 60, y: 68, w: 8, h: 8 }, { x: 83, y: 66, w: 12, h: 12 }, { x: 142, y: 86, w: 12, h: 10 }, { x: 100, y: 96, w: 20, h: 10 }],
     spots: [
       { id: 'brine', label: '👋 Brine', box: { x: 128, y: 78, w: 12, h: 16 }, stand: [120, 93] },
       { id: 'star', label: "⭐ Juniper's star", box: { x: 106, y: 32, w: 12, h: 12 }, stand: [112, 50] },
       { id: 'rod', label: '🎣 The line', box: { x: 124, y: 12, w: 36, h: 34 }, stand: [128, 54] },
       { id: 'wheel', label: '☸️ The wheel', box: { x: 56, y: 63, w: 14, h: 14 }, stand: [63, 88] },
+      { id: 'paddles', label: '🛞 The paddle wheels', box: { x: PADDLE_X, y: CY - 50, w: PADDLE_W, h: 12 }, stand: [67, 48] },
     ],
     draw(R, t, v) {
       const night = dark(), sea = night ? '#2c3f5c' : '#5b93bf', glint = night ? '#4a5f80' : '#8fbde0';
-      // the voyage: the gangplank comes up first, then the sail fills and the pier slides away behind
-      const { k } = voyage(v, t), plank = clamp01(1 - k / 0.2), away = ease(clamp01((k - 0.2) / 0.8)), sail = ease(clamp01((k - 0.1) / 0.5));
-      const ox = -Math.round(away * (RW + 10));
-      seaX += Math.min(50, Math.max(0, t - seaT)) * (1 / 90 - away * (1 / 90 + 1 / 28)); seaT = t;
+      // the voyage: the gangplank comes up first, then the paddle wheels start turning and the pier slides away behind
+      const { k } = voyage(v, t), plank = clamp01(1 - k / 0.2), away = ease(clamp01((k - 0.2) / 0.8)), power = ease(clamp01((k - 0.1) / 0.5));
+      const ox = -Math.round(away * (RW + 10)), dt = Math.min(50, Math.max(0, t - seaT)); seaT = t;
+      seaX += dt * (1 / 90 - away * (1 / 90 + 1 / 28));
+      paddleA += dt * power / 22;
       R(0, 0, RW, RH, INK); R(4, 4, RW - 8, RH - 8, sea);
-      // little waves, drifting (streaming past under sail); stars on the water at night
+      // little waves, drifting (streaming past under way); stars on the water at night
       const span = RW - 18, mod = (n: number) => ((n % span) + span) % span;
       for (let i = 0; i < 46; i++) {
         const wx = 6 + mod(i * 37 + seaX), wy = 6 + ((i * 53) % (RH - 30));
         if (Math.abs(wy - CY) < hull(wx) + 3 || Math.abs(wy - CY) < hull(wx + 4) + 3) continue;
+        if (wx + 4 >= PADDLE_X - 2 && wx <= PADDLE_X + PADDLE_W && Math.abs(wy - CY) < 52) continue;
         R(wx, wy, 4, 1, (Math.floor(t / 700) + i) % 5 ? glint : WHITE);
         if (night && i % 6 === 0) R(wx + 2, wy + 3, 1, 1, (Math.floor(t / 600) + i) % 4 ? '#fff2a8' : '#8890b0');
       }
@@ -609,7 +639,9 @@ export const ROOMS: Record<string, Room> = {
         for (let y = 109; y < 106 + len; y += 4) R(82, y, 12, 1, '#8a6240');
         R(81, 106 + len, 14, 2, 'rgba(0,0,0,.18)');
       }
-      // spray off the bow under sail
+      // the paddle wheels, one on each side
+      paddleWheel(R, -1, t, power); paddleWheel(R, 1, t, power);
+      // spray off the bow under way
       if (away > 0.3) for (let i = 0; i < 4; i++) { const ph = (t / 500 + i / 4) % 1; R(168 + ph * 5, CY - 3 + (i % 2 ? -1 : 1) * ph * 8, 1, 1, `rgba(255,255,255,${(0.8 * (1 - ph) * away).toFixed(2)})`); }
       // the wheelhouse: white roof, a stovepipe puffing, a lifebuoy, and windows that glow at night
       shadow(R, 22, 100, 32);
@@ -630,21 +662,18 @@ export const ROOMS: Record<string, Room> = {
       R(60, 65, 7, 1, '#a0683f'); R(60, 73, 7, 1, '#a0683f'); R(58, 67, 1, 5, '#a0683f'); R(68, 67, 1, 5, '#a0683f');
       R(59, 66, 1, 1, '#a0683f'); R(67, 66, 1, 1, '#a0683f'); R(59, 72, 1, 1, '#a0683f'); R(67, 72, 1, 1, '#a0683f');
       R(63, 64, 1, 11, '#8a5a3b'); R(57, 69, 13, 1, '#8a5a3b'); R(62, 68, 3, 3, '#e0b040');
-      // the mast, the furled sail on its boom, a lantern, the pennant, and the stay down to the bow
-      shadow(R, 72, 79, 31);
-      R(72, 74, 26, 3, '#a0683f');
-      if (sail < 0.15) { R(74, 71, 22, 4, WHITE); R(74, 74, 22, 1, '#e3dccb'); for (const x of [78, 85, 92]) R(x, 71, 1, 4, '#c8b8a0'); }
-      else for (let x = 73; x < 97; x++) {
-        // the sail, filling with wind: tallest at the mast, with a little flutter at the edge
-        const hh = Math.max(1, Math.round(sail * 30 * ((x - 72) / 25) ** 0.7 + (x < 78 ? Math.sin(t / 90 + x) * 0.8 : 0)));
-        R(x, 74 - hh, 1, hh, x % 6 ? WHITE : '#ece4d4'); R(x, 74 - hh, 1, 1, '#d8d0c0');
+      // the funnel amidships, seen from above: red, with a black rim, puffing harder (and the smoke streaming aft) under way
+      shadow(R, 83, 78, 12);
+      R(84, 67, 10, 10, '#d1495b'); R(83, 68, 12, 8, '#d1495b'); R(85, 66, 8, 12, '#d1495b');
+      R(85, 68, 8, 8, '#2a2630'); R(86, 67, 6, 10, '#2a2630'); R(84, 69, 10, 6, '#2a2630');
+      R(86, 69, 6, 6, '#1a1820'); R(85, 66, 3, 1, '#e8798a'); R(84, 67, 1, 2, '#e8798a');
+      for (let i = 0, n = 3 + Math.round(power * 3); i < n; i++) {
+        const ph = (t / (1500 - power * 900) + i / n) % 1, sx = 88 - ph * (3 + power * 34) + Math.sin(t / 300 + i * 2) * (1 - power), sy = 71 - ph * (13 - power * 9);
+        R(sx, sy, 3, 3, `rgba(${night ? '200,205,215' : '235,235,240'},${(0.75 * (1 - ph)).toFixed(2)})`);
       }
-      R(103, 75, 62, 1, 'rgba(59,42,42,.45)');
-      R(96, 72, 7, 7, '#6b4429'); R(97, 73, 5, 5, '#8a5a3b'); R(99, 75, 1, 1, '#a0683f');
-      const flap = Math.round(Math.sin(t / 220) * 1.5);
-      R(102, 69, 5 + flap, 2, '#d1495b'); R(102, 71, 3 + Math.max(0, flap), 1, '#d1495b');
-      R(97, 69, 3, 3, night ? '#ffe08a' : '#e0b040');
-      if (night) { const g = `rgba(255,230,150,${(0.25 + Math.sin(t / 600) * 0.06).toFixed(3)})`; R(94, 66, 9, 9, g); R(92, 68, 13, 5, g); }
+      // a lantern hung on the funnel's front, glowing at night
+      R(95, 70, 3, 4, '#3a2416'); R(95, 71, 3, 2, night ? '#ffe08a' : '#e0b040');
+      if (night) { const g = `rgba(255,230,150,${(0.25 + Math.sin(t / 600) * 0.06).toFixed(3)})`; R(92, 67, 9, 9, g); R(90, 69, 13, 5, g); }
       // the lobster pot and its float
       shadow(R, 100, 106, 14);
       R(100, 96, 14, 10, '#8a6a40'); for (let k = 0; k < 6; k++) R(101 + k * 2, 97, 1, 8, '#b89060'); R(100, 100, 14, 1, '#b89060');

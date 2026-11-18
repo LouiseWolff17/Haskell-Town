@@ -85,21 +85,21 @@ export const HALL = {
   program: 'main :: IO ()\nmain = do\n  putStrLn "Who goes there?"\n  name <- getLine\n  putStrLn ("Welcome to City Hall, " ++ name ++ "!")\n',
 };
 
-/** Brine's little boat, with Juniper's gold star on the rail. Talk to Brine to sail out to sea and back. Fishing comes later (ROADMAP). */
+/** Brine's little paddle boat, with Juniper's gold star on the rail. Talk to Brine to sail out to sea and back. Fishing comes later (ROADMAP). */
 export const BOAT = {
   /** Talking to Brine at the pier: he casts off, and the cut-scene sails you out to sea. */
   sailOut: [
     '"Right then," says Brine. "Let\'s see what\'s past the lighthouse." He pulls in the gangplank and casts off.',
-    '"Fancy a trip out?" Brine doesn\'t wait for an answer. Ropes off, sail up, and away you go.',
-    'Brine casts off and the sail fills with a snap. "Mind the bucket," he says. There isn\'t a bucket.',
+    '"Fancy a trip out?" Brine doesn\'t wait for an answer. Ropes off, wheels turning, and away you go.',
+    'Brine casts off and the paddle wheels start to churn. "Mind the bucket," he says. There isn\'t a bucket.',
   ],
   atSea: [
     'Out at sea. The harbour is a smudge behind you and the water goes on and on. Talk to Brine when you want to head home.',
-    'Nothing but sea and sky, and the boat creaking happily. "Say the word and we\'ll head home," says Brine.',
+    'Nothing but sea and sky, and the paddle wheels chuffing happily. "Say the word and we\'ll head home," says Brine.',
   ],
   /** Talking to Brine out at sea: he brings her about, and the cut-scene sails you home. */
   sailHome: [
-    '"Home, then," says Brine, and brings her about. The sail swings over your head.',
+    '"Home, then," says Brine, and brings her about, one paddle wheel churning while the other rests.',
     '"The kettle\'s on at the harbour," says Brine. "Let\'s not keep it waiting."',
   ],
   home: [
@@ -120,6 +120,15 @@ export const BOAT = {
     'A line out over the side, and a red float bobbing. Nothing bites in the harbour. "They all know me here," says Brine.',
     'What comes back on a line is a `Maybe Fish`, Brine says: sometimes `Just` a fish, mostly `Nothing`. Out at sea, more `Just`.',
     'The float bobs. You wait. The float bobs again. "Out at sea it\'s a different story," says Brine.',
+  ],
+  /** The paddle wheels, one on each side: resting at the pier, churning out at sea. */
+  paddles: [
+    'A paddle wheel on each side, red as a postbox, resting while she\'s tied up. "No sails on this one," says Brine. "Sails are fussy. Wheels just get on with it."',
+    'You count the paddles on the wheel: twelve. Brine says thirteen, for luck. You count again. Twelve.',
+  ],
+  paddlesAtSea: [
+    'The paddle wheels churn round and round, throwing up white water. Every turn of the wheel leaves a little more sea behind you.',
+    '"Round and round, and she goes forward," says Brine. "Like a fold, that is. Every turn adds a bit." He looks very pleased with that.',
   ],
   rodAtSea: [
     'Out here the float dances on every wave. Nothing yet. "They\'re thinking about it," says Brine.',
