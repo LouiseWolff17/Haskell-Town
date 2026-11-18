@@ -8,8 +8,10 @@ import type { Errand, ReviewTopic } from './types.ts';
 // come back at the same pace. Topics that used to be shared are listed in LEGACY_TOPICS,
 // so older saves carry their progress over.
 //
-// Every topic needs at least two errands: reviews take turns through them, so the player
-// practises using the idea on a new problem instead of retyping an answer they remember.
+// Every topic has three plain errands and one that mixes it with a second topic (`mix`): reviews
+// take turns through them, so the player practises using the idea on a new problem instead of
+// retyping an answer they remember. The mixed ones come last in each topic's turn (see errandTurns
+// in schedule.ts), so they only show up once the topic is familiar.
 
 export const REVIEW_TOPICS: ReviewTopic[] = [
   { id: 'functions', title: 'Functions & lists', resident: 'wren', from: ['house', 'mailbox'] },
@@ -55,6 +57,18 @@ export const ERRANDS: Errand[] = [
     explanation: '<code>[x]</code> is a pattern for a list with exactly one item, and it names that item <code>x</code>. Patterns are tried from the top, so the catch-all <code>_</code> only gets lists with two or more.',
   },
 
+  {
+    id: 'orderSlip', topic: 'patterns', resident: 'hazel', title: 'Order Slips',
+    story: "Orders come in as a pair: what, and how many. “I write a slip for each. Nothing for 0, one bun for 1, and 3 buns for three. Simple plurals: I'm a baker, not a teacher.”",
+    task: 'Write <code>orderSlip</code>, which takes a pair of an item and a count: <code>"nothing"</code> for a count of 0, <code>"one ITEM"</code> for 1, and <code>"N ITEMs"</code> (an <code>s</code> on the end) for more.',
+    fn: 'orderSlip', sig: 'orderSlip :: (String, Int) -> String',
+    examples: [['orderSlip ("bun", 1)', '"one bun"'], ['orderSlip ("scone", 3)', '"3 scones"']],
+    tests: [['orderSlip ("bun", 0)', '"nothing"'], ['orderSlip ("bun", 1)', '"one bun"'], ['orderSlip ("scone", 3)', '"3 scones"'], ['orderSlip ("roll", 12)', '"12 rolls"']],
+    starter: 'orderSlip :: (String, Int) -> String\n',
+    solution: 'orderSlip :: (String, Int) -> String\norderSlip (_, 0)    = "nothing"\norderSlip (item, 1) = "one " ++ item\norderSlip (item, n) = show n ++ " " ++ item ++ "s"\n',
+    explanation: 'A pattern can look inside a pair: <code>(item, 1)</code> only matches a pair whose count is 1, and names the item at the same time. The last equation catches every other count, so it has to come last.',
+  },
+
   // ---------- functions & lists (Wren) ----------
   {
     id: 'firstOrZero', topic: 'functions', resident: 'wren', title: 'The Top Box',
@@ -80,6 +94,18 @@ export const ERRANDS: Errand[] = [
     explanation: 'A function with two arguments has two arrows in its type: <code>[String] -> [String] -> Int</code>. Each argument gets a name on the left of <code>=</code>. (<code>length (morning ++ afternoon)</code> works too.)',
   },
 
+  {
+    id: 'newestThree', topic: 'functions', resident: 'wren', title: 'The Newest Post',
+    story: "Wren keeps letters in the order they came, oldest first. “I only have time for the three newest today. Could you hand me those, newest on top?”",
+    task: 'Write <code>newestThree</code>, which gives the last three letters of the list, newest first. With fewer than three letters, give all of them, newest first.',
+    fn: 'newestThree', sig: 'newestThree :: [String] -> [String]',
+    examples: [['newestThree ["a", "b", "c", "d"]', '["d", "c", "b"]'], ['newestThree ["a"]', '["a"]']],
+    tests: [['newestThree ["a", "b", "c", "d"]', '["d", "c", "b"]'], ['newestThree ["a"]', '["a"]'], ['newestThree []', '[]'], ['newestThree ["x", "y", "z"]', '["z", "y", "x"]']],
+    starter: 'newestThree :: [String] -> [String]\n',
+    solution: 'newestThree :: [String] -> [String]\nnewestThree letters = take 3 (reverse letters)\n',
+    explanation: 'Turn the pile over with <code>reverse</code>, so the newest is first, then <code>take 3</code>. <code>take</code> never complains about a short list: it gives what there is. The order matters: <code>reverse (take 3 letters)</code> would give the three <i>oldest</i>.',
+  },
+
   // ---------- map (Moss) ----------
   {
     id: 'afterRain', topic: 'map', resident: 'moss', title: 'After the Rain',
@@ -102,6 +128,18 @@ export const ERRANDS: Errand[] = [
     starter: 'potLabels :: [String] -> [String]\n',
     solution: 'potLabels :: [String] -> [String]\npotLabels names = map ("Pot: " ++) names\n',
     explanation: '<code>map</code> does the same thing to every item. <code>("Pot: " ++)</code> is a section: <code>++</code> with its left side filled in, so it\'s a function waiting for the name to stick on the end.',
+  },
+
+  {
+    id: 'needsWater', topic: 'map', resident: 'moss', title: 'Thirsty Beds',
+    story: "Moss pushes a finger into each bed and scores how damp it is, from 0 to 10. “Anything under 4 needs watering. Just tell me yes or no for each bed, in the same order.”",
+    task: 'Write <code>needsWater</code>, which gives <code>True</code> for each score below 4 and <code>False</code> otherwise: one answer per bed.',
+    fn: 'needsWater', sig: 'needsWater :: [Int] -> [Bool]',
+    examples: [['needsWater [2, 7, 3]', '[True, False, True]']],
+    tests: [['needsWater [2, 7, 3]', '[True, False, True]'], ['needsWater []', '[]'], ['needsWater [4]', '[False]'], ['needsWater [0, 10]', '[True, False]']],
+    starter: 'needsWater :: [Int] -> [Bool]\n',
+    solution: 'needsWater :: [Int] -> [Bool]\nneedsWater scores = map (< 4) scores\n',
+    explanation: '<code>map</code> gives one answer per bed, so what comes out is as long as what went in, and it can be a different type: <code>[Int]</code> in, <code>[Bool]</code> out. <code>filter (&lt; 4)</code> would throw the damp beds away instead.',
   },
 
   // ---------- filter (Bram) ----------
@@ -129,6 +167,18 @@ export const ERRANDS: Errand[] = [
     explanation: '<code>filter</code> keeps the items its test says <code>True</code> for. The test here is a lambda, <code>\\n -> length n > 4</code>. You could also write it as <code>(> 4) . length</code>.',
   },
 
+  {
+    id: 'withoutItem', topic: 'filter', resident: 'bram', title: 'Sold Out',
+    story: "The last jar of jam has gone. “Could you take every jam off my order list? There might be more than one line of it.”",
+    task: 'Write <code>withoutItem</code>, which takes a name and a list, and gives the list without any copies of that name.',
+    fn: 'withoutItem', sig: 'withoutItem :: String -> [String] -> [String]',
+    examples: [['withoutItem "jam" ["tea", "jam", "oats", "jam"]', '["tea", "oats"]']],
+    tests: [['withoutItem "jam" ["tea", "jam", "oats", "jam"]', '["tea", "oats"]'], ['withoutItem "jam" []', '[]'], ['withoutItem "eggs" ["jam"]', '["jam"]'], ['withoutItem "tea" ["tea", "tea"]', '[]']],
+    starter: 'withoutItem :: String -> [String] -> [String]\n',
+    solution: 'withoutItem :: String -> [String] -> [String]\nwithoutItem item names = filter (/= item) names\n',
+    explanation: '<code>(/= item)</code> is the test “isn\'t that item”, and <code>filter</code> keeps whatever passes. The thing to remove is an argument, so the same function works for any item.',
+  },
+
   // ---------- recursion ----------
   {
     id: 'countShort', topic: 'recursion', resident: 'iris', title: 'Short Reads',
@@ -151,6 +201,18 @@ export const ERRANDS: Errand[] = [
     starter: 'thickest :: [Int] -> Int\n',
     solution: 'thickest :: [Int] -> Int\nthickest []       = 0\nthickest (p:rest) = max p (thickest rest)\n',
     explanation: 'If you knew the thickest book in the rest of the shelf, the answer would be whichever is bigger: that one, or the first book. <code>max p (thickest rest)</code> says exactly that.',
+  },
+
+  {
+    id: 'everyOther', topic: 'recursion', resident: 'iris', title: 'Every Other Book',
+    story: "Iris is lending half a shelf to the school. “Take the first book, skip the next, take the one after, and so on to the end.”",
+    task: 'Write <code>everyOther</code>, which keeps the 1st, 3rd, 5th… items of a list, using recursion.',
+    fn: 'everyOther', sig: 'everyOther :: [String] -> [String]', recursive: true,
+    examples: [['everyOther ["a", "b", "c", "d", "e"]', '["a", "c", "e"]']],
+    tests: [['everyOther ["a", "b", "c", "d", "e"]', '["a", "c", "e"]'], ['everyOther []', '[]'], ['everyOther ["a"]', '["a"]'], ['everyOther ["a", "b"]', '["a"]']],
+    starter: 'everyOther :: [String] -> [String]\n',
+    solution: 'everyOther :: [String] -> [String]\neveryOther (x:_:rest) = x : everyOther rest\neveryOther short      = short\n',
+    explanation: 'The pattern <code>(x:_:rest)</code> takes two books at once: keep the first, skip the second, and recurse on the rest. A list with fewer than two books is already its own answer, so one catch-all equation handles both <code>[]</code> and <code>[x]</code>.',
   },
 
   // ---------- data types & records ----------
@@ -177,6 +239,18 @@ export const ERRANDS: Errand[] = [
     explanation: 'A record gives each field a name, and each name is also a function: <code>pupilName p</code> reads the name out of <code>p</code>. <code>show</code> turns the class number into text so <code>++</code> can join it on.',
   },
 
+  {
+    id: 'weekStars', topic: 'data', resident: 'juniper', title: 'The Star Chart',
+    story: "Juniper is adding up the week's stars. “Each day a pupil was either away, or got some stars. Away days count as 0.”",
+    task: 'Make a type <code>Mark</code> with the constructors <code>Away</code> and <code>Stars Int</code>, and write <code>weekStars</code>, which adds up the stars in a list of marks.',
+    fn: 'weekStars', sig: 'weekStars :: [Mark] -> Int', needs: { types: ['Mark'], cons: ['Away', 'Stars'] },
+    examples: [['weekStars [Stars 3, Away, Stars 4]', '7']],
+    tests: [['weekStars [Stars 3, Away, Stars 4]', '7'], ['weekStars []', '0'], ['weekStars [Away, Away]', '0'], ['weekStars [Stars 1, Stars 1, Stars 2]', '4']],
+    starter: '-- Your Mark type and weekStars go here.\n',
+    solution: 'data Mark = Away | Stars Int\n  deriving Show\n\nstarsOf :: Mark -> Int\nstarsOf Away      = 0\nstarsOf (Stars n) = n\n\nweekStars :: [Mark] -> Int\nweekStars marks = sum (map starsOf marks)\n',
+    explanation: 'A constructor can carry a value: <code>Stars 3</code> holds a 3, <code>Away</code> holds nothing. The pattern <code>(Stars n)</code> takes the number back out. A small helper for one mark, then <code>sum (map …)</code> adds up the week.',
+  },
+
   // ---------- IO ----------
   {
     id: 'signIn', topic: 'io', resident: 'fern', title: 'The Visitors\' Book',
@@ -199,6 +273,18 @@ export const ERRANDS: Errand[] = [
     starter: 'main :: IO ()\n',
     solution: 'main :: IO ()\nmain = do\n  a <- getLine\n  b <- getLine\n  let total = read a + read b :: Int\n  putStrLn ("Total: " ++ show total)\n',
     explanation: 'Each <code>getLine</code> gives a <code>String</code>. <code>read</code> turns it into a number, but it needs to know which type you want, so <code>:: Int</code> says so. <code>let</code> inside <code>do</code> names a pure value.',
+  },
+
+  {
+    id: 'bell', topic: 'io', resident: 'fern', title: 'The Town Bell',
+    story: "Fern rings the bell in City Hall's tower once for every new resident. “Type how many arrived today, and I'll ring that many times.”",
+    task: 'Write <code>main</code>: read a whole number N, print <code>Ding!</code> N times (one per line), then print <code>The bell is quiet.</code>',
+    fn: 'main', sig: 'main :: IO ()',
+    ioExamples: [{ input: '2', out: 'Ding!\nDing!\nThe bell is quiet.\n' }],
+    tests: [{ input: '2', out: 'Ding!\nDing!\nThe bell is quiet.\n' }, { input: '0', out: 'The bell is quiet.\n' }, { input: '4', out: 'Ding!\nDing!\nDing!\nDing!\nThe bell is quiet.\n' }],
+    starter: 'main :: IO ()\n',
+    solution: 'main :: IO ()\nmain = do\n  line <- getLine\n  let n = read line :: Int\n  mapM_ putStrLn (replicate n "Ding!")\n  putStrLn "The bell is quiet."\n',
+    explanation: '<code>replicate n "Ding!"</code> is a plain list of n dings, and <code>mapM_ putStrLn</code> runs <code>putStrLn</code> on each one, in order. With 0 the list is empty, so nothing rings. (<code>n &lt;- readLn</code> reads the number in one step.)',
   },
 
   // ---------- Maybe & Either ----------
@@ -225,6 +311,18 @@ export const ERRANDS: Errand[] = [
     explanation: '<code>Either</code> is like <code>Maybe</code>, but the failure side carries a reason. By convention <code>Left</code> is what went wrong and <code>Right</code> is the right answer.',
   },
 
+  {
+    id: 'roomFor', topic: 'maybe', resident: 'sorrel', title: 'Which Room?',
+    story: "Dr. Sorrel keeps a list of who is in which room. “When someone asks for a patient, tell them the room. If the patient isn't here, send them to the desk.”",
+    task: 'Write <code>roomFor</code>, which looks the name up in the list of (name, room) pairs with <code>lookup</code>, and gives <code>"Room N"</code>, or <code>"Ask at the desk"</code> if the name isn\'t there.',
+    fn: 'roomFor', sig: 'roomFor :: String -> [(String, Int)] -> String',
+    examples: [['roomFor "Moss" [("Moss", 2), ("Pip", 5)]', '"Room 2"'], ['roomFor "Iris" [("Moss", 2)]', '"Ask at the desk"']],
+    tests: [['roomFor "Moss" [("Moss", 2), ("Pip", 5)]', '"Room 2"'], ['roomFor "Pip" [("Moss", 2), ("Pip", 5)]', '"Room 5"'], ['roomFor "Iris" [("Moss", 2)]', '"Ask at the desk"'], ['roomFor "Pip" []', '"Ask at the desk"']],
+    starter: 'roomFor :: String -> [(String, Int)] -> String\n',
+    solution: 'roomFor :: String -> [(String, Int)] -> String\nroomFor name rooms = case lookup name rooms of\n  Nothing -> "Ask at the desk"\n  Just r  -> "Room " ++ show r\n',
+    explanation: '<code>lookup</code> gives a <code>Maybe Int</code>, because the name might not be there. <code>case … of</code> handles both answers, and the <code>Just r</code> pattern takes the room number out.',
+  },
+
   // ---------- higher-order functions ----------
   {
     id: 'twice', topic: 'hof', resident: 'pip', title: 'Round Trip',
@@ -247,6 +345,18 @@ export const ERRANDS: Errand[] = [
     starter: 'countWhere :: (a -> Bool) -> [a] -> Int\n',
     solution: 'countWhere :: (a -> Bool) -> [a] -> Int\ncountWhere p xs = length (filter p xs)\n',
     explanation: 'The test <code>p</code> is a function passed in by the caller. A fold works too: <code>foldr (\\x n -&gt; if p x then n + 1 else n) 0 xs</code>.',
+  },
+
+  {
+    id: 'throughAll', topic: 'hof', resident: 'pip', title: 'All Stations',
+    story: "Every station on the line does something to the train: one adds a carriage, another doubles them. “Run the train through all the stations, first station first.”",
+    task: 'Write <code>throughAll</code>, which takes a list of functions and a starting value, and applies the functions one after another, the first one first. With no stations, nothing changes.',
+    fn: 'throughAll', sig: 'throughAll :: [a -> a] -> a -> a',
+    examples: [['throughAll [(+ 1), (* 2)] 3', '8'], ['throughAll [] 5', '5']],
+    tests: [['throughAll [(+ 1), (* 2)] 3', '8'], ['throughAll [(* 2), (+ 1)] 3', '7'], ['throughAll [] 5', '5'], ['throughAll [reverse, take 2] "abc"', '"cb"']],
+    starter: 'throughAll :: [a -> a] -> a -> a\n',
+    solution: 'throughAll :: [a -> a] -> a -> a\nthroughAll stations train = foldl (\\t station -> station t) train stations\n',
+    explanation: '<code>foldl</code> carries the train from left to right and, at each station, applies that station\'s function to it. A list of functions is fine: functions are values. Recursion works too: <code>throughAll (f:fs) x = throughAll fs (f x)</code>.',
   },
 
   // ---------- type classes ----------
@@ -273,6 +383,18 @@ export const ERRANDS: Errand[] = [
     explanation: '<code>deriving (Eq, Ord)</code> asks Haskell to write the instances: constructors written earlier count as smaller. Once <code>Size</code> is in <code>Ord</code>, <code>maximum</code>, <code>sort</code> and <code>&lt;</code> all work on it.',
   },
 
+  {
+    id: 'showFlower', topic: 'classes', resident: 'rowan', title: 'Flower Labels',
+    story: "Rowan wants the flower beds to label themselves. “A flower has a name and a number of petals. When it's shown, it should read like <i>daisy (21 petals)</i>, not like code.”",
+    task: 'Make <code>data Flower = Flower String Int</code> and write your own <code>instance Show Flower</code>, so that <code>show (Flower "daisy" 21)</code> is <code>"daisy (21 petals)"</code>.',
+    fn: null, sig: null, needs: { types: ['Flower'], cons: ['Flower'], instances: [['Show', 'Flower']] },
+    examples: [['show (Flower "daisy" 21)', '"daisy (21 petals)"']],
+    tests: [['show (Flower "daisy" 21)', '"daisy (21 petals)"'], ['show (Flower "rose" 5)', '"rose (5 petals)"'], ['map show [Flower "iris" 3]', '["iris (3 petals)"]']],
+    starter: '-- Your Flower type and Show instance go here.\n',
+    solution: 'data Flower = Flower String Int\n\ninstance Show Flower where\n  show (Flower name petals) = name ++ " (" ++ show petals ++ " petals)"\n',
+    explanation: '<code>deriving Show</code> would print <code>Flower "daisy" 21</code>. Writing the instance yourself lets you choose the text. Inside it, <code>show petals</code> uses the <code>Show Int</code> instance: each type brings its own <code>show</code>.',
+  },
+
   // ---------- Functor & Monad ----------
   {
     id: 'parcel', topic: 'functor', resident: 'brine', title: 'Sealed Parcels',
@@ -295,6 +417,18 @@ export const ERRANDS: Errand[] = [
     starter: 'totalCargo :: Maybe Int -> Maybe Int -> Maybe Int\n',
     solution: 'totalCargo :: Maybe Int -> Maybe Int -> Maybe Int\ntotalCargo a b = do\n  x <- a\n  y <- b\n  return (x + y)\n',
     explanation: 'In a <code>Maybe</code> <code>do</code> block, each <code>&lt;-</code> stops everything at the first <code>Nothing</code>. Only if both are there does <code>return</code> wrap the total in <code>Just</code>.',
+  },
+
+  {
+    id: 'soaked', topic: 'functor', resident: 'brine', title: 'Wet Cargo',
+    story: "A wave soaked the deck. “Every crate that was weighed is now 2 kilos heavier. The ones nobody weighed are still unknown, mind.”",
+    task: 'Write <code>soaked</code>, which adds 2 to every weight that is there and leaves the missing ones as <code>Nothing</code>. Try <code>fmap</code> rather than <code>case</code>.',
+    fn: 'soaked', sig: 'soaked :: [Maybe Int] -> [Maybe Int]',
+    examples: [['soaked [Just 3, Nothing, Just 10]', '[Just 5, Nothing, Just 12]']],
+    tests: [['soaked [Just 3, Nothing, Just 10]', '[Just 5, Nothing, Just 12]'], ['soaked []', '[]'], ['soaked [Nothing]', '[Nothing]'], ['soaked [Just 0]', '[Just 2]']],
+    starter: 'soaked :: [Maybe Int] -> [Maybe Int]\n',
+    solution: 'soaked :: [Maybe Int] -> [Maybe Int]\nsoaked crates = map (fmap (+ 2)) crates\n',
+    explanation: 'Two Functors, one inside the other: <code>map</code> goes into the list, and <code>fmap</code> goes into each <code>Maybe</code>. <code>fmap</code> on <code>Nothing</code> gives <code>Nothing</code>, so the missing weights take care of themselves. (<code>fmap (fmap (+ 2))</code> works too: <code>map</code> is <code>fmap</code> for lists.)',
   },
 
   // ---------- Monoid & Foldable ----------
@@ -321,6 +455,18 @@ export const ERRANDS: Errand[] = [
     explanation: '<code>foldMap</code> turns each item into a Monoid value and combines them with <code>&lt;&gt;</code>. Pick the Monoid and you pick the job: <code>Sum</code> adds, <code>(\\x -&gt; [x])</code> collects a list.',
   },
 
+  {
+    id: 'dearest', topic: 'monoid', resident: 'marigold', title: 'The Dearest Thing',
+    story: "Each stall tells Marigold its dearest price. “Two stalls together have the dearer of the two. A stall that sells nothing counts as 0.”",
+    task: 'Make <code>data Dearest = Dearest Int</code> (deriving <code>Show</code> and <code>Eq</code>), with a <code>Semigroup</code> instance that keeps the larger price and a <code>Monoid</code> instance with <code>Dearest 0</code> as <code>mempty</code>.',
+    fn: null, sig: null, needs: { types: ['Dearest'], cons: ['Dearest'], instances: [['Semigroup', 'Dearest'], ['Monoid', 'Dearest']] },
+    examples: [['Dearest 3 <> Dearest 9', 'Dearest 9']],
+    tests: [['Dearest 3 <> Dearest 9', 'Dearest 9'], ['Dearest 7 <> Dearest 2', 'Dearest 7'], ['mconcat [Dearest 4, Dearest 12, Dearest 5]', 'Dearest 12'], ['mempty :: Dearest', 'Dearest 0']],
+    starter: '-- Your Dearest type and its instances go here.\n',
+    solution: 'data Dearest = Dearest Int\n  deriving (Show, Eq)\n\ninstance Semigroup Dearest where\n  Dearest a <> Dearest b = Dearest (max a b)\n\ninstance Monoid Dearest where\n  mempty = Dearest 0\n',
+    explanation: 'A Monoid doesn\'t have to add. Here <code>&lt;&gt;</code> keeps the larger price, and <code>Dearest 0</code> is the value that changes nothing, because <code>max 0 p</code> is always <code>p</code> for a price.',
+  },
+
   // ---------- laziness ----------
   {
     id: 'evens', topic: 'lazy', resident: 'orla', title: 'Even Hours',
@@ -343,5 +489,164 @@ export const ERRANDS: Errand[] = [
     starter: 'brightness :: [Int]\n',
     solution: 'brightness :: [Int]\nbrightness = 1 : map (* 2) brightness\n',
     explanation: 'The first item is 1, and the rest is the whole list doubled. Each new item only needs the one before it, so laziness can build it one step at a time. <code>iterate (* 2) 1</code> is the library version.',
+  },
+
+  {
+    id: 'numbered', topic: 'lazy', resident: 'orla', title: 'Numbering the Stars',
+    story: "Orla writes tonight's stars in her log. “Number them for me: 1. Vega, 2. Altair… I never know how many there'll be.”",
+    task: 'Write <code>numbered</code>, which puts <code>"1. "</code>, <code>"2. "</code> and so on in front of the names, using the endless list <code>[1 ..]</code>.',
+    fn: 'numbered', sig: 'numbered :: [String] -> [String]',
+    examples: [['numbered ["Vega", "Altair"]', '["1. Vega", "2. Altair"]']],
+    tests: [['numbered ["Vega", "Altair"]', '["1. Vega", "2. Altair"]'], ['numbered []', '[]'], ['numbered ["Deneb"]', '["1. Deneb"]'], ['length (numbered (replicate 50 "star"))', '50']],
+    starter: 'numbered :: [String] -> [String]\n',
+    solution: 'numbered :: [String] -> [String]\nnumbered stars = zipWith (\\n s -> show n ++ ". " ++ s) [1 ..] stars\n',
+    explanation: '<code>zipWith</code> stops at the end of the shorter list, so the endless <code>[1 ..]</code> is fine: only as many numbers are worked out as there are stars. No need to count them first.',
+  },
+
+  // ---------- errands that mix two topics ----------
+  // `topic` is the one it's scheduled under (and whose resident pins it up); `mix` is the other idea
+  // it needs. Mixed errands come last in their topic's turn, once the plain ones have each come round.
+  {
+    id: 'windowPair', topic: 'patterns', mix: 'maybe', resident: 'hazel', title: 'The Shop Window',
+    story: "Hazel puts the first two loaves of the day in the window. “If there aren't two yet, the window stays empty. Don't make one up!”",
+    task: 'Write <code>windowPair</code>, which gives <code>Just</code> the first two loaves as a pair, or <code>Nothing</code> if there are fewer than two. Use patterns, not <code>length</code>.',
+    fn: 'windowPair', sig: 'windowPair :: [String] -> Maybe (String, String)', forbid: ['length', 'head', 'tail'],
+    examples: [['windowPair ["rye", "spelt", "bap"]', 'Just ("rye", "spelt")'], ['windowPair ["rye"]', 'Nothing']],
+    tests: [['windowPair ["rye", "spelt", "bap"]', 'Just ("rye", "spelt")'], ['windowPair ["rye"]', 'Nothing'], ['windowPair []', 'Nothing'], ['windowPair ["a", "b"]', 'Just ("a", "b")']],
+    starter: 'windowPair :: [String] -> Maybe (String, String)\n',
+    solution: 'windowPair :: [String] -> Maybe (String, String)\nwindowPair (a:b:_) = Just (a, b)\nwindowPair _       = Nothing\n',
+    explanation: 'The pattern <code>(a:b:_)</code> only matches a list with at least two loaves, and names them. Everything else falls through to <code>Nothing</code>. The <code>Maybe</code> in the type tells whoever uses it that the window can be empty.',
+  },
+  {
+    id: 'envelope', topic: 'functions', mix: 'io', resident: 'wren', title: 'Addressing Envelopes',
+    story: "Wren is helping at the post office counter. “Type the name, then the street. I'll write the envelope, and I'd like to know how many letters I'll be writing by hand.”",
+    task: 'Write <code>main</code>: read a name and a street (one line each), print <code>To: NAME, STREET</code>, then <code>That is N letters.</code>, where N is the length of the name plus the length of the street.',
+    fn: 'main', sig: 'main :: IO ()',
+    ioExamples: [{ input: 'Hazel\nMill Lane', out: 'To: Hazel, Mill Lane\nThat is 14 letters.\n' }],
+    tests: [{ input: 'Hazel\nMill Lane', out: 'To: Hazel, Mill Lane\nThat is 14 letters.\n' }, { input: 'Bo\nAsh Row', out: 'To: Bo, Ash Row\nThat is 9 letters.\n' }],
+    starter: 'main :: IO ()\n',
+    solution: 'main :: IO ()\nmain = do\n  name <- getLine\n  street <- getLine\n  putStrLn ("To: " ++ name ++ ", " ++ street)\n  putStrLn ("That is " ++ show (letters name street) ++ " letters.")\n\nletters :: String -> String -> Int\nletters a b = length a + length b\n',
+    explanation: 'Keep the pure part pure: <code>letters</code> is an ordinary two-argument function, and <code>main</code> only reads, calls it and prints. That split makes the counting easy to try out on its own.',
+  },
+  {
+    id: 'sunnyWeek', topic: 'map', mix: 'data', resident: 'moss', title: 'A Week of Sun',
+    story: "Moss keeps a card for every plant, with its name and its height. “After this week of sun, every plant is 3 centimetres taller. Could you update all the cards?”",
+    task: 'Make a record <code>Plant</code> with fields <code>plantName :: String</code> and <code>height :: Int</code>, and write <code>sunnyWeek</code>, which adds 3 to every plant\'s height.',
+    fn: 'sunnyWeek', sig: 'sunnyWeek :: [Plant] -> [Plant]', needs: { types: ['Plant'], cons: ['Plant'], fields: ['plantName', 'height'] },
+    examples: [['map height (sunnyWeek [Plant "mint" 4, Plant "fern" 10])', '[7, 13]']],
+    tests: [['map height (sunnyWeek [Plant "mint" 4, Plant "fern" 10])', '[7, 13]'], ['map plantName (sunnyWeek [Plant "basil" 1])', '["basil"]'], ['map height (sunnyWeek [])', '[]'], ['height (head (sunnyWeek [Plant { plantName = "sage", height = 0 }]))', '3']],
+    starter: '-- Your Plant record and sunnyWeek go here.\n',
+    solution: 'data Plant = Plant { plantName :: String, height :: Int }\n\nsunnyWeek :: [Plant] -> [Plant]\nsunnyWeek plants = map grow plants\n  where grow p = p { height = height p + 3 }\n',
+    explanation: '<code>map</code> does the same to every card, and the record update <code>p { height = … }</code> makes a copy of a plant with one field changed. The name comes along without being mentioned.',
+  },
+  {
+    id: 'stillPriced', topic: 'filter', mix: 'maybe', resident: 'bram', title: 'Fallen Price Tags',
+    story: "A gust blew some price tags off the shelves. “Each item has <code>Just</code> its price, or <code>Nothing</code> if the tag's gone. Which ones can I still sell today?”",
+    task: 'Write <code>stillPriced</code>, which gives the names of the items whose price isn\'t <code>Nothing</code>, in the same order.',
+    fn: 'stillPriced', sig: 'stillPriced :: [(String, Maybe Int)] -> [String]',
+    examples: [['stillPriced [("jam", Just 3), ("tea", Nothing), ("oats", Just 2)]', '["jam", "oats"]']],
+    tests: [['stillPriced [("jam", Just 3), ("tea", Nothing), ("oats", Just 2)]', '["jam", "oats"]'], ['stillPriced []', '[]'], ['stillPriced [("tea", Nothing)]', '[]'], ['stillPriced [("eggs", Just 0)]', '["eggs"]']],
+    starter: 'stillPriced :: [(String, Maybe Int)] -> [String]\n',
+    solution: 'stillPriced :: [(String, Maybe Int)] -> [String]\nstillPriced items = map fst (filter (\\(_, price) -> price /= Nothing) items)\n',
+    explanation: 'The test looks at the second half of each pair: <code>price /= Nothing</code>. Then <code>map fst</code> keeps the names. A price of <code>Just 0</code> is still a price, so it stays: only <code>Nothing</code> means the tag is gone. A list comprehension can do both at once, because items that don\'t match its pattern are skipped: <code>[name | (name, Just _) &lt;- items]</code>.',
+  },
+  {
+    id: 'findShelf', topic: 'recursion', mix: 'maybe', resident: 'iris', title: 'Which Shelf?',
+    story: "Iris's catalogue is a list of (title, shelf) pairs. “Find me the shelf for a title. And if we don't have it, say so: don't guess.”",
+    task: 'Write <code>findShelf</code>, which gives <code>Just</code> the shelf of the first pair with that title, or <code>Nothing</code>, using recursion. No <code>lookup</code>.',
+    fn: 'findShelf', sig: 'findShelf :: String -> [(String, Int)] -> Maybe Int', forbid: ['lookup', 'find', 'filter'], recursive: true,
+    examples: [['findShelf "Emma" [("Dune", 4), ("Emma", 2)]', 'Just 2'], ['findShelf "Ulysses" []', 'Nothing']],
+    tests: [['findShelf "Emma" [("Dune", 4), ("Emma", 2)]', 'Just 2'], ['findShelf "Ulysses" []', 'Nothing'], ['findShelf "Dune" [("Dune", 4), ("Dune", 9)]', 'Just 4'], ['findShelf "Ulysses" [("Dune", 4)]', 'Nothing']],
+    starter: 'findShelf :: String -> [(String, Int)] -> Maybe Int\n',
+    solution: 'findShelf :: String -> [(String, Int)] -> Maybe Int\nfindShelf _ [] = Nothing\nfindShelf title ((t, shelf):rest)\n  | t == title = Just shelf\n  | otherwise  = findShelf title rest\n',
+    explanation: 'The empty catalogue is the base case, and the answer there is <code>Nothing</code>: that\'s what <code>Maybe</code> is for. Otherwise check the first pair, and either stop with <code>Just</code> or keep looking in the rest. This is how <code>lookup</code> itself is written.',
+  },
+  {
+    id: 'samePupil', topic: 'data', mix: 'classes', resident: 'juniper', title: 'The Same Pupil',
+    story: "Juniper's star chart is in a muddle: the same pupil is on it twice, with different stars. “Two cards are the same pupil if the names match. The stars don't matter for that.”",
+    task: 'Make a record <code>Card</code> with fields <code>pupil :: String</code> and <code>stars :: Int</code>, and write your own <code>instance Eq Card</code>, where two cards are equal when their pupils\' names are.',
+    fn: null, sig: null, needs: { types: ['Card'], cons: ['Card'], fields: ['pupil', 'stars'], instances: [['Eq', 'Card']] },
+    examples: [['Card "Ana" 3 == Card "Ana" 5', 'True'], ['Card "Ana" 3 == Card "Bo" 3', 'False']],
+    tests: [['Card "Ana" 3 == Card "Ana" 5', 'True'], ['Card "Ana" 3 == Card "Bo" 3', 'False'], ['elem (Card "Bo" 0) [Card "Ana" 1, Card "Bo" 4]', 'True'], ['Card "Ana" 1 /= Card "Ana" 2', 'False'], ['stars (Card "Cy" 2)', '2']],
+    starter: '-- Your Card record and Eq instance go here.\n',
+    solution: 'data Card = Card { pupil :: String, stars :: Int }\n\ninstance Eq Card where\n  a == b = pupil a == pupil b\n',
+    explanation: '<code>deriving Eq</code> would compare every field, so the muddled cards would look different. Your own instance decides what “the same” means. Defining <code>==</code> is enough: <code>/=</code> and <code>elem</code> come with it.',
+  },
+  {
+    id: 'untilDone', topic: 'io', mix: 'recursion', resident: 'fern', title: 'Until the Doors Close',
+    story: "It's the town fair, and visitors sign in one by one at City Hall. “When I type done, the doors are closed. How many signed in?”",
+    task: 'Write <code>main</code>: read lines until one is <code>done</code>, then print <code>Visitors: N</code>, the number of lines before it. You\'ll need a helper action that calls itself.',
+    fn: 'main', sig: 'main :: IO ()',
+    ioExamples: [{ input: 'Wren\nPip\ndone', out: 'Visitors: 2\n' }],
+    tests: [{ input: 'Wren\nPip\ndone', out: 'Visitors: 2\n' }, { input: 'done', out: 'Visitors: 0\n' }, { input: 'Moss\nIris\nOrla\nBram\ndone', out: 'Visitors: 4\n' }],
+    starter: 'main :: IO ()\n',
+    solution: 'main :: IO ()\nmain = do\n  n <- countUntilDone 0\n  putStrLn ("Visitors: " ++ show n)\n\ncountUntilDone :: Int -> IO Int\ncountUntilDone seen = do\n  line <- getLine\n  if line == "done"\n    then return seen\n    else countUntilDone (seen + 1)\n',
+    explanation: 'An IO action can call itself, just like a function: each round reads one line, then either stops with <code>return</code> or goes round again with one more counted. <code>return seen</code> hands the count back to <code>main</code> as the action\'s result.',
+  },
+  {
+    id: 'pillsEach', topic: 'maybe', mix: 'functor', resident: 'sorrel', title: 'Enough to Go Round',
+    story: "Dr. Sorrel's cupboard is a list of (medicine, how many). “Find the medicine, then share it between the patients. If it's not in the cupboard, or there are no patients, there's no answer.”",
+    task: 'Write <code>pillsEach</code>: look the medicine up in the cupboard, then divide the count between the patients with <code>div</code>. Give <code>Nothing</code> if the medicine is missing or there are 0 patients. A <code>Maybe</code> <code>do</code> block keeps it short.',
+    fn: 'pillsEach', sig: 'pillsEach :: [(String, Int)] -> String -> Int -> Maybe Int',
+    examples: [['pillsEach [("syrup", 12)] "syrup" 4', 'Just 3'], ['pillsEach [("syrup", 12)] "balm" 4', 'Nothing']],
+    tests: [['pillsEach [("syrup", 12)] "syrup" 4', 'Just 3'], ['pillsEach [("syrup", 12)] "balm" 4', 'Nothing'], ['pillsEach [("syrup", 12)] "syrup" 0', 'Nothing'], ['pillsEach [("balm", 7), ("syrup", 12)] "balm" 2', 'Just 3'], ['pillsEach [] "balm" 1', 'Nothing']],
+    starter: 'pillsEach :: [(String, Int)] -> String -> Int -> Maybe Int\n',
+    solution: 'pillsEach :: [(String, Int)] -> String -> Int -> Maybe Int\npillsEach cupboard medicine patients = do\n  count <- lookup medicine cupboard\n  if patients == 0 then Nothing else Just (count `div` patients)\n',
+    explanation: 'Two things can go wrong, one after the other. In a <code>Maybe</code> <code>do</code> block, <code>&lt;-</code> stops at the first <code>Nothing</code>, so the sharing only happens once the medicine has been found. Without <code>do</code>, you\'d need a <code>case</code> inside a <code>case</code>.',
+  },
+  {
+    id: 'departures', topic: 'hof', mix: 'lazy', resident: 'pip', title: 'The Timetable',
+    story: "Pip is painting a new timetable. “The first train leaves at minute S, then there's one every K minutes, for ever. I'll tell you when to stop reading.”",
+    task: 'Write <code>departures</code>, which takes the first minute and the gap, and gives the endless list of departure minutes. Try <code>iterate</code>.',
+    fn: 'departures', sig: 'departures :: Int -> Int -> [Int]',
+    examples: [['take 3 (departures 5 10)', '[5, 15, 25]'], ['takeWhile (< 60) (departures 0 15)', '[0, 15, 30, 45]']],
+    tests: [['take 3 (departures 5 10)', '[5, 15, 25]'], ['takeWhile (< 60) (departures 0 15)', '[0, 15, 30, 45]'], ['departures 7 1 !! 100', '107']],
+    starter: 'departures :: Int -> Int -> [Int]\n',
+    solution: 'departures :: Int -> Int -> [Int]\ndepartures start gap = iterate (+ gap) start\n',
+    explanation: '<code>iterate f x</code> is <code>[x, f x, f (f x), …]</code>: a higher-order function that makes an endless list. Laziness means only the departures someone reads are worked out. <code>[start, start + gap ..]</code> says the same thing.',
+  },
+  {
+    id: 'springWalk', topic: 'classes', mix: 'filter', resident: 'rowan', title: 'In Bloom',
+    story: "Rowan is planning a spring walk. “Tulips and daffodils are out now; asters wait for autumn. I'd like a class for things that can be in bloom, and then a list of what to show people.”",
+    task: 'Make a class <code>Blooming</code> with a method <code>inBloom :: a -> Bool</code>, a type <code>Flower</code> with <code>Tulip</code>, <code>Daffodil</code> and <code>Aster</code> (deriving <code>Show</code>), an instance where only asters aren\'t in bloom, and <code>springWalk</code>, which keeps the flowers that are.',
+    fn: 'springWalk', sig: 'springWalk :: [Flower] -> [Flower]', needs: { classes: ['Blooming'], types: ['Flower'], cons: ['Tulip', 'Daffodil', 'Aster'], instances: [['Blooming', 'Flower']] },
+    examples: [['springWalk [Aster, Tulip, Daffodil]', '[Tulip, Daffodil]']],
+    tests: [['springWalk [Aster, Tulip, Daffodil]', '[Tulip, Daffodil]'], ['springWalk [Aster]', '[]'], ['inBloom Tulip', 'True'], ['inBloom Aster', 'False']],
+    starter: '-- Your Blooming class, Flower type, instance and springWalk go here.\n',
+    solution: 'class Blooming a where\n  inBloom :: a -> Bool\n\ndata Flower = Tulip | Daffodil | Aster\n  deriving Show\n\ninstance Blooming Flower where\n  inBloom Aster = False\n  inBloom _     = True\n\nspringWalk :: [Flower] -> [Flower]\nspringWalk = filter inBloom\n',
+    explanation: 'Once there\'s an instance, a class method is an ordinary function, so <code>inBloom</code> can go straight to <code>filter</code>. If Rowan adds <code>instance Blooming Tree</code> one day, the same <code>filter inBloom</code> works on trees.',
+  },
+  {
+    id: 'crates', topic: 'functor', mix: 'data', resident: 'brine', title: 'Crates on the Quay',
+    story: "Some crates on the quay are empty and some hold one thing. “Relabel what's inside, if there's anything. An empty crate stays empty.”",
+    task: 'Make <code>data Crate a = Empty | Crate a</code> (deriving <code>Show</code>) and an instance <code>Functor Crate</code>.',
+    fn: null, sig: null, needs: { types: ['Crate'], cons: ['Empty', 'Crate'], instances: [['Functor', 'Crate']] },
+    examples: [['fmap (+ 1) (Crate 41)', 'Crate 42'], ['fmap (+ 1) Empty', 'Empty']],
+    tests: [['fmap (+ 1) (Crate 41)', 'Crate 42'], ['fmap (+ 1) Empty', 'Empty'], ['fmap length (Crate "rope")', 'Crate 4'], ['map (fmap (* 2)) [Crate 3, Empty]', '[Crate 6, Empty]']],
+    starter: '-- Your Crate type and Functor instance go here.\n',
+    solution: 'data Crate a = Empty | Crate a\n  deriving Show\n\ninstance Functor Crate where\n  fmap _ Empty     = Empty\n  fmap f (Crate x) = Crate (f x)\n',
+    explanation: 'This is <code>Maybe</code> under another name: <code>Empty</code> is <code>Nothing</code> and <code>Crate</code> is <code>Just</code>. <code>fmap</code> needs one equation per constructor, and the empty one has nothing to change.',
+  },
+  {
+    id: 'combineAll', topic: 'monoid', mix: 'recursion', resident: 'marigold', title: 'Closing the Till',
+    story: "At closing time Marigold combines everything from the day: baskets, receipts, bags of coins. “It's always the same steps, whatever the thing is. Could you write it once, from scratch?”",
+    task: 'Write <code>combineAll</code>, which joins a list of values of any Monoid with <code>&lt;&gt;</code>, using recursion. No <code>mconcat</code>, folds or <code>foldMap</code>.',
+    fn: 'combineAll', sig: 'combineAll :: Monoid a => [a] -> a', forbid: ['mconcat', 'foldr', 'foldl', 'foldMap', 'concat'], recursive: true,
+    examples: [['combineAll ["ab", "c", "de"]', '"abcde"'], ['getSum (combineAll [Sum 2, Sum 5])', '7']],
+    tests: [['combineAll ["ab", "c", "de"]', '"abcde"'], ['getSum (combineAll [Sum 2, Sum 5])', '7'], ['combineAll [[1], [2, 3], []]', '[1, 2, 3]'], ['combineAll ([] :: [String])', '""']],
+    starter: 'combineAll :: Monoid a => [a] -> a\n',
+    solution: 'combineAll :: Monoid a => [a] -> a\ncombineAll []     = mempty\ncombineAll (x:xs) = x <> combineAll xs\n',
+    explanation: 'The base case is <code>mempty</code>, the value that changes nothing, so an empty list has an answer for every Monoid. That\'s exactly how <code>mconcat</code> is defined.',
+  },
+  {
+    id: 'leapYears', topic: 'lazy', mix: 'filter', resident: 'orla', title: 'Comet Years',
+    story: "Orla's comet only comes back in leap years. “Every year from 2000 that divides by 4, except the ones that divide by 100 but not by 400. Give me all of them; I'll stop when I've seen enough.”",
+    task: 'Define <code>leapYears</code>, the endless list of leap years from 2000 on, by filtering an endless list.',
+    fn: 'leapYears', sig: 'leapYears :: [Int]',
+    examples: [['take 4 leapYears', '[2000, 2004, 2008, 2012]']],
+    tests: [['take 4 leapYears', '[2000, 2004, 2008, 2012]'], ['takeWhile (< 2110) (dropWhile (< 2090) leapYears)', '[2092, 2096, 2104, 2108]'], ['leapYears !! 25', '2104'], ['length (takeWhile (< 2400) leapYears)', '97']],
+    starter: 'leapYears :: [Int]\n',
+    solution: 'leapYears :: [Int]\nleapYears = filter isLeap [2000 ..]\n  where isLeap y = y `mod` 4 == 0 && (y `mod` 100 /= 0 || y `mod` 400 == 0)\n',
+    explanation: '<code>filter</code> on an endless list is still endless, and that\'s fine: <code>take</code> and <code>takeWhile</code> only pull out as many years as they need. <code>length leapYears</code>, on the other hand, would never finish.',
   },
 ];

@@ -102,8 +102,11 @@ export interface ReviewTopic {
  *  review is a fresh problem (practising transfer) rather than retyping a remembered answer. */
 export interface Errand extends Checkable {
   id: string;
-  /** A ReviewTopic id. */
+  /** A ReviewTopic id: the topic it is scheduled under. */
   topic: string;
+  /** A second ReviewTopic id, for an errand that mixes two ideas. It comes after the topic's
+   *  plain errands in their turns, and a peek shows both topics' Library cards. */
+  mix?: string;
   resident: string;
   title: string;
   story: string;
@@ -115,6 +118,46 @@ export interface Errand extends Checkable {
   solution: string;
   /** Shown after the errand is solved, or when the player asks for the answer. */
   explanation: string;
+}
+
+// ---------- City Hall projects: whole programs, built a step at a time (learning stage 5) ----------
+
+/** One step of a project: a function (or a few instances) added to the same file. It is checked like a
+ *  challenge, and every earlier step is checked again with it, so the earlier tests guard what is already there. */
+export interface ProjectStep extends Checkable {
+  title: string;
+  task: string;
+  examples?: ExprTest[];
+  ioExamples?: IOTest[];
+  /** Added to the bottom of the file when the step starts (in Guided and Balanced; Independent gets only a comment). */
+  stub: string;
+  /** Three hints: concept, direction, structure. The step's own code comes after them. */
+  hints: string[];
+  /** This step's code only. All the steps' solutions after the project's starter make the whole program. */
+  solution: string;
+  /** Shown when the step passes. */
+  explanation: string;
+}
+
+/** A bigger job for the town, set at City Hall once the village is built: several functions in one file,
+ *  each step using the ones before, ending with a program you can talk to. */
+export interface Project {
+  id: string;
+  /** Who it's for. Mayor Fern hands every project out at City Hall. */
+  resident: string;
+  title: string;
+  /** The ideas it brings together, e.g. "Recursion · Maybe · IO". */
+  concepts: string;
+  story: string;
+  /** The file it starts from: the types the steps share. */
+  starter: string;
+  steps: ProjectStep[];
+  /** What it adds at City Hall, for the win box, the toast and the Journal. */
+  reward: string;
+  /** Shown when the last step passes. */
+  wrapUp: string;
+  /** Ways to keep going: extensions and refactors. Every run still checks every step, so changes are safe to try. */
+  ideas: string[];
 }
 
 // ---------- Rewards: the town keeps growing after the village is built ----------

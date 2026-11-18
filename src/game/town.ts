@@ -1,7 +1,8 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
-import { CHALLENGES, EXPANSIONS, HEARTS, RESIDENTS } from '../content/index.ts';
+import { CHALLENGES, EXPANSIONS, HEARTS, PROJECTS, RESIDENTS } from '../content/index.ts';
 import { $, byId, save, state, status } from './state.ts';
-import { openChallenge, openErrand } from './notebook.ts';
+import { openChallenge, openErrand, openProject } from './notebook.ts';
+import { pinnedProject } from './projects.ts';
 import { isOpen } from './schedule.ts';
 import { errandById, hearts, practised, reviews, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.ts';
 import { drawPlayer, drawPrompt, drawResident, heldKeys, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.ts';
@@ -11,7 +12,7 @@ import { nextExpansion, nightness, stripsShown } from './rewards.ts';
 import { heldItem, holdLabel, openDoors, putBack, useHeld, visit } from './satchel.ts';
 import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract, roomsOf } from './rooms.ts';
 import { enterInterior, leaveInterior, placeOf, roomLabel } from './interiors.ts';
-import type { Challenge, Expansion, GiftItem, ItemTarget } from '../content/index.ts';
+import type { Challenge, Expansion, GiftItem, ItemTarget, Project } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
 /** A rectangle on the map, in map pixels. */
@@ -214,6 +215,25 @@ function hallDeco(x: number, y: number, t: number): void {
   R(fx + 8, fy + 2, 2, 9, '#9aa8b2');
   for (let i = 0; i < 4; i++) { const k = ((t / 600) + i / 4) % 1; R(fx + 9 + (i % 2 ? 1 : -1) * (2 + k * 5), fy + 1 + k * 10 - Math.sin(k * 3.14) * 4, 1, 1, '#a5d8e6'); }
   R(x + 2, y + 18, 3, 6, '#e07a5f'); R(x + 79, y + 18, 3, 6, '#e07a5f');
+}
+// City Hall projects: a notice board by the door while one is pinned up, and a string of bunting for each one finished
+const BUNTING = ['#d1495b', '#4a7fa7', '#e0b040'];
+function hallProjects(p: Plot, t: number): void {
+  const x = p.x, y = p.y, seg = 80 / PROJECTS.length;
+  PROJECTS.forEach((pr, i) => {
+    if (state.projects?.[pr.id]?.done == null) return;
+    withReveal('project-' + pr.id, p, t, () => {
+      const x0 = x + 2 + i * seg, col = BUNTING[i % BUNTING.length], sag = (k: number): number => Math.round(Math.sin(k / seg * Math.PI) * 2);
+      for (let k = 0; k < seg; k++) R(x0 + k, y + 26 + sag(k), 1, 1, '#9a8f80');
+      // the pennants flutter a little, one after another
+      for (let k = 2; k < seg - 2; k += 5) { const f = Math.floor(t / 400 + k / 5) % 3 === 0 ? 1 : 0; R(x0 + k, y + 27 + sag(k), 3, 1, col); R(x0 + k + 1, y + 28 + sag(k) + f, 1, 1, col); }
+    });
+  });
+  if (!pinnedProject()) return;
+  const bx = x + 55, by = y + 41;
+  R(bx + 1, by + 8, 1, 7, C.wood2); R(bx + 7, by + 8, 1, 7, C.wood2);
+  R(bx, by, 9, 9, C.wood); R(bx + 1, by + 1, 7, 7, '#f6e7cf');
+  R(bx + 2, by + 3, 5, 1, '#9a8f80'); R(bx + 2, by + 5, 4, 1, '#9a8f80'); R(bx + 4, by + 1, 1, 1, '#d1495b');
 }
 function clinic(x: number, y: number): void {
   roofSteps(x, y + 2, 70, 8, '#5fa8a0', '#3f7f78');
@@ -418,6 +438,7 @@ function draw(t: number): void {
     if (m && state.done[m.id]) {
       withReveal(pid, p, t, () => p.art(p, t), () => p.small ? smallLot(p) : lot(p, false));
       if (u && state.done[u.id] && p.deco) withReveal(pid + '-deco', p, t, () => p.deco!(p, t));
+      if (pid === 'hall') hallProjects(p, t);
     } else if (p.small) { if (m && status(m) === 'open') smallLot(p); }
     else lot(p, !m || status(m) === 'locked');
   }
@@ -427,6 +448,7 @@ function draw(t: number): void {
   // the resident the character can talk to swaps their ! or ? for the E prompt
   const drawFolk = (f: ReturnType<typeof residentsOnMap>[number]): void => { person(f.x, f.y, RESIDENTS[f.rid], f.task ? t : t + f.x * 50, !!f.task); if (f.task && f.rid !== talking) (f.task === 'request' ? bubble : errandBubble)(f.x - 1, f.y - 13, t); };
   folk.forEach(drawFolk);
+  if (pinnedProject() && state.done.hall && !(near?.kind === 'plot' && near.id === 'hall')) bubble(PLOTS.hall.x + 55, PLOTS.hall.y + 29, t);
   drawLife(t);
   if (musicPlaying() && state.done.market) musician(t);
   drawPlayer(R, t);
@@ -480,6 +502,8 @@ export function plotLabel(id: string | null): string {
     return `Misty land. ${next && next.id === x.id ? `<b>${left} more errand${left === 1 ? '' : 's'}</b> from the Notice Board and the mist lifts.` : 'Keep solving errands and it will open one day.'}`;
   }
   const cs = plotChallenges(id), open = cs.find(c => status(c) === 'open');
+  const proj = id === 'hall' && !open ? pinnedProject() : null;
+  if (proj) return `<b>Mayor ${RESIDENTS.fern.name}</b> has pinned up a project at City Hall: “${proj.title}”, for ${RESIDENTS[proj.resident].name}. Click to help!`;
   if (open) return `<b>${RESIDENTS[open.resident].name}</b> has a request: “${open.title}” · ${open.concept}. Click to help!`;
   const m = mainOf(id)!;
   if (state.done[m.id]) { const u = upgradeOf(id); return `<b>${m.reward}</b> ✓${u && state.done[u.id] ? ` with ${u.reward.replace(/ for the .*$/, '').toLowerCase()}` : ''} — click to revisit.`; }
@@ -574,6 +598,13 @@ export function goToChallenge(c: Challenge): void {
   cv.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   goTo(sx + 4, sy + 15, () => openChallenge(c.id));
 }
+/** Send the character to City Hall and open a project there (the Requests list uses this). */
+export function goToProject(p: Project): void {
+  leaveInterior();
+  const [sx, sy] = PLOTS.hall.stand;
+  cv.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  goTo(sx + 4, sy + 15, () => openProject(p.id));
+}
 /** Where a resident's open errand is in today's list (openErrand takes the index), or -1. */
 const errandIndex = (rid: string): number => (reviews()?.day?.items ?? []).findIndex(i => isOpen(i) && errandById(i.errand)?.resident === rid);
 function errandResidentAt(ev: MouseEvent): string | null {
@@ -613,6 +644,8 @@ function interactWith(n: Target): void {
   if (n.kind === 'errand') { const i = errandIndex(n.rid); if (i >= 0) openErrand(i); return; }
   if (n.kind === 'door') { goInside(n.rid, false); return; }
   if (n.id === 'mailbox' && unreadLetters().length) { openLetters(); return; }
+  const proj = n.id === 'hall' ? pinnedProject() : null;
+  if (proj) { openProject(proj.id); return; }
   const c = challengeForPlot(n.id);
   if (c) openChallenge(c.id); else $('#hoverLabel').innerHTML = plotLabel(n.id);
 }

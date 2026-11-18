@@ -75,10 +75,21 @@ Building the village once isn't the same as remembering it. When every request i
 - **Spacing.** Each of the 11 review topics sits in a box. Solving it first time without a peek moves it up a box, and the gap until it comes back grows: 1, 3, 7, 14, 30 days. A peek or a few wrong runs keep the box; seeing the answer sends it back to tomorrow.
 - **Successive relearning.** Within a day, a topic is practised until it's solved once from memory: seeing the answer puts a fresh errand on that topic at the end of the day's list.
 - **Interleaving and limits.** At most four errands a day, on different topics, in mixed order. When they're done, the board says when the next ones come and why there is no point cramming.
-- **Varied problems (transfer).** Each topic has at least two errands, and reviews take turns, so the player applies the idea to a new problem instead of retyping a remembered answer.
+- **Varied problems (transfer).** Each topic has three errands of its own and one that mixes it with a second topic. Reviews take turns through them, so the player applies the idea to a new problem instead of retyping a remembered answer. The mixed errand comes last in the turn, once the topic is familiar: it asks the player to choose which ideas a problem needs, not only to use one they've been told about. A retry after seeing an answer is always a plain errand not yet met that day.
 - **Metacognition.** Before the first run, the player can guess how sure they are. The board shows how often “Sure” really meant right first time, and the “Why do errands come back?” panel explains why effortful practice feels worse but works better.
 
 The rules are pure functions in `src/game/schedule.ts`, tested in `tests/schedule.test.ts`.
+
+## Stage 5 at City Hall: projects
+
+After the village, Mayor Fern hands out bigger jobs at City Hall, one after another (`src/content/projects.ts`). Each is a whole program in one file, built over five or six steps:
+
+- **Composition.** Each step adds a function that uses the ones before it, and the last step is a `main` the player can talk to: a thin IO shell around a pure core. The point is choosing which idea fits each piece, the way real programs are made.
+- **Tests as a safety net.** Every run checks every step so far, not only the current one. Breaking an earlier function while writing a later one is caught at once ("Step 1 used to pass"), and Reset goes back to the file as it was when the last step passed.
+- **Scaffolding still fades.** Guided and Balanced add each step's starting lines to the bottom of the file and show its signature; Independent adds only a heading. Each step has three hints and then its own code, at no cost.
+- **Creativity and refactoring.** A finished project stays open. Its tests keep checking all the steps, so the player can refactor safely, and each project suggests ways to extend or rewrite it, or copy it to the Workshop to change freely.
+
+The rules are pure functions in `src/game/project-rules.ts`, tested in `tests/projects.test.ts`.
 
 ## Learning stages (long term)
 

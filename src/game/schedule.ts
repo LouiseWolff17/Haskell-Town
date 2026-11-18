@@ -10,7 +10,8 @@
 //   memory. Seeing the answer puts a fresh errand on the same topic back at the end of the day's list.
 // - Interleaving: the day's errands are on different topics, in mixed order.
 // - Varied problems: reviews take turns through a topic's errands, so the player practises
-//   using an idea on a new problem rather than retyping a remembered answer.
+//   using an idea on a new problem rather than retyping a remembered answer. Later turns bring
+//   errands that mix in a second topic, so the player also practises picking which idea to use.
 
 /** Days until the next review, by box. A topic moves up a box each time it is recalled first time. */
 export const INTERVALS = [0, 1, 3, 7, 14, 30];
@@ -86,6 +87,21 @@ export function startReviews(topicIds: string[], today: number): ReviewState {
 const newItem = (topic: string, errand: string, retry = false): DayItem =>
   ({ topic, errand, retry, runs: 0, cue: false, sawAnswer: false, confidence: null, outcome: null });
 
+/**
+ * Each topic's errands in the order they take turns (`turns`): the plain ones first, then those that
+ * mix in a second topic, so a mix only comes once each plain one has had a turn. `retries` are the
+ * plain ones only: after seeing an answer, the player relearns the idea on its own.
+ */
+export function errandTurns(errands: { id: string; topic: string; mix?: string }[], topicIds: string[]): { turns: Record<string, string[]>; retries: Record<string, string[]> } {
+  const turns: Record<string, string[]> = {}, retries: Record<string, string[]> = {};
+  for (const t of topicIds) {
+    const mine = errands.filter(e => e.topic === t), plain = mine.filter(e => !e.mix).map(e => e.id);
+    turns[t] = [...plain, ...mine.filter(e => e.mix).map(e => e.id)];
+    retries[t] = plain;
+  }
+  return { turns, retries };
+}
+
 /** Which of a topic's errands comes next: they take turns. */
 export function errandFor(errandIds: string[], progress: TopicProgress, offset = 0): string {
   return errandIds[(progress.reviews + offset) % errandIds.length];
@@ -142,12 +158,16 @@ export function completeItem(rs: ReviewState, item: DayItem, today: number): Out
 /**
  * The player asked to see the answer. That's feedback, not failure: they study it now,
  * and a different errand on the same topic goes to the end of today's list, to be done from memory.
+ * `errandIds` are the errands a retry can be: the topic's plain ones (not those that mix in a second
+ * topic), so relearning is on the idea itself. One not yet met today is picked, if there is one.
  */
 export function showAnswer(rs: ReviewState, item: DayItem, errandIds: string[]): DayItem | null {
   if (!rs.day || !isOpen(item)) return null;
   item.sawAnswer = true;
-  const tries = rs.day.items.filter(x => x.topic === item.topic).length;
-  const retry = newItem(item.topic, errandFor(errandIds, rs.topics[item.topic], tries), true);
+  const today = rs.day.items.filter(x => x.topic === item.topic);
+  const fresh = errandIds.filter(id => !today.some(x => x.errand === id));
+  const pool = fresh.length ? fresh : errandIds.filter(id => id !== item.errand);
+  const retry = newItem(item.topic, errandFor(pool.length ? pool : errandIds, rs.topics[item.topic], today.length), true);
   rs.day.items.push(retry);
   return retry;
 }

@@ -294,6 +294,23 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .land-prog .cal-bar{display:block; margin-top:6px}
 .land-line{margin-top:8px; font-size:13.5px; color:var(--ink2)}
 .land-line.opened{color:var(--ink)}
+/* City Hall projects: the plan of steps, what still passes, and ideas for afterwards */
+.proj-concepts{font-size:13.5px; color:var(--ink2); margin:8px 0 0}
+.proj-steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.proj-steps li{border:2px solid var(--line); border-radius:10px; padding:6px 10px; font-size:14px}
+.proj-steps li.done{background:#f1f8ee; border-color:#c9e0c2}
+.proj-steps li.done summary{cursor:pointer; font-weight:700; color:var(--sage2)}
+.proj-steps li.done p{margin:6px 0 0}
+.proj-steps li.now{border-color:var(--terra); box-shadow:0 2px 0 var(--terra)}
+.proj-steps li.now p{margin:4px 0 0}
+.proj-steps li.later{color:var(--ink2); border-style:dashed}
+.proj-tick{color:var(--sage2)}
+.proj-step-h{font-weight:800; font-size:14.5px; margin:10px 0 6px}
+.proj-steps .proj-step-h{margin:0}
+.proj-pass{list-style:none; margin:8px 0; padding:0; font-size:13.5px; color:var(--sage2); font-weight:700}
+.proj-pass li{padding:1px 0}
+.proj-note{font-size:14px; margin:0 0 6px}
+.proj-ideas{margin:0 0 10px; padding-left:20px; font-size:14px} .proj-ideas li{margin-bottom:6px}
 .jpage{border:2px solid var(--line); border-radius:11px; margin-bottom:6px; background:var(--paper)}
 .jpage summary, .jlocked{display:flex; gap:10px; align-items:center; padding:7px 10px; cursor:pointer; list-style:none}
 .jpage summary::-webkit-details-marker{display:none}

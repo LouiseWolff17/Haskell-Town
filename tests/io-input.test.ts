@@ -187,3 +187,14 @@ describe('an IO loop that waits for input', () => {
     if (r.status === 'tested') assert.ok(r.tests.some(t => /no more input/.test(t.error ?? '')), JSON.stringify(r.tests));
   });
 });
+
+describe('a do statement that runs over several lines with a nested do', () => {
+  test('`if … then … else do` followed by a bind on a deeper line is not read as a bind', async () => {
+    const src = 'readAll :: IO [String]\nreadAll = do\n  line <- getLine\n  if line == "done" then return [] else do\n    rest <- readAll\n    return (line : rest)\nmain = readAll >>= print\n';
+    assert.equal((await run(src, 'x\ny\ndone\n')).out, '["x","y"]\n');
+  });
+  test('a case with nested do blocks, and a bind whose action is a lambda', async () => {
+    const src = 'go :: IO [String]\ngo = do\n  x <- getLine\n  case x of\n    "done" -> return []\n    _ -> do\n      rest <- go\n      return (x : rest)\nmain = do\n  xs <- go\n  ys <- mapM (\\s -> return (s ++ "!")) xs\n  print ys\n';
+    assert.equal((await run(src, 'a\nb\ndone\n')).out, '["a!","b!"]\n');
+  });
+});
