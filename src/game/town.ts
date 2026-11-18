@@ -914,7 +914,17 @@ const FRIEND_ART: Record<string, (p: Plot, t: number) => void> = {
   sorrel(p) { heart(p.x + 14, p.y + 28, '#e85a6f'); heart(p.x + 52, p.y + 28, '#e85a6f'); },
   rowan(p, t) { const x = p.x + 40, y = p.y + 4; const fl = ['#e8a0bf', '#d1495b', '#f7c6d0'];
     [[1, 0], [3, 0], [7, 0], [9, 0], [0, 2], [2, 2], [4, 2], [6, 2], [8, 2], [10, 2], [2, 4], [4, 4], [6, 4], [8, 4], [4, 6], [6, 6], [5, 8]].forEach(([a, b], i) => { R(x + a, y + b + 1, 2, 1, '#4f8a4a'); R(x + a, y + b, 2, 1, fl[(i + Math.floor(t / 900)) % 3]); }); },
-  brine(p, t) { const bob = Math.round(Math.sin(t / 650 + 1)); const x = p.x + 74, y = p.y + 22 + bob; R(x, y + 4, 12, 3, '#4a7fa7'); R(x + 1, y + 7, 10, 1, '#365f7f'); R(x + 5, y - 4, 1, 8, '#6b4429'); R(x + 6, y - 3, 4, 5, '#fffaf0'); heart(x + 4, y + 4, '#fff2a8'); },
+  // his little paddle boat, named after you: a cabin at the stern, the funnel puffing now and then, and the paddle box on her side
+  // (moored, so the wheel rests; it turns in the boat scene when she's under way)
+  brine(p, t) {
+    const bob = Math.round(Math.sin(t / 650 + 1)); const x = p.x + 74, y = p.y + 22 + bob;
+    R(x, y + 4, 14, 3, '#4a7fa7'); R(x + 1, y + 7, 12, 1, '#365f7f');
+    R(x + 1, y, 4, 4, '#fffaf0'); R(x + 1, y - 1, 4, 1, '#c8c0b0'); R(x + 2, y + 1, 2, 1, '#a8dbe8');
+    R(x + 6, y - 3, 2, 7, '#d1495b'); R(x + 6, y - 4, 2, 1, '#2a2630');
+    const ph = (t / 1600) % 1; R(x + 6 - ph * 2, y - 6 - ph * 4, 2, 2, `rgba(255,255,255,${(0.6 * (1 - ph)).toFixed(2)})`);
+    R(x + 9, y, 3, 1, '#d1495b'); R(x + 8, y + 1, 5, 5, '#d1495b'); R(x + 10, y + 1, 1, 5, '#fffaf0'); R(x + 8, y + 3, 5, 1, '#fffaf0'); R(x + 10, y + 3, 1, 1, '#6b4429');
+    heart(x + 1, y + 4, '#fff2a8');
+  },
   marigold(p, t) { const x = p.x + 58, y = p.y + 6;
     ([['#e85a6f', 0, 0], ['#f2cc8f', 5, -3], ['#81b29a', 9, 1]] as [string, number, number][]).forEach(([c, dx, dy], i) => { const sx = x + dx + Math.round(Math.sin(t / 900 + i)), sy = y + dy; R(sx, sy, 4, 5, c); R(sx + 1, sy - 1, 2, 1, c); R(sx + 1, sy + 1, 1, 1, 'rgba(255,255,255,.6)'); for (let k = 0; k < 12; k++) R(sx + 2 + Math.round((x + 4 - sx - 2) * k / 12), sy + 5 + k, 1, 1, '#9a8f80'); }); },
   orla(p, t) { const x = p.x + 8, y = p.y - 2, g = 0.4 + Math.sin(t / 500) * 0.3; ctx.globalAlpha = g; R(x - 2, y + 2, 9, 1, '#fff2a8'); R(x + 2, y - 2, 1, 9, '#fff2a8'); ctx.globalAlpha = 1; star(x, y, '#ffe08a'); R(x + 2, y + 2, 1, 1, C.white); },

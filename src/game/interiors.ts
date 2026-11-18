@@ -296,11 +296,11 @@ function visitorsBook(room: Room): void {
 INTERIORS.juniper = {
   view: () => ({ out: false, since: -Infinity }),
   act: (() => {
-    const lines = { star: cycler(BOAT.star), wheel: cycler(BOAT.wheel), rod: cycler(BOAT.rod), rodAtSea: cycler(BOAT.rodAtSea) };
+    const lines = { star: cycler(BOAT.star), wheel: cycler(BOAT.wheel), paddles: cycler(BOAT.paddles), paddlesAtSea: cycler(BOAT.paddlesAtSea), rod: cycler(BOAT.rod), rodAtSea: cycler(BOAT.rodAtSea) };
     const voyage = { sailOut: cycler(BOAT.sailOut), atSea: cycler(BOAT.atSea), sailHome: cycler(BOAT.sailHome), home: cycler(BOAT.home) };
     return (id: string, room: Room) => {
       if (id === 'brine') { sail(room, voyage); return; }
-      const key = id === 'rod' && room.view.out ? 'rodAtSea' : id;
+      const key = (id === 'rod' || id === 'paddles') && room.view.out ? `${id}AtSea` : id;
       if (key in lines) room.say(codeHTML(esc(lines[key as keyof typeof lines]())));
     };
   })(),

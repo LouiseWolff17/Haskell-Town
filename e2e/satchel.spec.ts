@@ -273,10 +273,10 @@ const aboard = {
   done: village, lettersRead: { brine: true, juniper: true }, used: { juniper: 1 }, player: { x: 366, y: 250 },
   reviews: { started: 0, topics: {}, day: null, log: ['parcel', 'cargoTotal', 'parcel', 'cargoTotal', 'weather', 'nameTag'].map(errand) },
 };
-const BOAT = { brine: [134, 86], star: [112, 38], rod: [140, 28], wheel: [63, 70] } as const;
+const BOAT = { brine: [134, 86], star: [112, 38], rod: [140, 28], wheel: [63, 70], paddles: [67, 31] } as const;
 const lookAboard = (page: Page, what: keyof typeof BOAT) => { const [x, y] = BOAT[what]; return clickRoom(page, x, y); };
 
-test("Brine's little boat: go aboard, look at the star, the wheel and the line, sail out with Brine and home again, and back ashore", async ({ page }) => {
+test("Brine's little boat: go aboard, look at the star, the wheel, the paddle wheels and the line, sail out with Brine and home again, and back ashore", async ({ page }) => {
   await openTown(page, aboard);
   await page.locator('#satchelBtn').click();
   await page.locator('#satchel').getByRole('button', { name: "Brine's little boat" }).click();
@@ -287,6 +287,8 @@ test("Brine's little boat: go aboard, look at the star, the wheel and the line, 
   await expect(say(page)).toContainText('star');
   await lookAboard(page, 'wheel');
   await expect(say(page)).toContainText('wheel');
+  await lookAboard(page, 'paddles');
+  await expect(say(page)).toContainText(/paddles on the wheel|resting while she/);
   await lookAboard(page, 'rod');
   await expect(say(page)).toContainText('float');
   // talking to Brine sails out to sea: a cut-scene, then there's no way ashore until you talk to him again
@@ -295,6 +297,9 @@ test("Brine's little boat: go aboard, look at the star, the wheel and the line, 
   await expect(page.locator('#hoverLabel')).toContainText('Talk to Brine to sail home');
   await expect(say(page)).toContainText(/Out at sea|head home/);
   await expect(insideOf(page)).toHaveAttribute('aria-label', /talk to Brine to sail home/);
+  // out at sea the paddle wheels are churning
+  await lookAboard(page, 'paddles');
+  await expect(say(page)).toContainText(/churn|Round and round/);
   await clickRoom(page, ...DOORMAT);
   await page.waitForTimeout(400);
   await expect(insideOf(page)).toHaveAttribute('aria-label', /^Aboard/);
