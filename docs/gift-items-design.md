@@ -10,6 +10,7 @@ Core rules (same spirit as the rewards design):
 ## Decisions (2026-11-14)
 - **Tulip bulb:** a magical way *into* the beehives. You shrink to bee size and step inside. **You pick which hive**, and each hive is a different room (2a).
 - **Moss's sunflower:** used as a **bookmark** in the library, which lets you into the reading room. (Iris's silk bookmark is the one for Glaschu's library.)
+- **Brine's little boat has paddle wheels, not a sail (2026-11-18).** A paddle wheel turns on each side of the hull, and the mast and sail go. Everywhere the boat is drawn should match: Brine's lasting change by the harbour, the boat scene you go aboard, and the cut-scene where Brine takes it out to sea, where the wheels turn as it moves.
 - **Fern's key:** keeps the twist. The note says it doesn't open anything, and then it opens City Hall (section 3).
 - **Money:** the currency is **coins**. You earn them **from errands and from selling things you find** (fish, shells, honey). You can sell **both** at Bram's store and to the resident each find belongs to (section 7).
 - **What coins buy:** all three kinds: **decorations**, **useful things** (seeds, a better fishing rod, a bigger satchel) and **bigger things** (new buildings and upgrades). Section 8.
