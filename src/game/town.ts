@@ -9,7 +9,10 @@ import { drawPlayer, drawPrompt, drawResident, heldKeys, initPlayerKeys, player,
 import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
 import { nextExpansion, nightness, stripsShown } from './rewards.ts';
-import { heldItem, holdLabel, openDoors, putBack, useHeld, visit } from './satchel.ts';
+import { heldItem, holdLabel, openDoors, putBack, renderSatchel, useHeld, visit } from './satchel.ts';
+import { TALL, cancelHold, decorating, drawDeco, footprint, ghostAt, heldDecor, initDecor, keepHeld, moveGhost, pickUp, placedDecor, setDown, stopDecorating } from './decor.ts';
+import { GRID, cellFor, nearestFree, whyNot } from './decor-rules.ts';
+import type { Zone } from './decor-rules.ts';
 import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract, roomsOf } from './rooms.ts';
 import { enterInterior, leaveInterior, placeOf, roomLabel } from './interiors.ts';
 import type { Challenge, Expansion, GiftItem, ItemTarget, Project } from '../content/index.ts';
@@ -416,6 +419,7 @@ let lastT: number | null = null;
 function draw(t: number): void {
   // inside a building, the map is its room
   if (inRoom()) {
+    if (decorating()) stopDecorating();
     syncSize(); drawRoom(ctx, W, cv.height, t, lastT == null ? 0 : Math.min(50, t - lastT), heldKeys()); lastT = t; camFresh = true;
     requestAnimationFrame(draw); return;
   }
@@ -444,6 +448,8 @@ function draw(t: number): void {
   }
   drawFriends(t);
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
+  const decor = placedDecor().sort((a, b) => a.y + a.deco.h * GRID - (b.y + b.deco.h * GRID));
+  decor.forEach(d => drawDeco(R, d.deco.id, d.x, d.y, t));
   const folk = residentsOnMap(), talking = near?.act ? (near.kind === 'errand' ? near.rid : near.kind === 'plot' ? plotChallenges(near.id).find(c => status(c) === 'open')?.resident : null) : null;
   // the resident the character can talk to swaps their ! or ? for the E prompt
   const drawFolk = (f: ReturnType<typeof residentsOnMap>[number]): void => { person(f.x, f.y, RESIDENTS[f.rid], f.task ? t : t + f.x * 50, !!f.task); if (f.task && f.rid !== talking) (f.task === 'request' ? bubble : errandBubble)(f.x - 1, f.y - 13, t); };
@@ -456,11 +462,14 @@ function draw(t: number): void {
   folk.forEach(f => { if (f.y + 13 > player.y && f.y < player.y && Math.abs(f.x + 4 - player.x) < 10) drawFolk(f); });
   // trees just south of the character stand in front of it
   TREES.forEach(([x, y]) => { if (y + 20 > player.y && y < player.y && Math.abs(x + 8 - player.x) < 14) tree(x, y); });
+  // and so do decorations whose foot is just south of it
+  decor.forEach(d => { const w = d.deco.w * GRID, b = d.y + d.deco.h * GRID; if (b > player.y && d.y - TALL[d.deco.id] < player.y && Math.abs(d.x + w / 2 - player.x) < w / 2 + 5) drawDeco(R, d.deco.id, d.x, d.y, t); });
   if (near && near.act) drawPrompt(R, t);
   butterflies.forEach(b => { const bx = b.x + Math.sin(t / 1900 + b.s) * 30, by = b.y + Math.sin(t / 700 + b.s) * 6 + Math.cos(t / 1300) * 4; const f = Math.floor(t / 140) % 2; R(bx, by, 1, 1, '#5a4636'); R(bx - 1 - f, by - f, 1 + f, 1, b.c); R(bx + 1, by - f, 1 + f, 1, b.c); });
   { const m = mainOf('railway'), u = upgradeOf('railway'), a = buildAnim['railway-deco'];
     if (m && u && state.done[m.id] && state.done[u.id] && !(a && t - a < 900)) train(t, friendsWith('pip')); }
-  drawNight(t);
+  drawNight(t, decor);
+  if (decorating()) drawDecorating(t);
   if (hover && (hover.startsWith('exp:') || hover.startsWith('fog:'))) { const r = slotRect(EXPANSIONS.find(x => x.id === hover!.split(':')[1])!.slot); ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3); ctx.setLineDash([]); }
   const outline = hover?.startsWith('door:') ? null : hover || (near?.kind === 'plot' ? near.id : null);
   if (outline && PLOTS[outline] && !heldItem()) { const p = PLOTS[outline]; ctx.strokeStyle = 'rgba(255,250,240,.9)'; ctx.setLineDash([2, 2]); ctx.lineWidth = 1; ctx.strokeRect(p.x - 1.5, p.y - 1.5, p.w + 3, p.h + 3); ctx.setLineDash([]); }
@@ -530,19 +539,24 @@ export function initTown(): void {
   renderNightBtn();
   cv.addEventListener('mousemove', ev => {
     if (inRoom()) { const s = roomHover(...mapPoint(ev), W, cv.height); cv.style.cursor = s ? 'pointer' : 'default'; $('#hoverLabel').innerHTML = roomLabel(s); return; }
+    if (decorating()) { hover = null; decorHover(...mapPoint(ev)); return; }
     const held = heldItem();
     if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
     const door = placeAt(...mapPoint(ev));
     if (door) { const key = 'door:' + (door.room ?? door.it.resident); if (hover !== key) { hover = key; $('#hoverLabel').innerHTML = doorLabel(door, 'Click'); } cv.style.cursor = 'pointer'; return; }
-    const id = plotAt(ev); if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
+    // a decoration of yours, outside Decorate mode: just a line about it
+    const id = plotAt(ev) ?? (d => d ? 'deco:' + d.i : null)(decorAt(...mapPoint(ev)));
+    if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id?.startsWith('deco:') ? decoLine(Number(id.slice(5))) : id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
   cv.addEventListener('mouseleave', () => {
     if (inRoom()) { roomHover(-1, -1, W, cv.height); $('#hoverLabel').innerHTML = roomLabel(null); return; }
-    hover = null; $('#hoverLabel').innerHTML = heldItem() ? holdLabel() : nearLabel(nearby());
+    hover = null; $('#hoverLabel').innerHTML = decorating() ? decorLabel() : heldItem() ? holdLabel() : nearLabel(nearby());
   });
   // a click sends the character walking there; a click on a resident or a building also talks to them on arrival
   cv.addEventListener('click', ev => {
     const [x, y] = mapPoint(ev), held = heldItem();
     if (inRoom()) { roomClick(x, y, W, cv.height); return; }
+    // Decorate mode: clicks set decorations down and pick them up, and nothing else
+    if (decorating()) { decorClick(x, y); return; }
     // holding something from the Satchel: this click uses it, or puts it back with a gentle line
     if (held) { useHeld(onTarget(held.target, x, y)); return; }
     // a place opened with a gift: a building's front door, or the spot outdoors (the hives, the boat, the pond)
@@ -553,8 +567,11 @@ export function initTown(): void {
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
     goTo(x, y);
   });
+  initDecorKeys();
+  initDecor(() => { renderSatchel(); if (decorating() || !hover) $('#hoverLabel').innerHTML = decorating() ? decorLabel() : nearLabel(nearby()); }, () => { if (heldItem()) putBack(); });
   initPlayerKeys(() => {
     if (inRoom()) return roomInteract();
+    if (decorating()) return false;
     const held = heldItem();
     if (held) { const b = held.target && targetBox(held.target); useHeld(!!b && Math.hypot(Math.max(b.x - player.x, 0, player.x - b.x - b.w), Math.max(b.y - player.y, 0, player.y - b.y - b.h)) < 14); return true; }
     const n = nearby(); if (!n?.act) return false; interactWith(n); return true; });
@@ -566,7 +583,8 @@ const mapPoint = (ev: MouseEvent): Pt => { const r = cv.getBoundingClientRect();
 /** Solid things, rebuilt (once a frame, and only when the town changed): built buildings, residents, tree trunks, the sea and misty land. */
 let solidCache: { sig: string | null; rects: [x: number, y: number, w: number, h: number][] } = { sig: null, rects: [] };
 function refreshSolids(): void {
-  const waiting = waitingResidents(), sig = `${Object.keys(state.done).join()}|${mapH}|${solvedErrands()}|${[...waiting].join()}`;
+  const placed = placedDecor(), waiting = waitingResidents();
+  const sig = `${Object.keys(state.done).join()}|${mapH}|${solvedErrands()}|${[...waiting].join()}|${placed.map(d => `${d.deco.id}@${d.x},${d.y}`).join()}`;
   if (solidCache.sig === sig) return;
   const rects: typeof solidCache.rects = [[358, 128, 42, 116]];
   // residents are solid too, so the character stops beside them instead of walking through
@@ -578,6 +596,7 @@ function refreshSolids(): void {
     rects.push(p.small ? [p.x + 3, p.y + 10, 6, 12] : [p.x + 2, p.y, p.w - 4, p.h - 2]);
   }
   TREES.forEach(([x, y]) => rects.push([x + 5, y + 15, 6, 5]));
+  for (const d of placed) if (d.deco.solid) rects.push([d.x + 1, d.y + 2, d.deco.w * GRID - 2, d.deco.h * GRID - 3]);
   const n = stripsShown(EXPANSIONS, solvedErrands());
   for (const x of EXPANSIONS) if (Math.floor(x.slot / 2) < n && !isOpenExp(x)) { const r = slotRect(x.slot); rects.push([r.x, r.y, r.w, r.h]); }
   solidCache = { sig, rects };
@@ -1009,7 +1028,7 @@ const WINDOWS: [plot: string, x: number, y: number, w: number, h: number][] = [
 /** The hour of day used for night, from the clock (the DEV panel can override it with state.devHour). */
 export const hourNow = (): number => state.devHour ?? (new Date().getHours() + new Date().getMinutes() / 60);
 export const nightOn = (): boolean => !!state.done.observatory && !state.clockOff;
-function drawNight(t: number): void {
+function drawNight(t: number, decor: ReturnType<typeof placedDecor>): void {
   if (!nightOn()) return;
   const n = nightness(hourNow()); if (n <= 0) return;
   ctx.globalAlpha = 0.5 * n; ctx.fillStyle = n < 0.6 ? '#3a3a78' : '#1d2350'; ctx.fillRect(0, 0, W, mapH);
@@ -1023,6 +1042,9 @@ function drawNight(t: number): void {
   }
   // the lighthouse lamp and the windmill window
   ctx.globalAlpha = 0.9 * glow; if (state.done.harbour2) R(384, 133, 6, 5, '#fff2a8');
+  ctx.globalAlpha = 1;
+  // your lamp posts light up
+  for (const d of decor) if (d.deco.light) lampGlow(d.x, d.y, glow, t);
   // a few fireflies over the grass
   for (let i = 0; i < 10; i++) { const fx = (hsh(i, 41) * W + Math.sin(t / 1300 + i) * 8) | 0, fy = (hsh(i, 43) * mapH + Math.cos(t / 1100 + i) * 6) | 0; ctx.globalAlpha = glow * (0.4 + 0.6 * Math.max(0, Math.sin(t / 400 + i * 2))); R(fx, fy, 1, 1, '#f6ff9a'); }
   ctx.globalAlpha = 1;
@@ -1047,4 +1069,146 @@ function musician(t: number): void {
     const k = ((t / 2200) + i / 3) % 1, nx = x + 8 + Math.sin(k * 6 + i) * 4, ny = y - 2 - k * 18;
     ctx.globalAlpha = 1 - k; R(nx, ny, 2, 2, C.ink); R(nx + 1, ny - 4, 1, 4, C.ink); R(nx + 2, ny - 4, 1, 1, C.ink); ctx.globalAlpha = 1;
   }
+}
+
+
+// ---------- Decorate mode: decorations set down on open ground (decor.ts, decor-rules.ts, src/content/decorations.ts) ----------
+/** Where decorations can go: the village, below the very top edge. The land south of the railway has its own art for now. */
+const DECOR_BOUNDS = { x: 0, y: 8, w: W, h: H - 8 };
+const OUTSIDE = 'Decorations go in the village for now. Land of your own to decorate comes later.';
+/** Ground that isn't open, whatever has been built: roads and paths, the railway, the sea, every lot (built or not, so
+ *  there's always room for its building), front paths, where residents stand, trees, and the things beside buildings. */
+function groundZones(): Zone[] {
+  const z: Zone[] = [
+    { x: 0, y: 96, w: W, h: 24, why: "That's the main road. Decorations go on the grass." },
+    { x: 144, y: 120, w: 14, h: 130, why: "That's the path down to the lane." },
+    { x: 0, y: 248, w: W, h: 16, why: "That's the lane. Decorations go on the grass." },
+    { x: 0, y: 306, w: W, h: 34, why: "That's the railway. The train wouldn't like it." },
+    { x: 348, y: 118, w: 52, h: 136, why: "That's the sea. It would float away." },
+    { x: 340, y: 216, w: 60, h: 34, why: "That's Brine's pier." },
+    { x: 12, y: 228, w: 16, h: 20, why: "That's the school swing." },
+    { x: 260, y: 228, w: 22, h: 22, why: "That's the fountain by City Hall." },
+    { x: 266, y: 146, w: 16, h: 36, why: "That's the market scale." },
+    { x: 340, y: 156, w: 14, h: 22, why: "That's where the fiddler plays." },
+    { x: 84, y: 216, w: 30, h: 26, why: 'Children play there.' },
+    { x: 256, y: 158, w: 14, h: 20, why: 'Someone sits there reading.' },
+  ];
+  for (const [pid, p] of Object.entries(PLOTS)) {
+    const m = mainOf(pid);
+    z.push({ x: p.x - 4, y: p.y - 6, w: p.w + 8, h: p.h + 8, why: m && state.done[m.id] ? `That's where ${m.reward.replace(/^(a|an|the) /i, 'the ')} stands.` : "That lot is waiting for its building." });
+    if (p.door != null) {
+      const [y1, y2] = p.road === 'up' ? [120, p.y + (p.pathEnd ?? 6)] : p.road === 'down' ? [264, p.y + 6] : p.road === 'lane' ? [p.y + p.h, 250] : [p.y + p.h, 98];
+      z.push({ x: p.door - 6, y: Math.min(y1, y2), w: 12, h: Math.abs(y2 - y1), why: "That's a front path." });
+    }
+    const [sx, sy] = p.stand; z.push({ x: sx - 2, y: sy - 2, w: 12, h: 18, why: `${RESIDENTS[mainOf(pid)?.resident ?? '']?.name ?? 'Someone'} stands there.` });
+  }
+  for (const [rid, [hx, hy]] of Object.entries(HOMES)) z.push({ x: hx - 2, y: hy - 2, w: 12, h: 18, why: `That's where ${RESIDENTS[rid].name} likes to stand.` });
+  for (const [x, y] of TREES) z.push({ x, y, w: 16, h: 20, why: "There's a tree there." });
+  return z;
+}
+/** The zones, with the decorations already down (cached: they only change when the town or a decoration does). */
+let zoneCache: { sig: string; zones: Zone[]; free: [number, number][] } | null = null;
+function zones(): Zone[] {
+  const placed = placedDecor(), sig = `${Object.keys(state.done).join()}|${placed.map(d => `${d.i}@${d.x},${d.y}`).join()}`;
+  if (zoneCache?.sig !== sig) {
+    const zs = [...groundZones(), ...placed.map(d => ({ ...footprint(d.deco, d.x, d.y), why: `The ${d.deco.name} is already there.` }))];
+    // the open cells, for the dots that show where things can go
+    const free: [number, number][] = [];
+    for (let y = DECOR_BOUNDS.y; y < DECOR_BOUNDS.y + DECOR_BOUNDS.h; y += GRID) for (let x = 0; x < W; x += GRID) if (!whyNot({ x, y, w: GRID, h: GRID }, zs, DECOR_BOUNDS)) free.push([x, y]);
+    zoneCache = { sig, zones: zs, free };
+  }
+  return zoneCache.zones;
+}
+/** Why the held decoration can't go at (x, y), or null if it can. Something solid can't go where you're standing. */
+function decorWhyNot(x: number, y: number): string | null {
+  const d = heldDecor(); if (!d) return null;
+  const fp = footprint(d, x, y), why = whyNot(fp, zones(), DECOR_BOUNDS, OUTSIDE);
+  if (why || !d.solid) return why;
+  return fp.x < player.x + 4 && player.x - 4 < fp.x + fp.w && fp.y < player.y + 1 && player.y - 3 < fp.y + fp.h ? "You're standing there. Step aside first." : null;
+}
+/** The decoration on the map under a point (its art reaches above its footprint), the front-most first. */
+function decorAt(x: number, y: number): ReturnType<typeof placedDecor>[number] | null {
+  return placedDecor().sort((a, b) => b.y - a.y).find(d => { const f = footprint(d.deco, d.x, d.y); return x >= f.x - 2 && x <= f.x + f.w + 2 && y >= f.y - TALL[d.deco.id] && y <= f.y + f.h + 2; }) ?? null;
+}
+/** The line under the map for one of your decorations, outside Decorate mode. */
+function decoLine(i: number): string {
+  const d = placedDecor().find(p => p.i === i); if (!d) return plotLabel(null);
+  return `${d.deco.icon} Your <b>${d.deco.name}</b>. Move it, or put it back in your satchel, with <b>🪴 Decorate</b>.`;
+}
+let decorNote = '';
+/** The line under the map in Decorate mode. */
+function decorLabel(): string {
+  const d = heldDecor(), g = ghostAt();
+  if (!d) return decorNote || '🪴 <b>Decorate mode.</b> Clicks move things now, instead of walking. Press <kbd>Esc</kbd> or <b>Done decorating</b> when you\'re finished.';
+  const why = g && decorWhyNot(...g);
+  return why ? `🚫 ${why}` : `${d.icon} Set the <b>${d.name}</b> down here? Click, or press <kbd>Enter</kbd>. <kbd>Esc</kbd> puts it back.`;
+}
+function decorHover(x: number, y: number): void {
+  const d = heldDecor();
+  if (d) { const [gx, gy] = cellFor(x, y, d.w * GRID, d.h * GRID); moveGhost(gx, gy); cv.style.cursor = decorWhyNot(gx, gy) ? 'not-allowed' : 'pointer'; $('#hoverLabel').innerHTML = decorLabel(); return; }
+  const on = decorAt(x, y);
+  cv.style.cursor = on ? 'grab' : 'default';
+  $('#hoverLabel').innerHTML = on ? `${on.deco.icon} Your <b>${on.deco.name}</b>. Click to pick it up and move it.` : decorLabel();
+}
+/** Set the held decoration down where its ghost is, if the ground is open there. */
+function placeHeld(): void {
+  const d = heldDecor(), g = ghostAt(); if (!d || !g) return;
+  if (decorWhyNot(...g)) { $('#hoverLabel').innerHTML = decorLabel(); return; }
+  setDown(...g);
+  decorNote = `${d.icon} The <b>${d.name}</b> looks right at home there. Click it to move it again.`;
+  $('#hoverLabel').innerHTML = decorLabel(); decorNote = '';
+}
+function decorClick(x: number, y: number): void {
+  if (heldDecor()) { decorHover(x, y); placeHeld(); return; }
+  const on = decorAt(x, y);
+  if (on) { pickUp(on.i); decorHover(x, y); }
+}
+/** The keyboard in Decorate mode, while something is in hand: arrows move it a grid cell, Enter sets it down, Esc puts it back,
+ *  Delete puts it in the Satchel. Without anything in hand, the arrows still walk and Esc leaves Decorate mode. */
+function initDecorKeys(): void {
+  const STEP: Record<string, Pt> = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0] };
+  window.addEventListener('keydown', ev => {
+    if (!decorating() || inRoom() || document.body.classList.contains('modal-open') || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const el = ev.target as Element | null;
+    if (el?.closest?.('input, textarea, select, [contenteditable]')) return;
+    const d = heldDecor(), g = ghostAt(), stop = (): void => { ev.preventDefault(); ev.stopPropagation(); };
+    if (ev.key === 'Escape') { if (d) cancelHold(); else stopDecorating(); stop(); return; }
+    if (!d) return;
+    const step = STEP[ev.code];
+    if (step && g) {
+      const x = Math.max(0, Math.min(W - d.w * GRID, g[0] + step[0] * GRID)), y = Math.max(0, Math.min(mapH - d.h * GRID, g[1] + step[1] * GRID));
+      moveGhost(x, y); focus = { y, until: performance.now() + 1500 };
+      $('#hoverLabel').innerHTML = decorLabel(); stop(); return;
+    }
+    if ((ev.code === 'Enter' || ev.code === 'Space' || ev.code === 'KeyE') && !el?.closest?.('button, a')) { placeHeld(); stop(); return; }
+    if (ev.code === 'Delete' || ev.code === 'Backspace') { keepHeld(); stop(); }
+  }, true);
+}
+/** Lamp posts and the ghost light up once it's properly dark (the same point the windows do). */
+const lampsLit = (): boolean => nightOn() && nightness(hourNow()) >= 0.35;
+/** Decorate mode on the map: dots on the open ground, and the decoration in hand with a green (fits) or red (doesn't) footprint. */
+function drawDecorating(t: number): void {
+  zones();
+  ctx.globalAlpha = 0.45;
+  for (const [x, y] of zoneCache!.free) R(x + 3, y + 3, 2, 2, C.white);
+  ctx.globalAlpha = 1;
+  const d = heldDecor(); if (!d) return;
+  // a new one out of the Satchel starts on the nearest free spot to the character
+  if (!ghostAt()) { const at = nearestFree(player.x, player.y + 14, d.w * GRID, d.h * GRID, zones(), DECOR_BOUNDS); const [x, y] = at ?? cellFor(player.x, player.y, d.w * GRID, d.h * GRID); moveGhost(x, y); $('#hoverLabel').innerHTML = decorLabel(); }
+  const [x, y] = ghostAt()!, ok = !decorWhyNot(x, y), w = d.w * GRID, h = d.h * GRID;
+  ctx.fillStyle = ok ? '#7ee08a' : '#e85a4f'; ctx.globalAlpha = 0.3 + Math.sin(t / 300) * 0.08; ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = 0.8; drawDeco(R, d.id, x, y, t, lampsLit());
+  ctx.globalAlpha = 1; ctx.strokeStyle = ok ? '#2f7a3a' : '#b03a2e'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+}
+/** A lamp post at night: a warm halo round its head, a pool of light on the ground, and the lamp itself bright. */
+function lampGlow(x: number, y: number, glow: number, t: number): void {
+  const cx = x + 4, cy = y - 16, r = 24 + Math.sin(t / 340 + x) * 0.8;
+  const halo = ctx.createRadialGradient(cx, cy, 1, cx, cy, r);
+  halo.addColorStop(0, `rgba(255,224,138,${(0.5 * glow).toFixed(3)})`); halo.addColorStop(1, 'rgba(255,224,138,0)');
+  ctx.fillStyle = halo; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.save(); ctx.translate(cx, y + 6); ctx.scale(1, 0.4);
+  const pool = ctx.createRadialGradient(0, 0, 1, 0, 0, 18);
+  pool.addColorStop(0, `rgba(255,217,112,${(0.4 * glow).toFixed(3)})`); pool.addColorStop(1, 'rgba(255,217,112,0)');
+  ctx.fillStyle = pool; ctx.fillRect(-18, -18, 36, 36); ctx.restore();
+  ctx.globalAlpha = glow; R(x + 2, y - 18, 4, 3, '#fff2a8'); R(x + 3, y - 17, 2, 1, C.white); ctx.globalAlpha = 1;
 }

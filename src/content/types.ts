@@ -240,3 +240,21 @@ export interface Find {
   /** What Bram pays for one, in coins. */
   price: number;
 }
+
+/** A decoration from Bram's store (src/content/decorations.ts), placed on open ground in Decorate mode. */
+export interface Decoration {
+  id: string;
+  icon: string;
+  name: string;
+  /** In coins, before Bram's 10%. */
+  price: number;
+  /** The footprint, in grid cells (8 map pixels each): the ground it needs free. */
+  w: number;
+  h: number;
+  /** The character walks around it (stepping stones it walks over). */
+  solid: boolean;
+  /** It lights up at night (lamp posts). */
+  light?: boolean;
+  /** Its line in the Satchel and on the shelf. */
+  note: string;
+}

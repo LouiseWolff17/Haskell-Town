@@ -58,6 +58,9 @@ export interface GameState {
   finds?: Record<string, number>;
   /** Things bought at Bram's store (a shelf name → how many), waiting in the Satchel. */
   bought?: Record<string, number>;
+  /** Decorations from Bram's store: with a position (the top-left of its footprint, in map pixels, on the 8 px grid) once it's
+   *  set down on the map, without one while it waits in the Satchel. */
+  decor?: { kind: string; x?: number; y?: number }[];
   /** City Hall projects, by project id. Their code is in `code` under `project:<id>`. */
   projects?: Record<string, ProjectProgress>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */

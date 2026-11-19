@@ -10,6 +10,7 @@ import { goInside, plotLabel, targetBox } from './town.ts';
 import { beachNote, hasInterior, hivesNote, placeOf } from './interiors.ts';
 import { giftFor, roomsOf } from './rooms.ts';
 import { heldFinds } from './purse.ts';
+import { keptDecor, startDecorating, stopDecorating } from './decor.ts';
 import type { GiftItem } from '../content/index.ts';
 
 const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
@@ -50,7 +51,7 @@ export function satchelItems(): GiftItem[] {
 /** Things bought at Bram's store, in shelf order, with how many of each. */
 const boughtItems = () => STORE.shelf.filter(s => (state.bought?.[s.name] || 0) > 0).map(s => ({ item: s, n: state.bought![s.name] }));
 /** The Satchel appears with the first gift (or the first find or purchase) and stays after that. */
-const hasSatchel = (): boolean => Object.values(hearts()).some(n => n >= HEARTS.gift) || heldFinds().length > 0 || boughtItems().length > 0;
+const hasSatchel = (): boolean => Object.values(hearts()).some(n => n >= HEARTS.gift) || heldFinds().length > 0 || boughtItems().length > 0 || !!state.decor?.length;
 
 let held: GiftItem | null = null;
 /** The item picked from the Satchel, waiting to be used on the map. */
@@ -85,7 +86,7 @@ export function useHeld(hit: boolean): void {
 
 function pick(rid: string): void {
   const it = ITEMS.find(i => i.resident === rid)!;
-  closeList();
+  closeList(); stopDecorating();
   if (!it.target || !targetBox(it.target)) { toast(`${giftOf(rid).icon} ${it.notYet}`); return; }
   held = it; document.body.classList.add('holding');
   $('#hoverLabel').innerHTML = holdLabel();
@@ -131,12 +132,17 @@ export function renderSatchel(): void {
     `<div class="satchel-item"><span class="satchel-icon">${f.icon}</span><span><b>${n} ${n === 1 ? f.name : f.plural}</b><small>Bram buys these at his till</small></span></div>`).join('');
   if (bought.length) list.innerHTML += `<div class="satchel-h satchel-h2">🛍️ From Bram's store</div>` + bought.map(({ item: b, n }) =>
     `<div class="satchel-item"><span class="satchel-icon">${b.icon}</span><span><b>${n > 1 ? `${n} × ` : ''}${b.name}</b><small>${b.note}</small></span></div>`).join('');
+  // decorations wait to be set down on the map, in Decorate mode
+  const decor = keptDecor();
+  if (decor.length) list.innerHTML += `<div class="satchel-h satchel-h2">🪴 Decorations</div>` + decor.map(({ deco: d, n }) =>
+    `<button class="satchel-item" data-decor="${d.id}"><span class="satchel-icon">${d.icon}</span><span><b>${n > 1 ? `${n} × ` : ''}${d.name}</b><small>Set it down anywhere on open ground</small></span></button>`).join('');
   // a gift that opens several rooms (Rowan's tulip: three hives) lists each of them
   const doors = openDoors().flatMap(i => { const rs = roomsOf(i.resident); return rs.length > 1 ? rs.map(r => ({ i, id: r, name: cap(placeOf(r)) })) : [{ i, id: i.resident, name: i.place! }]; });
   if (doors.length) list.innerHTML += `<div class="satchel-h satchel-h2">🚪 Open doors</div>` + doors.map(({ i, id, name }) =>
     `<button class="satchel-item" data-door="${id}"><span class="satchel-icon">${giftOf(i.resident).icon}</span><span><b>${name}</b><small>Pop in again</small></span></button>`).join('');
   list.querySelectorAll<HTMLElement>('[data-item]').forEach(b => b.onclick = () => pick(b.dataset.item!));
   list.querySelectorAll<HTMLElement>('[data-door]').forEach(b => b.onclick = () => visit(b.dataset.door!));
+  list.querySelectorAll<HTMLElement>('[data-decor]').forEach(b => b.onclick = () => { closeList(); startDecorating(b.dataset.decor!); });
 }
 
 export function initSatchel(): void {

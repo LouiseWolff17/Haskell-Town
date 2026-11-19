@@ -1,5 +1,5 @@
 // Dev-only shortcuts for skipping through the game. Loaded from main.ts only under `npm run dev`.
-import { CHALLENGES, EXPANSIONS, FINDS, HEARTS, LIFE } from '../content/index.ts';
+import { CHALLENGES, DECORATIONS, EXPANSIONS, FINDS, HEARTS, LIFE } from '../content/index.ts';
 import { save, state, status } from './state.ts';
 import { build, queueFriend, queueLand, queueLife, queueProject, revealLand } from './notebook.ts';
 import { passStep, pinnedProject, progressOf } from './projects.ts';
@@ -10,6 +10,7 @@ import { nextExpansion, newFriendRewards, newlyOpened } from './rewards.ts';
 import { renderSidebar } from './sidebar.ts';
 import { giveAway, satchelItems } from './satchel.ts';
 import { addFind, earn } from './purse.ts';
+import { renderDecor } from './decor.ts';
 import type { Challenge } from '../content/index.ts';
 import type { Confidence, DayItem, Outcome, ReviewState } from './schedule.ts';
  
@@ -51,6 +52,7 @@ export function initDevTools(): void {
       <button data-a="give" title="Give away the travel gifts in the Satchel, as Glaschu will (they stay in the Journal as a memory)">Give away</button>
       <button data-a="finds" title="Put two of every kind of find in the Satchel, to sell at Bram's till">Finds</button>
       <button data-a="coins" title="Put 20 coins in the purse">+20 🪙</button>
+      <button data-a="decor" title="Put one of every decoration in the Satchel, to set down in Decorate mode">Decor</button>
       <button data-a="pstep" title="Pass the current step of the City Hall project with its model answer">Project step</button>
       <button data-a="project" title="Finish the City Hall project pinned up now, with the model answers">Project</button></div>
     <div style="display:flex;gap:6px;align-items:center"><b>Errands</b>
@@ -85,6 +87,7 @@ export function initDevTools(): void {
   on('project', () => { if (!pinnedProject()) return; while (!projectStep()); renderSidebar(); revealLand(); });
   on('finds', () => { for (const f of FINDS) addFind(f.id, 2); renderSidebar(); });
   on('coins', () => { earn(20); renderSidebar(); });
+  on('decor', () => { (state.decor ||= []).push(...DECORATIONS.map(d => ({ kind: d.id }))); save(); renderDecor(); });
   on('give', () => { for (const i of satchelItems()) if (i.givenTo) giveAway(i.resident); renderSidebar(); });
  
   // move the clock forward, so spaced errands can be tried without waiting for real days

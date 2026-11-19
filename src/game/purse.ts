@@ -2,7 +2,7 @@
 // One purse, shared between Haskell Town and Glaschu. Every errand solved brings a fixed amount (COINS.errand),
 // whatever the outcome, like the hearts; those coins are worked out from the errand log, so they're never lost.
 // Selling finds and buying things go through `earn` and `spend`; Bram's store (interiors.ts) does both.
-import { COINS, FINDS, STORE } from '../content/index.ts';
+import { COINS, DECORATIONS, FINDS, STORE } from '../content/index.ts';
 import { $, save, state } from './state.ts';
 import { purseCoins, saleTotal, tenOff } from './rewards.ts';
 
@@ -30,6 +30,15 @@ export const cardPrice = (name: string): number => tenOff(STORE.shelf.find(s => 
 export function buy(name: string): boolean {
   if (!STORE.shelf.some(s => s.name === name) || !spend(cardPrice(name))) return false;
   const b = (state.bought ||= {}); b[name] = (b[name] || 0) + 1; save();
+  return true;
+}
+
+/** What a decoration costs with Bram's card. */
+export const decorPrice = (kind: string): number => tenOff(DECORATIONS.find(d => d.id === kind)?.price ?? 0);
+/** Buy a decoration, with 10% off. It waits in the Satchel until it's set down in Decorate mode. Returns whether there were enough coins. */
+export function buyDecoration(kind: string): boolean {
+  if (!DECORATIONS.some(d => d.id === kind) || !spend(decorPrice(kind))) return false;
+  (state.decor ||= []).push({ kind }); save();
   return true;
 }
 
