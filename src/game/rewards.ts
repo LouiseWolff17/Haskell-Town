@@ -99,3 +99,13 @@ export function nightness(hours: number): number {
   if (hours >= 5 && hours < 7) return (7 - hours) / 2;
   return 1;
 }
+
+// ---------- Satchel slots ----------
+
+/** How many slots the Satchel's things take: one for every find, bought thing, seed packet and decoration waiting in it.
+ *  Gifts, the rod and the bigger satchel never take one. */
+export const slotsUsed = (...counts: Record<string, number>[]): number =>
+  counts.reduce((n, c) => n + Object.values(c).reduce((a, b) => a + Math.max(0, b), 0), 0);
+/** How many of `n` new things fit, with `used` of `slots` taken. A satchel that's over full (it can be, by putting a
+ *  decoration back) just takes nothing more; nothing already in it is lost. */
+export const roomFor = (used: number, slots: number, n = 1): number => Math.max(0, Math.min(n, slots - used));

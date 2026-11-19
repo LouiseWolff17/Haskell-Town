@@ -61,12 +61,11 @@ export const STORE = {
     { icon: '🍓', name: 'jam', price: 12, note: "Strawberry, from Bram's own recipe. He says it's the best jam in town. It is the only jam in town." },
     { icon: '🕯️', name: 'candle', price: 5, note: 'A beeswax candle. It smells faintly of the meadow.' },
     { icon: '🏮', name: 'lantern', price: 30, note: 'A paper lantern, waiting for a good spot in town to hang.' },
-    { icon: '🌱', name: 'seeds', price: 8, note: 'A packet of mixed seeds, waiting for a patch of soil.' },
     { icon: '🫖', name: 'teapot', price: 20, note: 'A round blue teapot. Wren would approve.' },
   ],
   /** Bram's 10%, rounded in your favour. */
-  source: 'shelf :: [String]\nshelf = ["jam", "candle", "lantern", "seeds", "teapot"]\n\nprices :: [Int]\nprices = [12, 5, 30, 8, 20]\n\n-- Bram\'s card: 10% off, rounded in your favour\ntenOff :: Int -> Int\ntenOff p = p - p `div` 10\n',
-  tries: ['map tenOff prices', 'filter (< 10) prices', 'sum (map tenOff prices)', 'zip shelf (map tenOff prices)'],
+  source: 'shelf :: [String]\nshelf = ["jam", "candle", "lantern", "teapot"]\n\nprices :: [Int]\nprices = [12, 5, 30, 20]\n\n-- Bram\'s card: 10% off, rounded in your favour\ntenOff :: Int -> Int\ntenOff p = p - p `div` 10\n',
+  tries: ['map tenOff prices', 'filter (< 15) prices', 'sum (map tenOff prices)', 'zip shelf (map tenOff prices)'],
   bram: [
     '"Welcome back, favourite customer!" Bram straightens a jar that was already straight.',
     '"I filter the bargain shelf every Monday," says Bram. "You taught me that. Don\'t tell anyone."',
@@ -82,6 +81,8 @@ export const STORE = {
   short: '"Not quite enough yet," says Bram kindly. "It\'ll keep. I won\'t let anyone else have it."',
   /** Selling everything you've found at the till. */
   sold: '"Every bit of it, at a fair price," says Bram, counting the coins into your hand.',
+  /** The satchel is full: nothing is spent, and selling finds or setting decorations down makes room. */
+  full: '"Your satchel\'s full to the brim," says Bram. "Sell me a few finds, or set a decoration down somewhere, and come back for it."',
   nothingToSell: 'Bram buys anything you find, at a fair price: shells, honey, fish, flowers, vegetables. Your satchel has none yet.',
 };
 

@@ -344,6 +344,7 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .satchel-n{display:inline-grid; place-items:center; min-width:17px; height:17px; margin-left:3px; padding:0 4px; border-radius:9px; background:var(--terra); color:var(--paper); font-size:11px}
 .satchel{position:absolute; top:46px; right:16px; z-index:3; width:min(270px, calc(100% - 32px)); max-height:calc(100% - 62px); overflow:auto; padding:8px; background:var(--paper); border:2px solid var(--line); border-radius:12px; box-shadow:0 8px 20px rgba(60,40,20,.25); animation:pop .2s}
 .satchel-h{font-family:var(--pixel); font-size:15px; padding:2px 6px 6px}
+.satchel-slots{float:right; font:600 12px var(--body); color:var(--ink2)} .satchel-slots.full{color:var(--terra)}
 .satchel-item{display:flex; gap:10px; align-items:center; width:100%; text-align:left; padding:7px 8px; margin:0; background:none; border:0; border-radius:8px; font:inherit; font-size:13.5px; color:var(--ink); cursor:pointer}
 .satchel-item:hover, .satchel-item:focus-visible{background:var(--paper2); outline:2px solid #e0b040; outline-offset:-2px}
 .satchel-item small{display:block; color:var(--ink2); font-size:12px}

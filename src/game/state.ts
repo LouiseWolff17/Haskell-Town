@@ -61,6 +61,9 @@ export interface GameState {
   /** Decorations from Bram's store: with a position (the top-left of its footprint, in map pixels, on the 8 px grid) once it's
    *  set down on the map, without one while it waits in the Satchel. */
   decor?: { kind: string; x?: number; y?: number }[];
+  /** Useful things from Bram's store (a USEFUL id → how many): seed packets waiting in the Satchel, and the rod and the
+   *  bigger satchel (1 once bought). */
+  useful?: Record<string, number>;
   /** City Hall projects, by project id. Their code is in `code` under `project:<id>`. */
   projects?: Record<string, ProjectProgress>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */
@@ -74,6 +77,8 @@ const fresh = (mode: AssistMode, welcomed: boolean): GameState =>
 // The player's progress, saved in localStorage. Always mutate this object; never replace it.
 export const state: GameState = fresh('guided', false);
 try { const s = JSON.parse(localStorage.getItem(KEY) ?? 'null'); if (s && s.done) Object.assign(state, s); } catch {}
+// Seeds used to be an ordinary shelf item; they're a useful thing now (waiting for the garden plot).
+if (state.bought?.seeds) { (state.useful ||= {}).seeds = (state.useful.seeds || 0) + state.bought.seeds; delete state.bought.seeds; }
 export function save(): void { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
 // Start the town over, keeping the chosen learning-assistance mode.
 export function resetProgress(): void {

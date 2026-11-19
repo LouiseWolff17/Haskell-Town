@@ -139,6 +139,7 @@ Full design in **[glaschu-design.md](glaschu-design.md)**: 16 residents, 27 chal
   - Nothing wilts or dies: a ready plant just waits for you.
 - **A better fishing rod:** more kinds of fish, rarer catches. Never required: the basic rod can still catch everything common.
 - **A bigger satchel:** more slots for finds and bought things.
+- **As built:** the satchel holds 20 things, 40 with the bigger satchel. Every find, shelf thing, seed packet and decoration waiting in it takes one slot; gifts, the rod and the bigger satchel take none. A full satchel only turns *new* things away (buying, finds coming in) and nothing is spent; putting a decoration back in is always allowed, so it can sit over full for a while. Seeds are mixed packets for now; the garden decides what they grow into.
 - Possibly later: a shovel for digging up buried things on the beach, a bee-suit for the hives, a lantern for night fishing, a watering can that makes plants grow a little faster.
 
 ### 8c. Bigger things: buildings and upgrades

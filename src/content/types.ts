@@ -258,3 +258,17 @@ export interface Decoration {
   /** Its line in the Satchel and on the shelf. */
   note: string;
 }
+
+/** A useful thing from Bram's store (src/content/useful.ts): seeds, a better fishing rod, a bigger satchel. */
+export interface Useful {
+  id: string;
+  icon: string;
+  name: string;
+  /** In coins, before Bram's 10%. */
+  price: number;
+  /** Bought once and kept for good (the rod, the bigger satchel); these never take a satchel slot. Without it, you can
+   *  buy as many as you like and each one takes a slot while it waits (seed packets). */
+  once?: boolean;
+  /** Its line on the shelf and in the Satchel. */
+  note: string;
+}

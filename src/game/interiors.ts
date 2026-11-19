@@ -3,14 +3,15 @@
 // in the dialogue box over the map, or opens a pop-up (the recipe, the till, the letters, …).
 // The doormat leads back to town. Every interior is optional: a cozy toy or a small Haskell bonus,
 // never a required challenge. Content is in src/content/interiors.ts.
-import { BEACH, DECORATIONS, BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, HIVES, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
+import { BEACH, DECORATIONS, USEFUL, BOAT, CHALLENGES, COTTAGE, EXPANSIONS, FRIENDSHIP, HALL, HIVES, ITEMS, KITCHEN, MAX_HEARTS, READING, RESIDENTS, STORE } from '../content/index.ts';
 import { $, esc, save, state } from './state.ts';
 import { codeBlock } from './highlight.ts';
 import { hearts, solvedErrands, today } from './errands.ts';
 import { openExpansions } from './rewards.ts';
 import { runner } from './notebook.ts';
 import { portrait } from './town.ts';
-import { buy, buyDecoration, cardPrice, coinWord, coins, decorPrice, findsValue, heldFinds, sellAll } from './purse.ts';
+import { buy, buyDecoration, buyUseful, cardPrice, coinWord, coins, decorPrice, findsValue, haveUseful, heldFinds, satchelSlots, satchelUsed, sellAll, usefulPrice } from './purse.ts';
+import type { Bought } from './purse.ts';
 import { renderDecor } from './decor.ts';
 import { ROOMS, SAIL_MS, enterRoom, exitRoom, giftFor, inRoom, roomsOf } from './rooms.ts';
 import type { Spot, View } from './rooms.ts';
@@ -217,49 +218,72 @@ INTERIORS.bram = {
   })(),
 };
 const boughtLine = cycler(STORE.bought);
-/** The shelf: everything at its card price, with a Buy button. Buying says what happened below it (a receipt, or not enough coins). */
+/** What the receipt says after a Buy: Bram's line and the sum, or why nothing was spent. */
+function receipt(r: Bought, icon: string, price: number, paid: number, aside: string, extra = ''): string {
+  if (r === 'ok') return `<p class="in-line">${icon} ${esc(boughtLine())} <span class="toast-aside">${aside}</span></p><code class="in-layers">tenOff ${price}  -- ${coinWord(paid)}${extra}</code>`;
+  if (r === 'full') return `<p class="in-line">${esc(STORE.full)}${haveUseful('satchel') ? '' : ' <span class="toast-aside">A bigger satchel is on the shelf, under Useful things.</span>'}</p><code class="in-layers">length satchel == ${satchelSlots()}  -- full</code>`;
+  return `<p class="in-line">${esc(STORE.short)} <span class="toast-aside">${coinWord(paid - coins())} more, and it's yours.</span></p>`;
+}
+/** The shelf: everything at its card price, with a Buy button. Buying says what happened below it (a receipt, not enough
+ *  coins, or a full satchel). */
 function shelf(room: Room): void {
   const el = room.panel(`<h4 class="board-h">On the shelf</h4>
-    <p class="board-small">🧾 Bram's card: 10% off everything. In your purse: <b data-purse></b></p>
+    <p class="board-small">🧾 Bram's card: 10% off everything. In your purse: <b data-purse></b> · In your satchel: <b data-slots></b></p>
     <div class="in-shelfrow" data-row="shelf"></div>
+    <h4 class="board-h">Useful things</h4>
+    <p class="board-small">Seeds wait in your satchel for a patch of soil. The rod and the bigger satchel are yours for good, and take no room.</p>
+    <div class="in-shelfrow" data-row="useful"></div>
     <h4 class="board-h">For around town</h4>
     <p class="board-small">Decorations wait in your satchel. Set them down anywhere on open ground with <b>🪴 Decorate</b> on the map.</p>
     <div class="in-shelfrow" data-row="decor"></div>
     <div class="in-receipt" aria-live="polite"></div>`);
+  const out = (html: string): void => { el.querySelector('.in-receipt')!.innerHTML = html; };
+  const item = (icon: string, name: string, price: number, paid: number, purse: number, attr: string, have: string, owned = false, title = ''): string =>
+    `<div class="in-item"${title ? ` title="${esc(title)}"` : ''}><span aria-hidden="true">${icon}</span><b>${name}</b><small><s>${price}</s> ${coinWord(paid)}</small>
+      ${owned ? `<small class="in-have">✓ yours</small>` : `<button class="btn-soft in-buy${paid > purse ? ' short' : ''}" ${attr} aria-label="Buy the ${name} for ${coinWord(paid)}">Buy</button>${have ? `<small class="in-have">${have}</small>` : ''}`}</div>`;
   const fill = (focus = ''): void => {
     const purse = coins();
     el.querySelector('[data-purse]')!.textContent = `🪙 ${purse}`;
+    el.querySelector('[data-slots]')!.textContent = `${satchelUsed()} of ${satchelSlots()}`;
     el.querySelector('[data-row="shelf"]')!.innerHTML = STORE.shelf.map(s => {
-      const p = cardPrice(s.name), have = state.bought?.[s.name] || 0;
-      return `<div class="in-item"><span aria-hidden="true">${s.icon}</span><b>${s.name}</b><small><s>${s.price}</s> ${coinWord(p)}</small>
-        <button class="btn-soft in-buy${p > purse ? ' short' : ''}" data-buy="${s.name}" aria-label="Buy the ${s.name} for ${coinWord(p)}">Buy</button>${have ? `<small class="in-have">${have} in your satchel</small>` : ''}</div>`;
+      const have = state.bought?.[s.name] || 0;
+      return item(s.icon, s.name, s.price, cardPrice(s.name), purse, `data-buy="${s.name}"`, have ? `${have} in your satchel` : '');
     }).join('');
     el.querySelectorAll<HTMLElement>('[data-buy]').forEach(b => b.onclick = () => {
-      const name = b.dataset.buy!, it = STORE.shelf.find(s => s.name === name)!, p = cardPrice(name);
-      el.querySelector('.in-receipt')!.innerHTML = buy(name)
-        ? `<p class="in-line">${it.icon} ${esc(boughtLine())} <span class="toast-aside">It's in your satchel.</span></p><code class="in-layers">tenOff ${it.price}  -- ${coinWord(p)}</code>`
-        : `<p class="in-line">${esc(STORE.short)} <span class="toast-aside">${coinWord(p - coins())} more, and it's yours.</span></p>`;
-      fill(name);
+      const name = b.dataset.buy!, it = STORE.shelf.find(s => s.name === name)!;
+      out(receipt(buy(name), it.icon, it.price, cardPrice(name), "It's in your satchel."));
+      fill(`[data-buy="${name}"]`);
+    });
+    // useful things: seed packets wait in the Satchel; the rod and the bigger satchel are bought once
+    el.querySelector('[data-row="useful"]')!.innerHTML = USEFUL.map(u => {
+      const have = haveUseful(u.id);
+      return item(u.icon, u.name, u.price, usefulPrice(u.id), purse, `data-buyuse="${u.id}"`, have ? `${have} in your satchel` : '', !!u.once && have > 0, u.note);
+    }).join('');
+    el.querySelectorAll<HTMLElement>('[data-buyuse]').forEach(b => b.onclick = () => {
+      const id = b.dataset.buyuse!, u = USEFUL.find(x => x.id === id)!;
+      const aside = id === 'satchel' ? `Room for ${satchelSlots()} things now. Gifts still take none.`
+        : id === 'rod' ? "It's in your satchel, ready for a day out with Brine." : "It's in your satchel, waiting for a patch of soil.";
+      const r = buyUseful(id);
+      out(receipt(r, u.icon, u.price, usefulPrice(id), aside, r === 'ok' && id === 'satchel' ? `\nslots = ${satchelSlots()}` : ''));
+      fill(`[data-buyuse="${id}"]`);
     });
     // decorations: the same card price and receipt, and they wait in the Satchel for Decorate mode
     el.querySelector('[data-row="decor"]')!.innerHTML = DECORATIONS.map(d => {
-      const p = decorPrice(d.id), have = (state.decor || []).filter(o => o.kind === d.id).length;
-      return `<div class="in-item" title="${esc(d.note)}"><span aria-hidden="true">${d.icon}</span><b>${d.name}</b><small><s>${d.price}</s> ${coinWord(p)}</small>
-        <button class="btn-soft in-buy${p > purse ? ' short' : ''}" data-buydeco="${d.id}" aria-label="Buy the ${d.name} for ${coinWord(p)}">Buy</button>${have ? `<small class="in-have">you have ${have}</small>` : ''}</div>`;
+      const have = (state.decor || []).filter(o => o.kind === d.id).length;
+      return item(d.icon, d.name, d.price, decorPrice(d.id), purse, `data-buydeco="${d.id}"`, have ? `you have ${have}` : '', false, d.note);
     }).join('');
     el.querySelectorAll<HTMLElement>('[data-buydeco]').forEach(b => b.onclick = () => {
-      const id = b.dataset.buydeco!, d = DECORATIONS.find(x => x.id === id)!, p = decorPrice(id);
-      el.querySelector('.in-receipt')!.innerHTML = buyDecoration(id)
-        ? `<p class="in-line">${d.icon} ${esc(boughtLine())} <span class="toast-aside">It's in your satchel. Set it down with 🪴 Decorate on the map.</span></p><code class="in-layers">tenOff ${d.price}  -- ${coinWord(p)}</code>`
-        : `<p class="in-line">${esc(STORE.short)} <span class="toast-aside">${coinWord(p - coins())} more, and it's yours.</span></p>`;
+      const id = b.dataset.buydeco!, d = DECORATIONS.find(x => x.id === id)!;
+      out(receipt(buyDecoration(id), d.icon, d.price, decorPrice(id), "It's in your satchel. Set it down with 🪴 Decorate on the map."));
       renderDecor();
-      fill('deco:' + id);
+      fill(`[data-buydeco="${id}"]`);
     });
-    if (focus.startsWith('deco:')) el.querySelector<HTMLElement>(`[data-buydeco="${focus.slice(5)}"]`)?.focus();
-    else if (focus) el.querySelector<HTMLElement>(`[data-buy="${focus}"]`)?.focus();
+    // after a buy, focus stays on the same Buy button (or the row, once a one-off is yours)
+    if (focus) (el.querySelector<HTMLElement>(focus) ?? el.querySelector<HTMLElement>('[data-row="useful"] .in-buy'))?.focus();
   };
   fill();
 }
+
 /** The till's counter: sell everything you've found, at Bram's standard price. */
 function sellCounter(el: HTMLElement, line = ''): void {
   const box = el.querySelector<HTMLElement>('[data-sell]')!, held = heldFinds(), total = findsValue();

@@ -2,14 +2,14 @@
 // listing the gifts that haven't been used yet. Pick one and the place it belongs glows on the map.
 // Click there to use it. Click anywhere else and you get a gentle line, and the item goes back in the
 // Satchel. Nothing is lost. The map side (the glow, where a target is, clicks) is in town.ts.
-import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS, STORE } from '../content/index.ts';
+import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS, STORE, USEFUL } from '../content/index.ts';
 import { $, dateOf, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
 import { goInside, plotLabel, targetBox } from './town.ts';
 import { beachNote, hasInterior, hivesNote, placeOf } from './interiors.ts';
 import { giftFor, roomsOf } from './rooms.ts';
-import { heldFinds } from './purse.ts';
+import { haveUseful, heldFinds, satchelSlots, satchelUsed } from './purse.ts';
 import { keptDecor, startDecorating, stopDecorating } from './decor.ts';
 import type { GiftItem } from '../content/index.ts';
 
@@ -50,8 +50,10 @@ export function satchelItems(): GiftItem[] {
 }
 /** Things bought at Bram's store, in shelf order, with how many of each. */
 const boughtItems = () => STORE.shelf.filter(s => (state.bought?.[s.name] || 0) > 0).map(s => ({ item: s, n: state.bought![s.name] }));
+/** Useful things from Bram's store you have: seed packets, the rod (the bigger satchel shows as the slot count instead). */
+const usefulItems = () => USEFUL.filter(u => u.id !== 'satchel' && haveUseful(u.id) > 0).map(u => ({ item: u, n: haveUseful(u.id) }));
 /** The Satchel appears with the first gift (or the first find or purchase) and stays after that. */
-const hasSatchel = (): boolean => Object.values(hearts()).some(n => n >= HEARTS.gift) || heldFinds().length > 0 || boughtItems().length > 0 || !!state.decor?.length;
+const hasSatchel = (): boolean => Object.values(hearts()).some(n => n >= HEARTS.gift) || heldFinds().length > 0 || boughtItems().length > 0 || !!state.decor?.length || !!state.useful;
 
 let held: GiftItem | null = null;
 /** The item picked from the Satchel, waiting to be used on the map. */
@@ -122,7 +124,8 @@ export function renderSatchel(): void {
   btn.innerHTML = held ? `🎒 Put ${giftOf(held.resident).icon} back` : `🎒 Satchel${items.length ? ` <span class="satchel-n">${items.length}</span>` : ''}`;
   btn.title = held ? 'Put the item back in your satchel' : 'Gifts from your friends, to use around town';
   const list = $('#satchel');
-  list.innerHTML = `<div class="satchel-h">Your satchel</div>` + (items.length
+  const used = satchelUsed(), slots = satchelSlots();
+  list.innerHTML = `<div class="satchel-h">Your satchel <small class="satchel-slots${used >= slots ? ' full' : ''}" title="Finds and bought things take a slot each. Gifts never do.">${used} of ${slots}</small></div>` + (items.length
     ? items.map(i => { const g = giftOf(i.resident), ready = !!i.target && !!targetBox(i.target);
       return `<button class="satchel-item${ready ? '' : ' waiting'}" data-item="${i.resident}"><span class="satchel-icon">${g.icon}</span><span><b>${g.name}</b><small>From ${RESIDENTS[i.resident].name}${ready ? '' : ' · keep it for now'}</small></span></button>`; }).join('')
     : `<p class="board-small">Empty for now. Every gift has found its place.</p>`);
@@ -132,6 +135,10 @@ export function renderSatchel(): void {
     `<div class="satchel-item"><span class="satchel-icon">${f.icon}</span><span><b>${n} ${n === 1 ? f.name : f.plural}</b><small>Bram buys these at his till</small></span></div>`).join('');
   if (bought.length) list.innerHTML += `<div class="satchel-h satchel-h2">🛍️ From Bram's store</div>` + bought.map(({ item: b, n }) =>
     `<div class="satchel-item"><span class="satchel-icon">${b.icon}</span><span><b>${n > 1 ? `${n} × ` : ''}${b.name}</b><small>${b.note}</small></span></div>`).join('');
+  // useful things: seed packets wait for a patch of soil, the rod for a day out with Brine
+  const useful = usefulItems();
+  if (useful.length) list.innerHTML += `<div class="satchel-h satchel-h2">🧰 Useful things</div>` + useful.map(({ item: u, n }) =>
+    `<div class="satchel-item"><span class="satchel-icon">${u.icon}</span><span><b>${u.once ? `The ${u.name}` : `${n} ${n === 1 ? 'packet' : 'packets'} of ${u.name}`}</b><small>${u.once ? 'Ready for a day out at sea with Brine' : 'Waiting for a patch of soil'}</small></span></div>`).join('');
   // decorations wait to be set down on the map, in Decorate mode
   const decor = keptDecor();
   if (decor.length) list.innerHTML += `<div class="satchel-h satchel-h2">🪴 Decorations</div>` + decor.map(({ deco: d, n }) =>
