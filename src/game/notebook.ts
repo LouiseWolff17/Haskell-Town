@@ -1,6 +1,6 @@
 // The notebook: the challenge window (problem, hints, editor, results) and the Workshop.
 // All Haskell goes through the runner; this file only turns its results into HTML.
-import { CHALLENGES, EXPANSIONS, FRIENDSHIP, HEARTS, LIFE, RESIDENTS, WORKSHOP_EXAMPLES } from '../content/index.ts';
+import { CHALLENGES, COINS, EXPANSIONS, FRIENDSHIP, HEARTS, LIFE, RESIDENTS, WORKSHOP_EXAMPLES } from '../content/index.ts';
 import { createRunner } from '../runner/index.ts';
 import { $, HINT_LEVELS, MODES, byId, esc, resetProgress, save, state, status } from './state.ts';
 import { codeBlock, highlight } from './highlight.ts';
@@ -9,6 +9,7 @@ import { notSupportedHTML, renderSidebar } from './sidebar.ts';
 import { RETRY_ERRANDS, cueHTML, errandById, heartRow, hearts, practised, reviews, today, topicById, topicLabel, villageBuilt, whenText } from './errands.ts';
 import { completeItem, isOpen, showAnswer } from './schedule.ts';
 import { newFriendRewards, newlyOpened, nextExpansion } from './rewards.ts';
+import { coinWord, coins } from './purse.ts';
 import { passStep, progressOf, projectById, projectKey, projectState } from './projects.ts';
 import { projectStarter, stepsToCheck } from './project-rules.ts';
 import type { FriendReward } from './rewards.ts';
@@ -97,6 +98,10 @@ export function revealLand(): void {
   toast(msgs.join(' '));
   if (opened.length) showLand(opened[opened.length - 1].id);
   $('.town-frame').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+/** One line for the win box: the coins this errand brought, and what's in the purse now. */
+function coinLine(): string {
+  return `<div class="land-line coin-line">🪙 <b>+${coinWord(COINS.errand)}</b> · ${coinWord(coins())} in your purse</div>`;
 }
 /** One line for the win box: the resident's hearts, and anything their friendship just brought. */
 function friendLine(rid: string, rewards: FriendReward[]): string {
@@ -376,7 +381,7 @@ async function checkErrand(): Promise<void> {
         : item.confidence === 'unsure' && first ? 'You knew more than you thought!' : 'Nicely judged.'}</p>`;
     }
     html += `<div class="win"><h3>${headline}</h3><p>${body}</p>${conf}<details class="compare"><summary>Compare with one way to write it</summary>${answerHTML(c)}</details>
-      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div>${friendLine(c.resident, friendNew)}${lifeNew.map(l => `<div class="land-line opened">✨ <b>Life in town:</b> ${l.note}</div>`).join('')}${landLine(opened, rs.log.length)}<button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
+      <div class="win-stats">${who} will pin up another ${t.title} errand <b>${whenText(p.due)}</b>.</div>${coinLine()}${friendLine(c.resident, friendNew)}${lifeNew.map(l => `<div class="land-line opened">✨ <b>Life in town:</b> ${l.note}</div>`).join('')}${landLine(opened, rs.log.length)}<button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;
     renderSidebar(); renderErrandAssistant();
   } else if (all) {
     html += `<div class="win"><h3>All tests pass</h3><p>${item.sawAnswer ? `Now try the new ${topicById(item.topic)?.title} errand on the Notice Board, from memory.` : 'This errand is already done for today.'}</p><button class="btn-build" id="boardBtn">Back to the Notice Board</button></div>`;

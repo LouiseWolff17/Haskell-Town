@@ -230,3 +230,59 @@ export interface LifeTouch {
   title: string;
   note: string;
 }
+
+/** Something you find (a shell, a jar of honey, a fish…), kept in the Satchel until it's sold. */
+export interface Find {
+  id: string;
+  icon: string;
+  name: string;
+  plural: string;
+  /** What Bram pays for one, in coins. */
+  price: number;
+}
+
+/** A decoration from Bram's store (src/content/decorations.ts), placed on open ground in Decorate mode. */
+export interface Decoration {
+  id: string;
+  icon: string;
+  name: string;
+  /** In coins, before Bram's 10%. */
+  price: number;
+  /** The footprint, in grid cells (8 map pixels each): the ground it needs free. */
+  w: number;
+  h: number;
+  /** The character walks around it (stepping stones it walks over). */
+  solid: boolean;
+  /** It lights up at night (lamp posts). */
+  light?: boolean;
+  /** Its line in the Satchel and on the shelf. */
+  note: string;
+}
+
+/** A useful thing from Bram's store (src/content/useful.ts): seeds, a better fishing rod, a bigger satchel. */
+export interface Useful {
+  id: string;
+  icon: string;
+  name: string;
+  /** In coins, before Bram's 10%. */
+  price: number;
+  /** Bought once and kept for good (the rod, the bigger satchel); these never take a satchel slot. Without it, you can
+   *  buy as many as you like and each one takes a slot while it waits (seed packets). */
+  once?: boolean;
+  /** Its line on the shelf and in the Satchel. */
+  note: string;
+}
+
+/** What a seed in your garden plot grows into (src/content/garden.ts). */
+export interface Plant {
+  id: string;
+  icon: string;
+  /** "a daisy", "carrots": how it reads in a sentence. */
+  name: string;
+  /** The FINDS id it becomes when it's picked: a flower or a vegetable, for Bram's till. */
+  find: string;
+  /** How it's drawn on the map once it's ready: a flower head, or the vegetable's shape. */
+  look: 'flower' | 'carrot' | 'cabbage' | 'pumpkin';
+  /** Its main colour, for the bud and the ready plant. */
+  colour: string;
+}

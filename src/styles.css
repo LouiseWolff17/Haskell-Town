@@ -344,14 +344,27 @@ pre.console.result{color:#f2cc8f; font-weight:600}
 .satchel-n{display:inline-grid; place-items:center; min-width:17px; height:17px; margin-left:3px; padding:0 4px; border-radius:9px; background:var(--terra); color:var(--paper); font-size:11px}
 .satchel{position:absolute; top:46px; right:16px; z-index:3; width:min(270px, calc(100% - 32px)); max-height:calc(100% - 62px); overflow:auto; padding:8px; background:var(--paper); border:2px solid var(--line); border-radius:12px; box-shadow:0 8px 20px rgba(60,40,20,.25); animation:pop .2s}
 .satchel-h{font-family:var(--pixel); font-size:15px; padding:2px 6px 6px}
+.satchel-slots{float:right; font:600 12px var(--body); color:var(--ink2)} .satchel-slots.full{color:var(--terra)}
 .satchel-item{display:flex; gap:10px; align-items:center; width:100%; text-align:left; padding:7px 8px; margin:0; background:none; border:0; border-radius:8px; font:inherit; font-size:13.5px; color:var(--ink); cursor:pointer}
 .satchel-item:hover, .satchel-item:focus-visible{background:var(--paper2); outline:2px solid #e0b040; outline-offset:-2px}
 .satchel-item small{display:block; color:var(--ink2); font-size:12px}
 .satchel-item.waiting{opacity:.7}
+div.satchel-item{cursor:default} div.satchel-item:hover{background:none; outline:0}
 .satchel-icon{font-size:22px; line-height:1}
 .satchel .board-small{margin:4px 6px 6px}
 body.holding .satchel-btn{background:#fff2a8}
+.purse{cursor:default; font-variant-numeric:tabular-nums}
+.purse:hover{background:rgba(255,250,240,.88)}
+.purse.bump{animation:pop .4s}
 .toast-aside{opacity:.75; font-size:13px}
+/* ---------- Decorate mode (decor.ts): decorations set down on open ground ---------- */
+body.decorating .decor-btn{background:#d8f0c8}
+.decor-tray{pointer-events:auto; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:6px 10px; background:rgba(255,250,240,.96); border:2px solid var(--ink); border-radius:10px; font-size:13px; line-height:1.35; box-shadow:0 2px 0 rgba(0,0,0,.2)}
+.decor-tray:not([hidden]){display:flex}
+.decor-tray p{margin:0; flex:1 1 220px}
+.decor-row{display:flex; flex-wrap:wrap; gap:6px}
+.decor-row .btn-soft{padding:3px 10px; font-size:12.5px}
+.decor-row small{color:var(--ink2)}
 .satchel-h2{margin-top:6px; padding-top:8px; border-top:2px dashed var(--line)}
 .visit{position:relative; width:min(440px,100%); background:var(--paper); border:3px solid var(--ink); border-radius:18px; padding:22px 24px; box-shadow:0 8px 0 rgba(0,0,0,.25); animation:pop .25s}
 .visit .x{position:absolute; top:12px; right:12px}
@@ -385,6 +398,12 @@ body.holding .satchel-btn{background:#fff2a8}
 .in-item{display:flex; flex-direction:column; align-items:center; gap:2px; background:var(--paper2); border:2px solid var(--line); border-radius:10px; padding:8px 4px; font-size:13px}
 .in-item span{font-size:26px}
 .in-item small{color:var(--ink2)} .in-item s{text-decoration-color:var(--terra)}
+.in-buy{margin-top:4px; padding:3px 12px; font-size:12.5px}
+.in-buy.short{background:var(--paper); opacity:.75}
+.in-have{font-size:11.5px}
+.in-receipt:not(:empty){margin-top:10px}
+.in-finds{list-style:none; margin:6px 0; padding:0; display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13.5px}
+.in-finds small{color:var(--ink2)}
 .in-prompt label{font-size:13.5px; font-weight:700}
 .in-input{flex:1; min-width:140px; border:2px solid var(--ink); border-radius:9px; padding:6px 10px; font-family:var(--mono); font-size:13px; background:#fff; color:var(--ink)}
 .in-tries{gap:4px 12px; margin-top:0}

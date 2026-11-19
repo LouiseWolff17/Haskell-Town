@@ -52,6 +52,21 @@ export interface GameState {
   used?: Record<string, number>;
   /** The town interiors: the day the croissants were first baked, the book the sunflower marks, the name the hall greets. */
   inside?: { baked?: number; bookmark?: string; name?: string; /** The hives you've been inside, and the day you first went in. */ hives?: Record<string, number>; /** The magical beach: the day you first went, and how many shells you've found there. */ beach?: number; shells?: number };
+  /** The purse's coins other than from errands (those come from `reviews.log`): sold finds in, purchases out. Shared with Glaschu. */
+  purse?: { earned: number; spent: number };
+  /** Things you've found (a FINDS id → how many), waiting in the Satchel to be sold. */
+  finds?: Record<string, number>;
+  /** Things bought at Bram's store (a shelf name → how many), waiting in the Satchel. */
+  bought?: Record<string, number>;
+  /** Decorations from Bram's store: with a position (the top-left of its footprint, in map pixels, on the 8 px grid) once it's
+   *  set down on the map, without one while it waits in the Satchel. */
+  decor?: { kind: string; x?: number; y?: number }[];
+  /** Useful things from Bram's store (a USEFUL id → how many): seed packets waiting in the Satchel, and the rod and the
+   *  bigger satchel (1 once bought). */
+  useful?: Record<string, number>;
+  /** Your garden plot by Wren's cottage: each bed's plant (a PLANTS id) and the day it was planted, or null while it's
+   *  empty; and how many things you've picked from it, for the Journal. */
+  garden?: { beds: ({ plant: string; day: number } | null)[]; picked?: number };
   /** City Hall projects, by project id. Their code is in `code` under `project:<id>`. */
   projects?: Record<string, ProjectProgress>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */
@@ -65,6 +80,8 @@ const fresh = (mode: AssistMode, welcomed: boolean): GameState =>
 // The player's progress, saved in localStorage. Always mutate this object; never replace it.
 export const state: GameState = fresh('guided', false);
 try { const s = JSON.parse(localStorage.getItem(KEY) ?? 'null'); if (s && s.done) Object.assign(state, s); } catch {}
+// Seeds used to be an ordinary shelf item; they're a useful thing now (waiting for the garden plot).
+if (state.bought?.seeds) { (state.useful ||= {}).seeds = (state.useful.seeds || 0) + state.bought.seeds; delete state.bought.seeds; }
 export function save(): void { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
 // Start the town over, keeping the chosen learning-assistance mode.
 export function resetProgress(): void {

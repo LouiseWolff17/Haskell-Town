@@ -65,6 +65,24 @@ export function newFriendRewards(before: number, after: number, at: Record<Frien
   return (Object.keys(at) as FriendReward[]).filter(k => before < at[k] && after >= at[k]);
 }
 
+// ---------- Coins ----------
+
+/** Coins taken in and paid out other than for errands: selling finds (in), and Bram's store, land deeds… (out). */
+export interface Ledger { earned: number; spent: number }
+
+/** The coins in the purse: `perErrand` for every solved errand (any outcome), plus the ledger. Never below zero. */
+export function purseCoins(log: LogEntry[], perErrand: number, ledger: Ledger = { earned: 0, spent: 0 }): number {
+  return Math.max(0, errandsSolved(log) * perErrand + ledger.earned - ledger.spent);
+}
+
+/** Bram's card: 10% off, rounded in your favour. The same as `tenOff` in the till's Haskell. */
+export const tenOff = (price: number): number => price - Math.floor(price / 10);
+
+/** What Bram pays for everything you've found: each kind's count times its standard price. Unknown kinds count for nothing. */
+export function saleTotal(held: Record<string, number>, prices: Record<string, number>): number {
+  return Object.entries(held).reduce((sum, [id, n]) => sum + Math.max(0, n) * (prices[id] ?? 0), 0);
+}
+
 // ---------- Life in town ----------
 
 /** Topics with at least one solved errand. Log entries from before a topic was split count for every topic it became. */
@@ -81,3 +99,13 @@ export function nightness(hours: number): number {
   if (hours >= 5 && hours < 7) return (7 - hours) / 2;
   return 1;
 }
+
+// ---------- Satchel slots ----------
+
+/** How many slots the Satchel's things take: one for every find, bought thing, seed packet and decoration waiting in it.
+ *  Gifts, the rod and the bigger satchel never take one. */
+export const slotsUsed = (...counts: Record<string, number>[]): number =>
+  counts.reduce((n, c) => n + Object.values(c).reduce((a, b) => a + Math.max(0, b), 0), 0);
+/** How many of `n` new things fit, with `used` of `slots` taken. A satchel that's over full (it can be, by putting a
+ *  decoration back) just takes nothing more; nothing already in it is lost. */
+export const roomFor = (used: number, slots: number, n = 1): number => Math.max(0, Math.min(n, slots - used));

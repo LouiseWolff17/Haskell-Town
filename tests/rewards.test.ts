@@ -104,3 +104,54 @@ test('nightness: day, dusk, night, dawn', () => {
   assert.equal(nightness(3), 1);
   assert.equal(nightness(6), 0.5);
 });
+
+import { COINS } from '../src/content/index.ts';
+import { purseCoins } from '../src/game/rewards.ts';
+
+test('the purse holds a fixed amount per errand, whatever the outcome, plus what was earned and minus what was spent', () => {
+  const log = [entry(1, 'a', 'recalled'), entry(1, 'b', 'effortful'), entry(2, 'c', 'relearned')];
+  assert.ok(COINS.errand > 0);
+  assert.equal(purseCoins([], COINS.errand), 0);
+  assert.equal(purseCoins(log, COINS.errand), 3 * COINS.errand);
+  assert.equal(purseCoins(log, 5, { earned: 12, spent: 20 }), 7);
+  assert.equal(purseCoins(log, 5, { earned: 0, spent: 99 }), 0, 'never below zero');
+});
+
+import { FINDS, STORE } from '../src/content/index.ts';
+import { saleTotal, tenOff } from '../src/game/rewards.ts';
+
+test("Bram's card takes 10% off, rounded in your favour, like tenOff in the till's Haskell", () => {
+  assert.deepEqual(STORE.shelf.map(s => tenOff(s.price)), [11, 5, 27, 18]);
+  assert.equal(tenOff(9), 9);
+  assert.equal(tenOff(100), 90);
+});
+
+test('Bram pays the standard price for every find, and nothing for unknown kinds', () => {
+  const prices = Object.fromEntries(FINDS.map(f => [f.id, f.price]));
+  assert.ok(FINDS.every(f => f.price > 0));
+  assert.equal(saleTotal({}, prices), 0);
+  assert.equal(saleTotal({ shell: 3, honey: 1 }, prices), 3 * prices.shell + prices.honey);
+  assert.equal(saleTotal({ pebble: 5, shell: -2 }, prices), 0);
+});
+
+import { SATCHEL_SLOTS, USEFUL } from '../src/content/index.ts';
+import { roomFor, slotsUsed } from '../src/game/rewards.ts';
+
+test('satchel slots: every find and bought thing takes one, and only new things are turned away when full', () => {
+  assert.equal(slotsUsed(), 0);
+  assert.equal(slotsUsed({ shell: 3, honey: 1 }, { jam: 2 }, { seeds: 1 }), 7);
+  assert.equal(slotsUsed({ shell: -2 }), 0, 'nonsense counts take no room');
+  assert.equal(roomFor(0, SATCHEL_SLOTS.base, 3), 3);
+  assert.equal(roomFor(18, 20, 5), 2, 'as many as fit');
+  assert.equal(roomFor(20, 20), 0);
+  assert.equal(roomFor(23, 20), 0, 'over full (a decoration put back) is never negative');
+  assert.ok(SATCHEL_SLOTS.bigger > SATCHEL_SLOTS.base);
+});
+
+test('useful things: seeds by the packet, the rod and the bigger satchel once', () => {
+  assert.deepEqual(USEFUL.map(u => u.id), ['seeds', 'rod', 'satchel']);
+  assert.ok(USEFUL.every(u => u.price > 0 && u.note));
+  assert.ok(!USEFUL.find(u => u.id === 'seeds')!.once);
+  assert.ok(USEFUL.filter(u => u.id !== 'seeds').every(u => u.once));
+  assert.ok(!STORE.shelf.some(s => USEFUL.some(u => u.name === s.name)), "seeds moved off the ordinary shelf");
+});

@@ -4,6 +4,9 @@ import type { Friendship } from './types.ts';
 // At these heart counts something arrives. Every outcome counts the same.
 export const HEARTS = { letter: 1, gift: 2, change: 4 } as const;
 export const MAX_HEARTS = HEARTS.change;
+/** Coins (docs/gift-items-design.md, section 7): a fixed amount for every errand solved, whatever the outcome, like the hearts.
+ *  One purse, shared between Haskell Town and Glaschu. */
+export const COINS = { errand: 5 } as const;
 
 // One entry per resident. Letters are signed by the resident; the game adds "Dear neighbour".
 export const FRIENDSHIP: Friendship[] = [

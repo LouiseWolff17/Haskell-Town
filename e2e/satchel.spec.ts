@@ -1,7 +1,7 @@
 // The Satchel: it appears with the first gift, lists unused gifts, and using one in the wrong place loses nothing.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { CHALLENGES } from '../src/content/index.ts';
+import { CHALLENGES, COINS } from '../src/content/index.ts';
 import { openTown, savedState } from './helpers.ts';
 
 const village = Object.fromEntries(CHALLENGES.map(c => [c.id, true]));
@@ -235,14 +235,93 @@ test("the general store: the shelf, and asking Bram's till about it", async ({ p
   await expect(pop).toContainText('teapot');
   await page.keyboard.press('Escape');
   await look(page, 'till');
-  await pop.getByRole('button', { name: 'filter (< 10) prices' }).click();
-  await expect(pop.locator('[data-result]')).toContainText('[5,8]');
+  await pop.getByRole('button', { name: 'filter (< 15) prices' }).click();
+  await expect(pop.locator('[data-result]')).toContainText('[12,5]');
   await pop.locator('#tillExpr').fill('map tenOff prices');
   await pop.locator('#tillExpr').press('Enter');
-  await expect(pop.locator('[data-result]')).toContainText('[11,5,27,8,18]');
+  await expect(pop.locator('[data-result]')).toContainText('[11,5,27,18]');
   await pop.locator('#tillExpr').fill('bananas');
   await pop.locator('#tillExpr').press('Enter');
   await expect(pop.locator('[data-result]')).toContainText('bananas');
+});
+
+test("Bram's store: buy from the shelf with 10% off, and sell every find at the till", async ({ page }) => {
+  // 10 errands solved (50 coins), and a few things found
+  await openTown(page, { ...openBy('bram'), finds: { shell: 3, honey: 1 } });
+  const purse = page.locator('#purse');
+  await expect(purse).toHaveText(`🪙 ${10 * COINS.errand}`);
+  await goInside(page, 'Inside the store');
+  const pop = popup(page);
+
+  // the lantern is 30, 27 with the card
+  await look(page, 'goods');
+  await pop.getByRole('button', { name: 'Buy the lantern for 27 coins' }).click();
+  await expect(pop.locator('.in-receipt')).toContainText('tenOff 30');
+  await expect(purse).toHaveText(`🪙 ${10 * COINS.errand - 27}`);
+  await expect(pop).toContainText('1 in your satchel');
+  // a second one is too dear: a kind line, and nothing is spent
+  await pop.getByRole('button', { name: 'Buy the lantern for 27 coins' }).click();
+  await expect(pop.locator('.in-receipt')).toContainText('4 coins more');
+  await expect(purse).toHaveText(`🪙 ${10 * COINS.errand - 27}`);
+  expect((await savedState(page)).bought).toEqual({ lantern: 1 });
+  await page.keyboard.press('Escape');
+
+  // the till buys everything found, at the standard price: 3 shells × 2 + 1 honey × 4
+  await look(page, 'till');
+  await expect(pop.locator('[data-sell]')).toContainText('sum [3 * 2, 1 * 4]');
+  await pop.getByRole('button', { name: 'Sell everything for 10 coins' }).click();
+  await expect(pop.locator('[data-sell]')).toContainText('+10 coins');
+  await expect(purse).toHaveText(`🪙 ${10 * COINS.errand - 27 + 10}`);
+  const saved = await savedState(page);
+  expect(saved.finds).toEqual({});
+  expect(saved.purse).toEqual({ earned: 10, spent: 27 });
+  await page.keyboard.press('Escape');
+
+  // the lantern waits in the satchel
+  await page.locator('#satchelBtn').click();
+  await expect(page.locator('#satchel')).toContainText('lantern');
+  await expect(page.locator('#satchel')).not.toContainText('Finds');
+});
+
+test("Bram's useful things: seeds, the rod and a bigger satchel, and a full satchel turns new things away", async ({ page }) => {
+  // 10 errands (50 coins) and 20 coins found earlier; the satchel holds 19 of its 20 already (gifts take no room)
+  await openTown(page, { ...openBy('bram'), purse: { earned: 20, spent: 0 }, finds: { shell: 19 } });
+  const purse = page.locator('#purse');
+  await goInside(page, 'Inside the store');
+  const pop = popup(page);
+  await look(page, 'goods');
+  await expect(pop).toContainText('In your satchel: 19 of 20');
+
+  // a seed packet takes the last slot: 8, 8 with the card
+  await pop.getByRole('button', { name: 'Buy the seeds for 8 coins' }).click();
+  await expect(pop.locator('.in-receipt')).toContainText('tenOff 8');
+  await expect(pop).toContainText('In your satchel: 20 of 20');
+  // a full satchel: a kind line, a hint at the bigger satchel, and nothing is spent
+  await pop.getByRole('button', { name: 'Buy the seeds for 8 coins' }).click();
+  await expect(pop.locator('.in-receipt')).toContainText('full to the brim');
+  await expect(pop.locator('.in-receipt')).toContainText('A bigger satchel is on the shelf');
+  await expect(purse).toHaveText('🪙 62');
+
+  // the bigger satchel takes no slot, so it can always be bought; 30, 27 with the card
+  await pop.getByRole('button', { name: 'Buy the bigger satchel for 27 coins' }).click();
+  await expect(pop.locator('.in-receipt')).toContainText('slots = 40');
+  await expect(pop).toContainText('In your satchel: 20 of 40');
+  await expect(pop.getByRole('button', { name: /Buy the bigger satchel/ })).toHaveCount(0);
+  // the rod: 40, 36 with the card, and there's only 35 left
+  await pop.getByRole('button', { name: 'Buy the fishing rod for 36 coins' }).click();
+  await expect(pop.locator('.in-receipt')).toContainText('1 coin more');
+  await expect(purse).toHaveText('🪙 35');
+  expect((await savedState(page)).useful).toEqual({ seeds: 1, satchel: 1 });
+});
+
+test('the Satchel counts its slots, and seeds bought from the old shelf move to the useful things', async ({ page }) => {
+  await openTown(page, { ...openBy('bram'), bought: { seeds: 2, jam: 1 }, useful: { rod: 1 } });
+  await page.locator('#satchelBtn').click();
+  // the seeds and the jam take a slot each; the rod and the gifts take none
+  await expect(page.locator('#satchel .satchel-slots')).toHaveText('3 of 20');
+  await expect(page.locator('#satchel')).toContainText('2 packets of seeds');
+  await expect(page.locator('#satchel')).toContainText('The fishing rod');
+  await expect(page.locator('#satchel')).toContainText('jam');
 });
 
 test("City Hall: sign the visitors' book and Fern updates the holiday", async ({ page }) => {
@@ -416,4 +495,17 @@ test('the magical beach: the conch at the pond washes you there, shells wash up 
   await expect(page.locator('#hoverLabel')).toContainText("Brine's conch");
   await page.keyboard.press('KeyE');
   await expect(insideOf(page)).toHaveAttribute('aria-label', /^On the magical beach/);
+});
+
+test('the coin counter sits next to the Satchel, with a fixed amount per errand solved', async ({ page }) => {
+  await openTown(page, { ...withWrensKey, purse: { earned: 3, spent: 1 } });
+  const purse = page.locator('#purse');
+  await expect(purse).toBeVisible();
+  await expect(purse).toHaveText(`🪙 ${2 * COINS.errand + 2}`);
+});
+
+test('there is no coin counter before the first errand', async ({ page }) => {
+  await openTown(page, { done: village });
+  await expect(page.locator('#town')).toBeVisible();
+  await expect(page.locator('#purse')).toBeHidden();
 });
