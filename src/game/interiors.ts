@@ -41,7 +41,7 @@ export const placeOf = (rid: string): string => ROOMS[rid]?.name ?? ITEMS.find(i
 // ---------- The pop-up ----------
 const pop = (): HTMLElement => $('#roomPop');
 export const popOpen = (): boolean => !pop().hidden;
-function openPop(html: string): HTMLElement {
+export function openPop(html: string): HTMLElement {
   const body = pop().querySelector<HTMLElement>('.room-pop-body')!, fresh = pop().hidden;
   body.innerHTML = html;
   if (fresh) {
@@ -231,7 +231,7 @@ function shelf(room: Room): void {
     <p class="board-small">🧾 Bram's card: 10% off everything. In your purse: <b data-purse></b> · In your satchel: <b data-slots></b></p>
     <div class="in-shelfrow" data-row="shelf"></div>
     <h4 class="board-h">Useful things</h4>
-    <p class="board-small">Seeds wait in your satchel for a patch of soil. The rod and the bigger satchel are yours for good, and take no room.</p>
+    <p class="board-small">Seeds wait in your satchel for your garden plot by Wren's cottage. The rod and the bigger satchel are yours for good, and take no room.</p>
     <div class="in-shelfrow" data-row="useful"></div>
     <h4 class="board-h">For around town</h4>
     <p class="board-small">Decorations wait in your satchel. Set them down anywhere on open ground with <b>🪴 Decorate</b> on the map.</p>
@@ -262,7 +262,7 @@ function shelf(room: Room): void {
     el.querySelectorAll<HTMLElement>('[data-buyuse]').forEach(b => b.onclick = () => {
       const id = b.dataset.buyuse!, u = USEFUL.find(x => x.id === id)!;
       const aside = id === 'satchel' ? `Room for ${satchelSlots()} things now. Gifts still take none.`
-        : id === 'rod' ? "It's in your satchel, ready for a day out with Brine." : "It's in your satchel, waiting for a patch of soil.";
+        : id === 'rod' ? "It's in your satchel, ready for a day out with Brine." : "It's in your satchel. Plant it in your garden plot by Wren's cottage.";
       const r = buyUseful(id);
       out(receipt(r, u.icon, u.price, usefulPrice(id), aside, r === 'ok' && id === 'satchel' ? `\nslots = ${satchelSlots()}` : ''));
       fill(`[data-buyuse="${id}"]`);

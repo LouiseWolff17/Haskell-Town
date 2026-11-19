@@ -64,6 +64,9 @@ export interface GameState {
   /** Useful things from Bram's store (a USEFUL id → how many): seed packets waiting in the Satchel, and the rod and the
    *  bigger satchel (1 once bought). */
   useful?: Record<string, number>;
+  /** Your garden plot by Wren's cottage: each bed's plant (a PLANTS id) and the day it was planted, or null while it's
+   *  empty; and how many things you've picked from it, for the Journal. */
+  garden?: { beds: ({ plant: string; day: number } | null)[]; picked?: number };
   /** City Hall projects, by project id. Their code is in `code` under `project:<id>`. */
   projects?: Record<string, ProjectProgress>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */

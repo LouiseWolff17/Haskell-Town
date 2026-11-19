@@ -14,3 +14,4 @@ export { FINDS } from './finds.ts';
 export { DECORATIONS } from './decorations.ts';
 export { SATCHEL_SLOTS, USEFUL } from './useful.ts';
 export { COTTAGE, KITCHEN, READING, STORE, HALL, BOAT, HIVES, BEACH } from './interiors.ts';
+export { GARDEN_BEDS, PLANTS } from './garden.ts';

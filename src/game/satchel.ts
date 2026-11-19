@@ -6,7 +6,7 @@ import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS, STORE, USEFUL } from '../content/
 import { $, dateOf, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
-import { goInside, plotLabel, targetBox } from './town.ts';
+import { goInside, goToGarden, plotLabel, targetBox } from './town.ts';
 import { beachNote, hasInterior, hivesNote, placeOf } from './interiors.ts';
 import { giftFor, roomsOf } from './rooms.ts';
 import { haveUseful, heldFinds, satchelSlots, satchelUsed } from './purse.ts';
@@ -135,10 +135,11 @@ export function renderSatchel(): void {
     `<div class="satchel-item"><span class="satchel-icon">${f.icon}</span><span><b>${n} ${n === 1 ? f.name : f.plural}</b><small>Bram buys these at his till</small></span></div>`).join('');
   if (bought.length) list.innerHTML += `<div class="satchel-h satchel-h2">🛍️ From Bram's store</div>` + bought.map(({ item: b, n }) =>
     `<div class="satchel-item"><span class="satchel-icon">${b.icon}</span><span><b>${n > 1 ? `${n} × ` : ''}${b.name}</b><small>${b.note}</small></span></div>`).join('');
-  // useful things: seed packets wait for a patch of soil, the rod for a day out with Brine
+  // useful things: seed packets go in your garden plot by Wren's cottage (click to walk there), the rod waits for a day out with Brine
   const useful = usefulItems();
-  if (useful.length) list.innerHTML += `<div class="satchel-h satchel-h2">🧰 Useful things</div>` + useful.map(({ item: u, n }) =>
-    `<div class="satchel-item"><span class="satchel-icon">${u.icon}</span><span><b>${u.once ? `The ${u.name}` : `${n} ${n === 1 ? 'packet' : 'packets'} of ${u.name}`}</b><small>${u.once ? 'Ready for a day out at sea with Brine' : 'Waiting for a patch of soil'}</small></span></div>`).join('');
+  if (useful.length) list.innerHTML += `<div class="satchel-h satchel-h2">🧰 Useful things</div>` + useful.map(({ item: u, n }) => u.once
+    ? `<div class="satchel-item"><span class="satchel-icon">${u.icon}</span><span><b>The ${u.name}</b><small>Ready for a day out at sea with Brine</small></span></div>`
+    : `<button class="satchel-item" data-garden><span class="satchel-icon">${u.icon}</span><span><b>${n} ${n === 1 ? 'packet' : 'packets'} of ${u.name}</b><small>${state.done.house ? 'For your garden plot by Wren\'s cottage' : 'For a garden plot by Wren\'s cottage, once it\'s built'}</small></span></button>`).join('');
   // decorations wait to be set down on the map, in Decorate mode
   const decor = keptDecor();
   if (decor.length) list.innerHTML += `<div class="satchel-h satchel-h2">🪴 Decorations</div>` + decor.map(({ deco: d, n }) =>
@@ -149,6 +150,7 @@ export function renderSatchel(): void {
     `<button class="satchel-item" data-door="${id}"><span class="satchel-icon">${giftOf(i.resident).icon}</span><span><b>${name}</b><small>Pop in again</small></span></button>`).join('');
   list.querySelectorAll<HTMLElement>('[data-item]').forEach(b => b.onclick = () => pick(b.dataset.item!));
   list.querySelectorAll<HTMLElement>('[data-door]').forEach(b => b.onclick = () => visit(b.dataset.door!));
+  list.querySelectorAll<HTMLElement>('[data-garden]').forEach(b => b.onclick = () => { closeList(); stopDecorating(); goToGarden(); });
   list.querySelectorAll<HTMLElement>('[data-decor]').forEach(b => b.onclick = () => { closeList(); startDecorating(b.dataset.decor!); });
 }
 

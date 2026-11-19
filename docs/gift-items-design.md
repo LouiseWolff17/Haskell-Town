@@ -137,6 +137,7 @@ Full design in **[glaschu-design.md](glaschu-design.md)**: 16 residents, 27 chal
   - Pick what's ready to sell, or keep flowers to put in a vase decoration.
   - A bigger plot (more beds) could be one of the upgrades in 8c.
   - Nothing wilts or dies: a ready plant just waits for you.
+- **As built (garden):** 4 beds in a fenced patch west of Wren's cottage, appearing with the first seed packet (once the cottage is built). A seed moves on a stage per calendar day (seed → sprout → bud → ready, 3 days) and a ready plant waits for good. Mixed packets: the garden picks the plant at planting (three flowers, three vegetables), shown from the bud on. Picking adds a flower or vegetable find; a full satchel leaves it in the bed. Decorations already standing where the plot appears go back in the satchel. The vase and the higher prices from Moss/Hazel are still to come.
 - **A better fishing rod:** more kinds of fish, rarer catches. Never required: the basic rod can still catch everything common.
 - **A bigger satchel:** more slots for finds and bought things.
 - **As built:** the satchel holds 20 things, 40 with the bigger satchel. Every find, shelf thing, seed packet and decoration waiting in it takes one slot; gifts, the rod and the bigger satchel take none. A full satchel only turns *new* things away (buying, finds coming in) and nothing is spent; putting a decoration back in is always allowed, so it can sit over full for a while. Seeds are mixed packets for now; the garden decides what they grow into.

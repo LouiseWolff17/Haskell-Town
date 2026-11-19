@@ -272,3 +272,17 @@ export interface Useful {
   /** Its line on the shelf and in the Satchel. */
   note: string;
 }
+
+/** What a seed in your garden plot grows into (src/content/garden.ts). */
+export interface Plant {
+  id: string;
+  icon: string;
+  /** "a daisy", "carrots": how it reads in a sentence. */
+  name: string;
+  /** The FINDS id it becomes when it's picked: a flower or a vegetable, for Bram's till. */
+  find: string;
+  /** How it's drawn on the map once it's ready: a flower head, or the vegetable's shape. */
+  look: 'flower' | 'carrot' | 'cabbage' | 'pumpkin';
+  /** Its main colour, for the bud and the ready plant. */
+  colour: string;
+}

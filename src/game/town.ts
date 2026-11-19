@@ -1,10 +1,10 @@
 // The pixel-art town map: background, buildings, residents, animation and clicks.
 import { CHALLENGES, EXPANSIONS, HEARTS, PROJECTS, RESIDENTS } from '../content/index.ts';
 import { $, byId, save, state, status } from './state.ts';
-import { openChallenge, openErrand, openProject } from './notebook.ts';
+import { openChallenge, openErrand, openProject, toast } from './notebook.ts';
 import { pinnedProject } from './projects.ts';
 import { isOpen } from './schedule.ts';
-import { errandById, hearts, practised, reviews, solvedErrands, unreadLetters, villageBuilt, waitingResidents } from './errands.ts';
+import { errandById, hearts, practised, reviews, solvedErrands, today, unreadLetters, villageBuilt, waitingResidents } from './errands.ts';
 import { drawPlayer, drawPrompt, drawResident, heldKeys, initPlayerKeys, player, savePlayer, updatePlayer, walkTo } from './player.ts';
 import { openLetters } from './friends.ts';
 import { musicPlaying, startMusic, stopMusic } from './music.ts';
@@ -15,6 +15,8 @@ import { GRID, cellFor, nearestFree, whyNot } from './decor-rules.ts';
 import type { Zone } from './decor-rules.ts';
 import { RH, RW, drawRoom, inRoom, roomClick, roomHover, roomInteract, roomsOf } from './rooms.ts';
 import { enterInterior, leaveInterior, placeOf, roomLabel } from './interiors.ts';
+import { gardenBeds, gardenShown, gardenWaiting, openGarden, plantOf } from './garden.ts';
+import { stageOf } from './garden-rules.ts';
 import type { Challenge, Expansion, GiftItem, ItemTarget, Project } from '../content/index.ts';
 import type { Rect } from './player.ts';
 
@@ -39,7 +41,7 @@ interface Plot extends Box {
 /** Hair and shirt colours: a resident, or someone passing through. */
 interface Look { hair: string; shirt: string }
 /** Something on the map the character can talk to. */
-type Target = { kind: 'errand'; rid: string } | { kind: 'plot'; id: string } | { kind: 'door'; rid: string };
+type Target = { kind: 'errand'; rid: string } | { kind: 'plot'; id: string } | { kind: 'door'; rid: string } | { kind: 'garden' };
 /** The closest Target, how far away it is, and whether pressing E does anything. */
 type Near = Target & { key: string; act: boolean; d: number };
 type Pt = [x: number, y: number];
@@ -424,6 +426,7 @@ function draw(t: number): void {
     requestAnimationFrame(draw); return;
   }
   const plots = visiblePlots(), dt = lastT == null ? 0 : Math.min(50, t - lastT);
+  gardenGone();
   syncSize(); refreshSolids();
   updatePlayer(dt, solidAt); lastT = t;
   moveCamera(t, dt);
@@ -447,6 +450,7 @@ function draw(t: number): void {
     else lot(p, !m || status(m) === 'locked');
   }
   drawFriends(t);
+  if (gardenShown()) { gardenAppears(t); withReveal('garden', GARDEN, t, () => drawGarden(t)); }
   TREES.forEach(([x, y]) => { if (y >= 120) tree(x, y); });
   const decor = placedDecor().sort((a, b) => a.y + a.deco.h * GRID - (b.y + b.deco.h * GRID));
   decor.forEach(d => drawDeco(R, d.deco.id, d.x, d.y, t));
@@ -544,6 +548,7 @@ export function initTown(): void {
     if (held) { hover = null; const [x, y] = mapPoint(ev); cv.style.cursor = onTarget(held.target, x, y) ? 'pointer' : 'default'; return; }
     const door = placeAt(...mapPoint(ev));
     if (door) { const key = 'door:' + (door.room ?? door.it.resident); if (hover !== key) { hover = key; $('#hoverLabel').innerHTML = doorLabel(door, 'Click'); } cv.style.cursor = 'pointer'; return; }
+    if (gardenShown() && onGarden(...mapPoint(ev))) { if (hover !== 'garden') { hover = 'garden'; $('#hoverLabel').innerHTML = gardenLabel('Click'); } cv.style.cursor = 'pointer'; return; }
     // a decoration of yours, outside Decorate mode: just a line about it
     const id = plotAt(ev) ?? (d => d ? 'deco:' + d.i : null)(decorAt(...mapPoint(ev)));
     if (id !== hover) { hover = id; $('#hoverLabel').innerHTML = id?.startsWith('deco:') ? decoLine(Number(id.slice(5))) : id ? plotLabel(id) : nearLabel(nearby()); } cv.style.cursor = id && (challengeForPlot(id) || (id === 'mailbox' && unreadLetters().length)) || errandResidentAt(ev) ? 'pointer' : 'default'; });
@@ -562,6 +567,7 @@ export function initTown(): void {
     // a place opened with a gift: a building's front door, or the spot outdoors (the hives, the boat, the pond)
     const door = placeAt(x, y);
     if (door) { if (door.room) goInside(door.room); else visit(door.it.resident); return; }
+    if (gardenShown() && onGarden(x, y)) { goToGarden(); return; }
     const rid = errandResidentAt(ev), id = rid ? null : plotAt(ev);
     if (rid) { const [hx, hy] = HOMES[rid]; goTo(hx + 4, hy + 15, () => interactWith({ kind: 'errand', rid })); return; }
     if (id && !id.includes(':')) { const [sx, sy] = PLOTS[id].stand; goTo(sx + 4, sy + 15, () => interactWith({ kind: 'plot', id })); return; }
@@ -584,7 +590,7 @@ const mapPoint = (ev: MouseEvent): Pt => { const r = cv.getBoundingClientRect();
 let solidCache: { sig: string | null; rects: [x: number, y: number, w: number, h: number][] } = { sig: null, rects: [] };
 function refreshSolids(): void {
   const placed = placedDecor(), waiting = waitingResidents();
-  const sig = `${Object.keys(state.done).join()}|${mapH}|${solvedErrands()}|${[...waiting].join()}|${placed.map(d => `${d.deco.id}@${d.x},${d.y}`).join()}`;
+  const sig = `${Object.keys(state.done).join()}|${gardenShown()}|${mapH}|${solvedErrands()}|${[...waiting].join()}|${placed.map(d => `${d.deco.id}@${d.x},${d.y}`).join()}`;
   if (solidCache.sig === sig) return;
   const rects: typeof solidCache.rects = [[358, 128, 42, 116]];
   // residents are solid too, so the character stops beside them instead of walking through
@@ -596,6 +602,7 @@ function refreshSolids(): void {
     rects.push(p.small ? [p.x + 3, p.y + 10, 6, 12] : [p.x + 2, p.y, p.w - 4, p.h - 2]);
   }
   TREES.forEach(([x, y]) => rects.push([x + 5, y + 15, 6, 5]));
+  if (gardenShown()) rects.push(GARDEN_FENCE);
   for (const d of placed) if (d.deco.solid) rects.push([d.x + 1, d.y + 2, d.deco.w * GRID - 2, d.deco.h * GRID - 3]);
   const n = stripsShown(EXPANSIONS, solvedErrands());
   for (const x of EXPANSIONS) if (Math.floor(x.slot / 2) < n && !isOpenExp(x)) { const r = slotRect(x.slot); rects.push([r.x, r.y, r.w, r.h]); }
@@ -644,6 +651,10 @@ function nearby(): Near | null {
   for (const w of ways()) {
     const [dx, dy] = w.at; consider(Math.hypot(px - dx, py - dy) - 4, { kind: 'door', rid: w.room, key: 'door:' + w.room, act: true });
   }
+  if (gardenShown()) {
+    const [x, y, w, h] = GARDEN_FENCE, toFence = Math.hypot(Math.max(x - px, 0, px - x - w), Math.max(y - py, 0, py - y - h));
+    consider(toFence, { kind: 'garden', key: 'garden', act: true });
+  }
   for (const [id, p] of visiblePlots()) {
     const [sx, sy] = p.stand, toStand = Math.hypot(px - sx - 4, py - sy - 13);
     const toWall = Math.hypot(Math.max(p.x - px, 0, px - p.x - p.w), Math.max(p.y - py, 0, py - p.y - p.h));
@@ -656,12 +667,14 @@ function nearLabel(n: Near | null): string {
   if (!n) return plotLabel(null);
   if (n.kind === 'errand') return `<b>${RESIDENTS[n.rid].name}</b> has pinned an errand to the Notice Board. Press <kbd>E</kbd> to help.`;
   if (n.kind === 'door') { const w = ways().find(v => v.room === n.rid); return w ? doorLabel(w, 'Press <kbd>E</kbd>') : plotLabel(null); }
+  if (n.kind === 'garden') return gardenLabel('Press <kbd>E</kbd>');
   return plotLabel(n.id).replace('Click to help!', 'Press <kbd>E</kbd> to help!').replace('click to revisit.', 'press <kbd>E</kbd> to revisit.').replace('Click the mailbox to read.', 'Press <kbd>E</kbd> to read.');
 }
 function interactWith(n: Target): void {
   savePlayer();
   if (n.kind === 'errand') { const i = errandIndex(n.rid); if (i >= 0) openErrand(i); return; }
   if (n.kind === 'door') { goInside(n.rid, false); return; }
+  if (n.kind === 'garden') { openGarden(); return; }
   if (n.id === 'mailbox' && unreadLetters().length) { openLetters(); return; }
   const proj = n.id === 'hall' ? pinnedProject() : null;
   if (proj) { openProject(proj.id); return; }
@@ -1104,12 +1117,13 @@ function groundZones(): Zone[] {
   }
   for (const [rid, [hx, hy]] of Object.entries(HOMES)) z.push({ x: hx - 2, y: hy - 2, w: 12, h: 18, why: `That's where ${RESIDENTS[rid].name} likes to stand.` });
   for (const [x, y] of TREES) z.push({ x, y, w: 16, h: 20, why: "There's a tree there." });
+  if (gardenShown()) z.push({ ...GARDEN, why: "That's your garden plot." }, { x: GARDEN_STAND[0] - 4, y: GARDEN_STAND[1] - 12, w: 8, h: 16, why: "That's the way into your garden plot." });
   return z;
 }
 /** The zones, with the decorations already down (cached: they only change when the town or a decoration does). */
 let zoneCache: { sig: string; zones: Zone[]; free: [number, number][] } | null = null;
 function zones(): Zone[] {
-  const placed = placedDecor(), sig = `${Object.keys(state.done).join()}|${placed.map(d => `${d.i}@${d.x},${d.y}`).join()}`;
+  const placed = placedDecor(), sig = `${Object.keys(state.done).join()}|${gardenShown()}|${placed.map(d => `${d.i}@${d.x},${d.y}`).join()}`;
   if (zoneCache?.sig !== sig) {
     const zs = [...groundZones(), ...placed.map(d => ({ ...footprint(d.deco, d.x, d.y), why: `The ${d.deco.name} is already there.` }))];
     // the open cells, for the dots that show where things can go
@@ -1211,4 +1225,73 @@ function lampGlow(x: number, y: number, glow: number, t: number): void {
   pool.addColorStop(0, `rgba(255,217,112,${(0.4 * glow).toFixed(3)})`); pool.addColorStop(1, 'rgba(255,217,112,0)');
   ctx.fillStyle = pool; ctx.fillRect(-18, -18, 36, 36); ctx.restore();
   ctx.globalAlpha = glow; R(x + 2, y - 18, 4, 3, '#fff2a8'); R(x + 3, y - 17, 2, 1, C.white); ctx.globalAlpha = 1;
+}
+
+
+// ---------- Your garden plot by Wren's cottage (garden.ts, garden-rules.ts, src/content/garden.ts) ----------
+/** The plot, on the grass between the cottage and the two trees to its west: the ground decorations keep off. */
+const GARDEN: Box = { x: 0, y: 24, w: 24, h: 40 };
+/** Its fence, which the character walks round: [x, y, w, h]. */
+const GARDEN_FENCE: [x: number, y: number, w: number, h: number] = [1, 29, 22, 33];
+/** Where you stand to tend it: by the gate on the cottage side. */
+const GARDEN_STAND: Pt = [26, 50];
+/** The top-left of each 8×12 bed, two by two. */
+const BEDS: Pt[] = [[3, 32], [13, 32], [3, 47], [13, 47]];
+const onGarden = (x: number, y: number): boolean => x >= GARDEN.x && x <= GARDEN.x + GARDEN.w + 2 && y >= GARDEN.y && y <= GARDEN.y + GARDEN.h;
+/** Walk to the plot's gate and open it (from a click on the map, or the seeds in the Satchel). */
+export function goToGarden(): void {
+  if (!gardenShown()) { toast(`🌱 Your garden plot goes by Wren's cottage, once the cottage is built.`); return; }
+  goTo(GARDEN_STAND[0], GARDEN_STAND[1], () => interactWith({ kind: 'garden' }));
+}
+/** The line under the map about the plot: what's ready, what can be planted, or that everything's growing. */
+function gardenLabel(how: string): string {
+  const { plant, pick } = gardenWaiting(), beds = (n: number): string => `${n} bed${n === 1 ? '' : 's'}`;
+  if (pick) return `🌱 <b>Your garden plot</b>: ${pick === 1 ? 'something is' : `${pick} things are`} ready to pick. ${how} to pick ${pick === 1 ? 'it' : 'them'}.`;
+  if (plant) return `🌱 <b>Your garden plot</b>: ${beds(plant)} empty, and seeds in your satchel. ${how} to plant.`;
+  return `🌱 <b>Your garden plot</b>. Everything is growing, a little more each day. ${how} to have a look.`;
+}
+let gardenWas: boolean | null = null;
+/** The first frame the plot is there: it rises out of the grass (not on loading a game that already has it), anything you
+ *  had set down there goes back in your satchel, and if you were standing on it you step out by the gate. */
+function gardenAppears(t: number): void {
+  if (gardenWas) return;
+  if (gardenWas === false) buildAnim.garden = t;
+  gardenWas = true;
+  const moved = placedDecor().filter(d => { const f = footprint(d.deco, d.x, d.y); return f.x < GARDEN.x + GARDEN.w && GARDEN.x < f.x + f.w && f.y < GARDEN.y + GARDEN.h && GARDEN.y < f.y + f.h; });
+  for (const d of moved) { delete state.decor![d.i].x; delete state.decor![d.i].y; }
+  const [fx, fy, fw, fh] = GARDEN_FENCE;
+  if (player.x >= fx - 4 && player.x <= fx + fw + 4 && player.y >= fy && player.y <= fy + fh + 2) { player.path = null; player.x = GARDEN_STAND[0]; player.y = GARDEN_STAND[1]; }
+  if (moved.length) { save(); renderSatchel(); toast(`🌱 Your garden plot needs that bit of grass, so ${moved.length === 1 ? `the ${moved[0].deco.name} is` : 'some decorations are'} back in your satchel.`); }
+}
+/** Notice (on the next frame) when the plot isn't there, so it can rise out of the grass when it comes. */
+function gardenGone(): void { if (gardenWas !== false && !gardenShown()) gardenWas = false; }
+/** The plot: a little fence with a gate on the cottage side, and four beds, each drawn as it is today. */
+function drawGarden(t: number): void {
+  const [fx, fy, fw, fh] = GARDEN_FENCE;
+  R(fx + 1, fy + 1, fw - 2, fh - 2, '#9c7a4f');
+  const d = today();
+  gardenBeds().forEach((bed, i) => { const [bx, by] = BEDS[i]; drawBed(bx, by, stageOf(bed, d), plantOf(bed), t, i); });
+  // the fence: rails all round, posts at the corners and halfway, and the gate on the east side standing open
+  R(fx, fy, fw, 1, C.wood); R(fx, fy + 3, fw, 1, C.wood2); R(fx, fy + fh - 1, fw, 1, C.wood); R(fx, fy + fh - 4, fw, 1, C.wood2);
+  R(fx, fy, 1, fh, C.wood);
+  R(fx + fw - 1, fy, 1, 15, C.wood); R(fx + fw - 1, fy + 21, 1, fh - 21, C.wood);
+  for (const [x, y] of [[fx - 1, fy - 2], [fx + fw - 2, fy - 2], [fx - 1, fy + fh - 6], [fx + fw - 2, fy + fh - 6], [fx - 1, fy + 14], [fx + fw - 2, fy + 13], [fx + fw - 2, fy + 21], [fx + 10, fy - 2], [fx + 10, fy + fh - 6]]) R(x, y, 2, 6, C.wood2);
+  R(fx + fw, fy + 15, 4, 1, C.wood); R(fx + fw, fy + 18, 4, 1, C.wood); R(fx + fw + 3, fy + 14, 1, 6, C.wood2);
+}
+/** One 8×12 bed: soil, and the plant at its stage (a ready one twinkles now and then, to say it's waiting for you). */
+function drawBed(x: number, y: number, s: string, p: ReturnType<typeof plantOf>, t: number, i: number): void {
+  R(x, y, 8, 12, '#7a5236'); R(x, y + 11, 8, 1, '#6b4429');
+  for (const r of [2, 6, 9]) R(x + 1, y + r, 6, 1, '#8a6242');
+  const G = '#4f8a4a', G2 = '#6aa85e', G3 = '#8fd16a', c = p?.colour ?? '#e0b040';
+  if (s === 'seed') { R(x + 2, y + 8, 3, 1, '#a97f55'); R(x + 6, y + 5, 1, 5, C.wood); R(x + 5, y + 3, 3, 3, C.white); R(x + 6, y + 4, 1, 1, '#6aa85e'); }
+  else if (s === 'sprout') { R(x + 3, y + 7, 1, 3, G2); R(x + 2, y + 6, 1, 1, G3); R(x + 4, y + 6, 1, 1, G3); }
+  else if (s === 'bud') { R(x + 3, y + 4, 1, 6, G); R(x + 1, y + 7, 2, 1, G2); R(x + 4, y + 6, 2, 1, G2); R(x + 3, y + 2, 2, 2, c); R(x + 2, y + 3, 1, 1, G2); R(x + 5, y + 3, 1, 1, G2); }
+  else if (s === 'ready' && p) {
+    if (p.look === 'flower') { R(x + 3, y + 3, 1, 7, G); R(x + 1, y + 6, 2, 1, G2); R(x + 4, y + 7, 2, 1, G2); R(x + 2, y - 1, 3, 5, c); R(x + 1, y, 5, 3, c); R(x + 3, y + 1, 1, 1, p.id === 'daisy' ? '#e0b040' : '#fff2a8'); }
+    else if (p.look === 'carrot') { R(x + 2, y + 2, 1, 4, G2); R(x + 4, y + 1, 1, 5, G); R(x + 3, y + 3, 1, 3, G2); R(x + 5, y + 3, 1, 2, G2); R(x + 2, y + 6, 4, 2, c); R(x + 3, y + 8, 2, 1, c); }
+    else if (p.look === 'cabbage') { R(x + 1, y + 4, 6, 6, '#5f9e4a'); R(x + 2, y + 3, 4, 1, '#5f9e4a'); R(x + 2, y + 5, 4, 3, c); R(x + 3, y + 6, 2, 1, '#a9dc8a'); }
+    else { R(x, y + 4, 3, 1, G); R(x + 1, y + 3, 2, 1, G2); R(x + 1, y + 6, 6, 4, c); R(x + 2, y + 5, 4, 1, c); R(x + 3, y + 6, 1, 4, '#c26a20'); R(x + 5, y + 6, 1, 4, '#c26a20'); R(x + 4, y + 4, 1, 2, C.wood2); }
+    const k = (t / 1700 + i * 0.37) % 1;
+    if (k < 0.15) { ctx.globalAlpha = 1 - k / 0.15; R(x + 6, y, 1, 3, C.white); R(x + 5, y + 1, 3, 1, C.white); ctx.globalAlpha = 1; }
+  }
 }
