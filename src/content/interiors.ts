@@ -54,14 +54,15 @@ export const READING = {
   ],
 };
 
-/** Bram's store: the shelf as a list. Coins and buying come with the next part of the design. */
+/** Bram's store: the shelf as a list. Buy from it with 10% off (Bram's card), and sell your finds at the till.
+ *  Bought things wait in the Satchel; `note` is their line there. */
 export const STORE = {
   shelf: [
-    { icon: '🍓', name: 'jam', price: 12 },
-    { icon: '🕯️', name: 'candle', price: 5 },
-    { icon: '🏮', name: 'lantern', price: 30 },
-    { icon: '🌱', name: 'seeds', price: 8 },
-    { icon: '🫖', name: 'teapot', price: 20 },
+    { icon: '🍓', name: 'jam', price: 12, note: "Strawberry, from Bram's own recipe. He says it's the best jam in town. It is the only jam in town." },
+    { icon: '🕯️', name: 'candle', price: 5, note: 'A beeswax candle. It smells faintly of the meadow.' },
+    { icon: '🏮', name: 'lantern', price: 30, note: 'A paper lantern, waiting for a good spot in town to hang.' },
+    { icon: '🌱', name: 'seeds', price: 8, note: 'A packet of mixed seeds, waiting for a patch of soil.' },
+    { icon: '🫖', name: 'teapot', price: 20, note: 'A round blue teapot. Wren would approve.' },
   ],
   /** Bram's 10%, rounded in your favour. */
   source: 'shelf :: [String]\nshelf = ["jam", "candle", "lantern", "seeds", "teapot"]\n\nprices :: [Int]\nprices = [12, 5, 30, 8, 20]\n\n-- Bram\'s card: 10% off, rounded in your favour\ntenOff :: Int -> Int\ntenOff p = p - p `div` 10\n',
@@ -69,9 +70,19 @@ export const STORE = {
   bram: [
     '"Welcome back, favourite customer!" Bram straightens a jar that was already straight.',
     '"I filter the bargain shelf every Monday," says Bram. "You taught me that. Don\'t tell anyone."',
-    '"Coins are coming," says Bram. "I\'ve ordered a little drawer for them and everything."',
+    '"The coin drawer works!" says Bram, opening and shutting it twice to show you. "Ten percent off, and I\'ll buy anything you find."',
   ],
-  till: 'The till isn\'t taking coins yet. Bram says he\'s still deciding what a coin should look like.',
+  /** Bram, as you buy something. */
+  bought: [
+    '"Lovely choice," says Bram, wrapping it in brown paper.',
+    '"With the card, of course," says Bram, and stamps it with a flourish.',
+    '"That one\'s been waiting for you," says Bram.',
+  ],
+  /** Not quite enough coins: nothing is lost, and errands bring more. */
+  short: '"Not quite enough yet," says Bram kindly. "It\'ll keep. I won\'t let anyone else have it."',
+  /** Selling everything you've found at the till. */
+  sold: '"Every bit of it, at a fair price," says Bram, counting the coins into your hand.',
+  nothingToSell: 'Bram buys anything you find, at a fair price: shells, honey, fish, flowers, vegetables. Your satchel has none yet.',
 };
 
 /** City Hall: Fern's office, the town records, a proposed holiday, and a hall that greets you by name. */

@@ -104,3 +104,32 @@ test('nightness: day, dusk, night, dawn', () => {
   assert.equal(nightness(3), 1);
   assert.equal(nightness(6), 0.5);
 });
+
+import { COINS } from '../src/content/index.ts';
+import { purseCoins } from '../src/game/rewards.ts';
+
+test('the purse holds a fixed amount per errand, whatever the outcome, plus what was earned and minus what was spent', () => {
+  const log = [entry(1, 'a', 'recalled'), entry(1, 'b', 'effortful'), entry(2, 'c', 'relearned')];
+  assert.ok(COINS.errand > 0);
+  assert.equal(purseCoins([], COINS.errand), 0);
+  assert.equal(purseCoins(log, COINS.errand), 3 * COINS.errand);
+  assert.equal(purseCoins(log, 5, { earned: 12, spent: 20 }), 7);
+  assert.equal(purseCoins(log, 5, { earned: 0, spent: 99 }), 0, 'never below zero');
+});
+
+import { FINDS, STORE } from '../src/content/index.ts';
+import { saleTotal, tenOff } from '../src/game/rewards.ts';
+
+test("Bram's card takes 10% off, rounded in your favour, like tenOff in the till's Haskell", () => {
+  assert.deepEqual(STORE.shelf.map(s => tenOff(s.price)), [11, 5, 27, 8, 18]);
+  assert.equal(tenOff(9), 9);
+  assert.equal(tenOff(100), 90);
+});
+
+test('Bram pays the standard price for every find, and nothing for unknown kinds', () => {
+  const prices = Object.fromEntries(FINDS.map(f => [f.id, f.price]));
+  assert.ok(FINDS.every(f => f.price > 0));
+  assert.equal(saleTotal({}, prices), 0);
+  assert.equal(saleTotal({ shell: 3, honey: 1 }, prices), 3 * prices.shell + prices.honey);
+  assert.equal(saleTotal({ pebble: 5, shell: -2 }, prices), 0);
+});

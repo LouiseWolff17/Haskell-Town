@@ -2,13 +2,14 @@
 // listing the gifts that haven't been used yet. Pick one and the place it belongs glows on the map.
 // Click there to use it. Click anywhere else and you get a gentle line, and the item goes back in the
 // Satchel. Nothing is lost. The map side (the glow, where a target is, clicks) is in town.ts.
-import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS } from '../content/index.ts';
+import { FRIENDSHIP, HEARTS, ITEMS, RESIDENTS, STORE } from '../content/index.ts';
 import { $, dateOf, save, state } from './state.ts';
 import { hearts, today } from './errands.ts';
 import { toast } from './notebook.ts';
 import { goInside, plotLabel, targetBox } from './town.ts';
 import { beachNote, hasInterior, hivesNote, placeOf } from './interiors.ts';
 import { giftFor, roomsOf } from './rooms.ts';
+import { heldFinds } from './purse.ts';
 import type { GiftItem } from '../content/index.ts';
 
 const giftOf = (rid: string) => FRIENDSHIP.find(f => f.resident === rid)!.gift;
@@ -46,8 +47,10 @@ export function satchelItems(): GiftItem[] {
   const h = hearts();
   return ITEMS.filter(i => (h[i.resident] || 0) >= HEARTS.gift && !state.used?.[i.resident]);
 }
-/** The Satchel appears with the first gift and stays after that. */
-const hasSatchel = (): boolean => Object.values(hearts()).some(n => n >= HEARTS.gift);
+/** Things bought at Bram's store, in shelf order, with how many of each. */
+const boughtItems = () => STORE.shelf.filter(s => (state.bought?.[s.name] || 0) > 0).map(s => ({ item: s, n: state.bought![s.name] }));
+/** The Satchel appears with the first gift (or the first find or purchase) and stays after that. */
+const hasSatchel = (): boolean => Object.values(hearts()).some(n => n >= HEARTS.gift) || heldFinds().length > 0 || boughtItems().length > 0;
 
 let held: GiftItem | null = null;
 /** The item picked from the Satchel, waiting to be used on the map. */
@@ -122,6 +125,12 @@ export function renderSatchel(): void {
     ? items.map(i => { const g = giftOf(i.resident), ready = !!i.target && !!targetBox(i.target);
       return `<button class="satchel-item${ready ? '' : ' waiting'}" data-item="${i.resident}"><span class="satchel-icon">${g.icon}</span><span><b>${g.name}</b><small>From ${RESIDENTS[i.resident].name}${ready ? '' : ' · keep it for now'}</small></span></button>`; }).join('')
     : `<p class="board-small">Empty for now. Every gift has found its place.</p>`);
+  // finds wait to be sold at Bram's till; bought things wait for their place (they're not used on the map yet)
+  const finds = heldFinds(), bought = boughtItems();
+  if (finds.length) list.innerHTML += `<div class="satchel-h satchel-h2">🧺 Finds</div>` + finds.map(({ find: f, n }) =>
+    `<div class="satchel-item"><span class="satchel-icon">${f.icon}</span><span><b>${n} ${n === 1 ? f.name : f.plural}</b><small>Bram buys these at his till</small></span></div>`).join('');
+  if (bought.length) list.innerHTML += `<div class="satchel-h satchel-h2">🛍️ From Bram's store</div>` + bought.map(({ item: b, n }) =>
+    `<div class="satchel-item"><span class="satchel-icon">${b.icon}</span><span><b>${n > 1 ? `${n} × ` : ''}${b.name}</b><small>${b.note}</small></span></div>`).join('');
   // a gift that opens several rooms (Rowan's tulip: three hives) lists each of them
   const doors = openDoors().flatMap(i => { const rs = roomsOf(i.resident); return rs.length > 1 ? rs.map(r => ({ i, id: r, name: cap(placeOf(r)) })) : [{ i, id: i.resident, name: i.place! }]; });
   if (doors.length) list.innerHTML += `<div class="satchel-h satchel-h2">🚪 Open doors</div>` + doors.map(({ i, id, name }) =>

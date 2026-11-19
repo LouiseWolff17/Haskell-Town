@@ -230,3 +230,13 @@ export interface LifeTouch {
   title: string;
   note: string;
 }
+
+/** Something you find (a shell, a jar of honey, a fish…), kept in the Satchel until it's sold. */
+export interface Find {
+  id: string;
+  icon: string;
+  name: string;
+  plural: string;
+  /** What Bram pays for one, in coins. */
+  price: number;
+}

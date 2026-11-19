@@ -52,6 +52,12 @@ export interface GameState {
   used?: Record<string, number>;
   /** The town interiors: the day the croissants were first baked, the book the sunflower marks, the name the hall greets. */
   inside?: { baked?: number; bookmark?: string; name?: string; /** The hives you've been inside, and the day you first went in. */ hives?: Record<string, number>; /** The magical beach: the day you first went, and how many shells you've found there. */ beach?: number; shells?: number };
+  /** The purse's coins other than from errands (those come from `reviews.log`): sold finds in, purchases out. Shared with Glaschu. */
+  purse?: { earned: number; spent: number };
+  /** Things you've found (a FINDS id → how many), waiting in the Satchel to be sold. */
+  finds?: Record<string, number>;
+  /** Things bought at Bram's store (a shelf name → how many), waiting in the Satchel. */
+  bought?: Record<string, number>;
   /** City Hall projects, by project id. Their code is in `code` under `project:<id>`. */
   projects?: Record<string, ProjectProgress>;
   /** DEV panel: days the clock has been moved forward, and an hour override. */

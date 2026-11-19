@@ -9,6 +9,7 @@ import { renderBoard, revisitReason, revisits, showInLibrary, topicById } from '
 import { renderJournal } from './journal.ts';
 import { renderFriends } from './friends.ts';
 import { renderSatchel } from './satchel.ts';
+import { renderPurse } from './purse.ts';
 import type { AssistMode } from '../content/index.ts';
 
 export function notSupportedHTML(): string {
@@ -58,6 +59,7 @@ export function renderSidebar(): void {
   renderFriends();
   renderNightBtn();
   renderSatchel();
+  renderPurse();
   document.querySelectorAll<HTMLElement>('.mode-seg').forEach(seg => renderSeg(seg));
 }
 export function renderSeg(seg: HTMLElement): void {
